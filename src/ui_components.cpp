@@ -456,6 +456,55 @@ void drawCentered(LGFX_Sprite& spr, const char* text, int y, const lgfx::IFont* 
 }
 
 // ══════════════════════════════════════════
+//  FIXED-WIDTH PRICE RENDERING
+// ══════════════════════════════════════════
+
+void drawFixedWidthPrice(LovyanGFX& gfx, const char* text, int cx, int cy,
+                         const lgfx::IFont* font, uint16_t color) {
+    // Measure max digit width once (cached across calls for same font)
+    static int maxDigitW = 0;
+    if (maxDigitW == 0) {
+        char d[2] = {0, 0};
+        for (int i = 0; i <= 9; i++) {
+            d[0] = '0' + i;
+            int w = gfx.textWidth(d, font);
+            if (w > maxDigitW) maxDigitW = w;
+        }
+    }
+
+    // Calculate total width: digits use fixed maxDigitW, others use natural width
+    int len = strlen(text);
+    int totalW = 0;
+    for (int i = 0; i < len; i++) {
+        if (text[i] >= '0' && text[i] <= '9') {
+            totalW += maxDigitW;
+        } else {
+            char c[2] = { text[i], 0 };
+            totalW += gfx.textWidth(c, font);
+        }
+    }
+
+    // Draw each char, starting from left edge so total is centered on cx
+    int x = cx - totalW / 2;
+    gfx.setTextColor(color);
+    gfx.setTextDatum(lgfx::middle_center);
+
+    for (int i = 0; i < len; i++) {
+        char c[2] = { text[i], 0 };
+        if (text[i] >= '0' && text[i] <= '9') {
+            // Digit: draw centered in fixed-width cell
+            gfx.drawString(c, x + maxDigitW / 2, cy, font);
+            x += maxDigitW;
+        } else {
+            // Non-digit ($, comma): use natural width
+            int cw = gfx.textWidth(c, font);
+            gfx.drawString(c, x + cw / 2, cy, font);
+            x += cw;
+        }
+    }
+}
+
+// ══════════════════════════════════════════
 //  FORMATTERS
 // ══════════════════════════════════════════
 

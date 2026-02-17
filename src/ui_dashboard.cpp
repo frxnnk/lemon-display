@@ -118,6 +118,12 @@ void dashboardSetup() {
     sprZ2.createSprite(SCREEN_W, Z2_H);
 
     spritesReady = true;
+
+    // Fill gaps between zones once (static, never need redrawing)
+    tft.fillRect(0, Z0_Y + Z0_H, SCREEN_W, Z1_Y - (Z0_Y + Z0_H), Colors::BG_BASE);
+    tft.fillRect(0, Z1_Y + Z1_H, SCREEN_W, Z2_Y - (Z1_Y + Z1_H), Colors::BG_BASE);
+    tft.fillRect(0, Z2_Y + Z2_H, SCREEN_W, SCREEN_H - (Z2_Y + Z2_H), Colors::BG_BASE);
+
     Serial.printf("[Dashboard] Zone sprites allocated: Z0=%dB Z1=%dB Z2=%dB\n",
                   SCREEN_W * Z0_H * 2, SCREEN_W * Z1_H * 2, SCREEN_W * Z2_H * 2);
 }
@@ -209,6 +215,106 @@ static void drawCarousel(LGFX_Sprite& spr, uint8_t selectedPeriod) {
     }
 }
 
+// ── Direct-to-framebuffer time update (fixed-width digits, per-cell rendering) ──
+void dashboardUpdateTimeDirect(const char* timeStr) {
+    if (!spritesReady) return;
+
+    // Measure max digit width for Orbitron (cached)
+    static int maxDigitW_clock = 0;
+    if (maxDigitW_clock == 0) {
+        char d[2] = {0, 0};
+        for (int i = 0; i <= 9; i++) {
+            d[0] = '0' + i;
+            int w = tft.textWidth(d, &fonts::Orbitron_Light_24);
+            if (w > maxDigitW_clock) maxDigitW_clock = w;
+        }
+    }
+
+    // Calculate total fixed width (digits = maxDigitW, colons = natural)
+    int len = strlen(timeStr);
+    int totalW = 0;
+    for (int i = 0; i < len; i++) {
+        if (timeStr[i] >= '0' && timeStr[i] <= '9') {
+            totalW += maxDigitW_clock;
+        } else {
+            char c[2] = { timeStr[i], 0 };
+            totalW += tft.textWidth(c, &fonts::Orbitron_Light_24);
+        }
+    }
+
+    int timeRightX = SCREEN_W - MARGIN;
+    int startX = timeRightX - totalW;  // right-aligned
+    int cy_spr = Z0_H / 2;
+    int cy_scr = Z0_Y + cy_spr;
+    int cellH = 30;
+    int cellY_spr = cy_spr - cellH / 2;
+    int cellY_scr = cy_scr - cellH / 2;
+
+    // Update sprZ0 for consistency with future full pushes
+    sprZ0.fillRect(startX, cellY_spr, totalW, cellH, Colors::BG_BASE);
+    int sx = startX;
+    sprZ0.setTextColor(Colors::LEMON_GREEN);
+    sprZ0.setTextDatum(lgfx::middle_center);
+    for (int i = 0; i < len; i++) {
+        char c[2] = { timeStr[i], 0 };
+        int cellW = (timeStr[i] >= '0' && timeStr[i] <= '9')
+                    ? maxDigitW_clock
+                    : sprZ0.textWidth(c, &fonts::Orbitron_Light_24);
+        sprZ0.drawString(c, sx + cellW / 2, cy_spr, &fonts::Orbitron_Light_24);
+        sx += cellW;
+    }
+
+    // Draw directly to framebuffer — per-cell fill+draw (no visible flicker)
+    displayWaitVSync();
+    int x = startX;
+    tft.setTextColor(Colors::LEMON_GREEN);
+    tft.setTextDatum(lgfx::middle_center);
+    for (int i = 0; i < len; i++) {
+        char c[2] = { timeStr[i], 0 };
+        int cellW = (timeStr[i] >= '0' && timeStr[i] <= '9')
+                    ? maxDigitW_clock
+                    : tft.textWidth(c, &fonts::Orbitron_Light_24);
+        tft.fillRect(x, cellY_scr, cellW, cellH, Colors::BG_BASE);
+        tft.drawString(c, x + cellW / 2, cy_scr, &fonts::Orbitron_Light_24);
+        x += cellW;
+    }
+}
+
+// ── Direct-to-framebuffer price update (no pushSprite) ──
+void dashboardUpdatePriceDirect(const BtcPrice& btc) {
+    if (!spritesReady || !btc.valid) return;
+
+    char priceBuf[20];
+    formatBtcPrice(priceBuf, sizeof(priceBuf), btc.usd);
+
+    uint16_t priceColor = Colors::TEXT_PRIMARY;
+    if (priceFlashActive) {
+        uint32_t elapsed = millis() - priceFlashStartMs;
+        if (elapsed < PRICE_FLASH_DURATION_MS) {
+            float progress = (float)elapsed / PRICE_FLASH_DURATION_MS;
+            uint16_t flashColor = priceFlashUp ? Colors::POSITIVE : Colors::NEGATIVE;
+            priceColor = blendColor565(flashColor, Colors::TEXT_PRIMARY, progress);
+        } else {
+            priceFlashActive = false;
+        }
+    }
+
+    // Price area in sprite coords
+    const int STRIP_Y = 26;
+    const int STRIP_H = 48;
+    const int STRIP_X = MARGIN + 1;
+    const int STRIP_W = CAROUSEL_X - MARGIN - 2;
+
+    // Update sprZ1 to stay in sync
+    sprZ1.fillRect(STRIP_X, STRIP_Y, STRIP_W, STRIP_H, Colors::BG_CARD);
+    drawFixedWidthPrice(sprZ1, priceBuf, PRICE_CX, PRICE_CY, &SatoshiBold40, priceColor);
+
+    // Write directly to framebuffer (small area, fits in VBlank)
+    displayWaitVSync();
+    tft.fillRect(STRIP_X, Z1_Y + STRIP_Y, STRIP_W, STRIP_H, Colors::BG_CARD);
+    drawFixedWidthPrice(tft, priceBuf, PRICE_CX, Z1_Y + PRICE_CY, &SatoshiBold40, priceColor);
+}
+
 // ══════════════════════════════════════════
 //  Z1: BTC HERO + CHART (300px)
 // ══════════════════════════════════════════
@@ -250,9 +356,7 @@ void dashboardDrawBtcHero(const BtcPrice& btc, const SparklineData& spark, uint8
         }
     }
 
-    sprZ1.setTextColor(priceColor);
-    sprZ1.setTextDatum(lgfx::middle_center);
-    sprZ1.drawString(priceBuf, PRICE_CX, PRICE_CY, &SatoshiBold40);
+    drawFixedWidthPrice(sprZ1, priceBuf, PRICE_CX, PRICE_CY, &SatoshiBold40, priceColor);
 
     // ── Selected period change text below price ──
     if (periodChanges) {
@@ -313,6 +417,7 @@ void dashboardDrawBtcHero(const BtcPrice& btc, const SparklineData& spark, uint8
     // Flash border (drawn last, on top of everything)
     drawFlashBorderIfActive(sprZ1, 1, Z1_H);
 
+    displayWaitVSync();
     sprZ1.pushSprite(0, Z1_Y);
     dirtyZones |= (1 << 1);
 }
@@ -322,8 +427,9 @@ void dashboardDrawBtcHero(const BtcPrice& btc, const SparklineData& spark, uint8
 void dashboardDrawPriceOnly(const BtcPrice& btc) {
     if (!spritesReady || !btc.valid) return;
 
-    const int STRIP_Y = 30;   // Start Y in sprite (below top row labels)
-    const int STRIP_H = 42;   // Height (covers price text only, not change text)
+    // Generous strip covering full SatoshiBold40 text height around PRICE_CY=50
+    const int STRIP_Y = 24;
+    const int STRIP_H = 56;   // covers y=24..80, well beyond font extents
     const int CLIP_W  = CAROUSEL_X - 4;  // Stop before carousel area
 
     // Clip sprite drawing to price strip, left of carousel
@@ -334,7 +440,6 @@ void dashboardDrawPriceOnly(const BtcPrice& btc) {
     sprZ1.fillRect(MARGIN + 1, STRIP_Y, CLIP_W - MARGIN - 1, STRIP_H, Colors::BG_CARD);
     sprZ1.drawFastVLine(MARGIN, STRIP_Y, STRIP_H, Colors::CARD_BORDER_ACCENT);
 
-    // Price text (no glow, centered — will be clipped on the right)
     char priceBuf[20];
     formatBtcPrice(priceBuf, sizeof(priceBuf), btc.usd);
 
@@ -350,17 +455,15 @@ void dashboardDrawPriceOnly(const BtcPrice& btc) {
         }
     }
 
-    sprZ1.setTextColor(priceColor);
-    sprZ1.setTextDatum(lgfx::middle_center);
-    sprZ1.drawString(priceBuf, PRICE_CX, PRICE_CY, &SatoshiBold40);
+    drawFixedWidthPrice(sprZ1, priceBuf, PRICE_CX, PRICE_CY, &SatoshiBold40, priceColor);
 
     sprZ1.clearClipRect();
 
-    // Only push the price strip region to framebuffer (much less data than full Z1)
+    // VSync + push only the price strip (much less PSRAM bus contention than full Z1)
+    displayWaitVSync();
     tft.setClipRect(0, Z1_Y + STRIP_Y, CLIP_W, STRIP_H);
     sprZ1.pushSprite(0, Z1_Y);
     tft.clearClipRect();
-    dirtyZones |= (1 << 1);
 }
 
 // ══════════════════════════════════════════
@@ -518,18 +621,9 @@ void dashboardDrawAll(const char* timeStr,
                       uint8_t dollarPeriod,
                       ChartStyle dollarChartStyle,
                       float dollarChange) {
-    tft.startWrite();
-
-    // Fill gaps between zones (instead of full fillScreen)
-    tft.fillRect(0, Z0_Y + Z0_H, SCREEN_W, Z1_Y - (Z0_Y + Z0_H), Colors::BG_BASE);
-    tft.fillRect(0, Z1_Y + Z1_H, SCREEN_W, Z2_Y - (Z1_Y + Z1_H), Colors::BG_BASE);
-    tft.fillRect(0, Z2_Y + Z2_H, SCREEN_W, SCREEN_H - (Z2_Y + Z2_H), Colors::BG_BASE);
-
     dashboardDrawHeader(timeStr, offline, wsConnected);
     dashboardDrawBtcHero(btc, spark, selectedPeriod, periodChanges, chartStyle, ohlc);
     dashboardDrawLemonDollar(lemon, lemonSpark, dollarPeriod, dollarChartStyle, dollarChange);
-
-    tft.endWrite();
 }
 
 // ══════════════════════════════════════════
@@ -543,23 +637,15 @@ void dashboardSyncDrawBuffer() {
     dirtyZones = 0;  // Reset for next frame
 
     // Only push zones that were actually modified this frame.
-    // Adjacent gaps are always synced to keep both buffers consistent.
+    // Gaps are filled once in dashboardSetup() — no need to refill here.
     if (dz & (1 << 0)) {
-        tft.fillRect(0, 0, SCREEN_W, Z0_Y, Colors::BG_BASE);                              // gap above Z0
         sprZ0.pushSprite(0, Z0_Y);
-        tft.fillRect(0, Z0_Y + Z0_H, SCREEN_W, Z1_Y - (Z0_Y + Z0_H), Colors::BG_BASE);   // gap Z0-Z1
     }
     if (dz & (1 << 1)) {
-        if (!(dz & (1 << 0)))  // don't double-fill gap Z0-Z1
-            tft.fillRect(0, Z0_Y + Z0_H, SCREEN_W, Z1_Y - (Z0_Y + Z0_H), Colors::BG_BASE);
         sprZ1.pushSprite(0, Z1_Y);
-        tft.fillRect(0, Z1_Y + Z1_H, SCREEN_W, Z2_Y - (Z1_Y + Z1_H), Colors::BG_BASE);   // gap Z1-Z2
     }
     if (dz & (1 << 2)) {
-        if (!(dz & (1 << 1)))  // don't double-fill gap Z1-Z2
-            tft.fillRect(0, Z1_Y + Z1_H, SCREEN_W, Z2_Y - (Z1_Y + Z1_H), Colors::BG_BASE);
         sprZ2.pushSprite(0, Z2_Y);
-        tft.fillRect(0, Z2_Y + Z2_H, SCREEN_W, SCREEN_H - (Z2_Y + Z2_H), Colors::BG_BASE); // gap below Z2
     }
 }
 

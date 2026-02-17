@@ -53,6 +53,11 @@ void drawCryptoCard(LGFX_Sprite& spr, int x, int y, int w, int h,
 // ── Layout helpers ──
 void drawCentered(LGFX_Sprite& spr, const char* text, int y, const lgfx::IFont* font, uint16_t color, uint16_t bg = 0x0841);
 
+// ── Fixed-width price rendering (eliminates bounce from proportional font) ──
+// Accepts both LGFX_Sprite and tft (LGFX) via common base class
+void drawFixedWidthPrice(LovyanGFX& gfx, const char* text, int cx, int cy,
+                         const lgfx::IFont* font, uint16_t color);
+
 // ── Formatters ──
 void formatBtcPrice(char* buf, size_t bufSize, float price);
 void formatCoinPrice(char* buf, size_t bufSize, float price, CoinId coin);
