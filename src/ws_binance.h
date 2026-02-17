@@ -23,3 +23,8 @@ void wsBinanceGetSparkline(SparklineData& out);
 
 // HTTP fetch 96 x 1m klines to fill buffer at boot (blocking)
 bool wsBinanceBackfill();
+
+// Parameterized variants for pair switching
+void wsBinanceReconnect(const char* wsPath, bool invertPrices);
+bool wsBinanceBackfillSymbol(const char* symbol, bool invert);
+void wsBinanceSetInvert(bool invert);

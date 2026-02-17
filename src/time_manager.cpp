@@ -19,11 +19,18 @@ bool timeReady() {
     return synced;
 }
 
-String getTimeStr() {
+String getTimeStr(bool use24h) {
     struct tm t;
-    if (!getLocalTime(&t, 0)) return "--:--:--";
-    char buf[9];
-    snprintf(buf, sizeof(buf), "%02d:%02d:%02d", t.tm_hour, t.tm_min, t.tm_sec);
+    if (!getLocalTime(&t, 0)) return use24h ? "--:--:--" : "--:-- --";
+    char buf[12];
+    if (use24h) {
+        snprintf(buf, sizeof(buf), "%02d:%02d:%02d", t.tm_hour, t.tm_min, t.tm_sec);
+    } else {
+        int h = t.tm_hour % 12;
+        if (h == 0) h = 12;
+        const char* ampm = (t.tm_hour >= 12) ? "PM" : "AM";
+        snprintf(buf, sizeof(buf), "%d:%02d %s", h, t.tm_min, ampm);
+    }
     return String(buf);
 }
 

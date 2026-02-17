@@ -62,9 +62,17 @@ void drawFixedWidthPrice(LovyanGFX& gfx, const char* text, int cx, int cy,
 void formatBtcPrice(char* buf, size_t bufSize, float price);
 void formatCoinPrice(char* buf, size_t bufSize, float price, CoinId coin);
 void formatArsPrice(char* buf, size_t bufSize, float price);
+void formatPairPrice(char* buf, size_t bufSize, float price,
+                     const char* prefix, const char* suffix, uint8_t decimals);
 
 // ── Settings components ──
 void drawSlider(LGFX_Sprite& spr, int x, int y, int w, int h, float value); // 0.0-1.0
+void drawToggle(LGFX_Sprite& spr, int x, int y, bool on); // 44x24 toggle switch
+
+// ── Zoomed sparkline (for pinch-to-zoom) ──
+void drawSparklineZoomed(LGFX_Sprite& spr, int x, int y, int w, int h,
+                         const SparklineData& data, uint16_t lineColor, uint16_t fillColor,
+                         float zoomLevel, float panOffset);
 
 // ── Toast ──
 void showToast(const char* msg);

@@ -18,6 +18,9 @@ static unsigned long long currentKlineOpenTime = 0;
 static float latestPrice    = 0.0f;
 static bool  hasPrice       = false;
 
+// ── Invert mode (for ETHBTC/SOLBTC → BTC/ETH, BTC/SOL) ──
+static bool invertMode = false;
+
 // ── WebSocket client ──
 static WebSocketsClient ws;
 static bool wsConnected = false;
@@ -65,6 +68,11 @@ static void parseKline(uint8_t* payload, size_t length) {
 
     float closePrice = atof(closeStr);
     if (closePrice <= 0) return;
+
+    // Invert for pairs like ETHBTC → BTC/ETH
+    if (invertMode && closePrice > 0) {
+        closePrice = 1.0f / closePrice;
+    }
 
     // Always update latest price
     latestPrice = closePrice;
@@ -243,5 +251,110 @@ bool wsBinanceBackfill() {
     }
 
     Serial.printf("[WS] Backfill: %d klines loaded, latest=$%.0f\n", loaded, latestPrice);
+    return loaded > 0;
+}
+
+void wsBinanceSetInvert(bool invert) {
+    invertMode = invert;
+}
+
+void wsBinanceReconnect(const char* wsPath, bool invertPrices) {
+    // Disconnect existing connection
+    ws.disconnect();
+    wsConnected = false;
+
+    // Reset ring buffer
+    ringHead = 0;
+    ringCount = 0;
+    currentKlineOpenTime = 0;
+    latestPrice = 0.0f;
+    hasPrice = false;
+
+    // Set invert mode
+    invertMode = invertPrices;
+
+    // Reconnect to new stream
+    ws.beginSSL(BINANCE_WS_HOST, BINANCE_WS_PORT, wsPath);
+    ws.onEvent(wsEvent);
+    ws.setReconnectInterval(WS_RECONNECT_MS);
+    ws.enableHeartbeat(WS_PING_MS, WS_PONG_TIMEOUT, WS_DISCONNECT_CNT);
+    Serial.printf("[WS] Reconnecting to %s (invert=%d)\n", wsPath, invertPrices);
+}
+
+bool wsBinanceBackfillSymbol(const char* symbol, bool invert) {
+    Serial.printf("[WS] Backfill: fetching 96 x 1m klines for %s...\n", symbol);
+
+    WiFiClientSecure client;
+    client.setInsecure();
+
+    HTTPClient http;
+    http.setConnectTimeout(5000);
+    http.setTimeout(10000);
+
+    char urlBuf[128];
+    snprintf(urlBuf, sizeof(urlBuf), "%s?symbol=%s&interval=1m&limit=96",
+             BINANCE_KLINES_EP, symbol);
+
+    if (!http.begin(client, urlBuf)) {
+        Serial.println("[WS] Backfill: HTTP begin failed");
+        http.end();
+        return false;
+    }
+
+    int code = http.GET();
+    if (code != 200) {
+        Serial.printf("[WS] Backfill: HTTP %d\n", code);
+        http.end();
+        return false;
+    }
+
+    String payload = http.getString();
+    http.end();
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, payload);
+    if (err) {
+        Serial.printf("[WS] Backfill: JSON error: %s\n", err.c_str());
+        return false;
+    }
+
+    JsonArray arr = doc.as<JsonArray>();
+    if (arr.isNull() || arr.size() == 0) {
+        Serial.println("[WS] Backfill: empty array");
+        return false;
+    }
+
+    // Reset ring buffer
+    ringHead = 0;
+    ringCount = 0;
+
+    int loaded = 0;
+    unsigned long long lastOpenTime = 0;
+
+    for (JsonArray kline : arr) {
+        unsigned long long openTime = kline[0].as<unsigned long long>();
+        const char* closeStr = kline[4].as<const char*>();
+        if (!closeStr) continue;
+
+        float closePrice = atof(closeStr);
+        if (closePrice <= 0) continue;
+
+        // Invert if needed
+        if (invert && closePrice > 0) {
+            closePrice = 1.0f / closePrice;
+        }
+
+        ringPush(closePrice);
+        lastOpenTime = openTime;
+        loaded++;
+    }
+
+    if (loaded > 0 && lastOpenTime > 0) {
+        currentKlineOpenTime = lastOpenTime;
+        latestPrice = ringBuf[(ringHead == 0) ? (SPARKLINE_POINTS - 1) : (ringHead - 1)];
+        hasPrice = true;
+    }
+
+    Serial.printf("[WS] Backfill %s: %d klines loaded, latest=%.4f\n", symbol, loaded, latestPrice);
     return loaded > 0;
 }

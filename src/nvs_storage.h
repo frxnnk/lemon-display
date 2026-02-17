@@ -26,5 +26,13 @@ void     nvsSetSoundEnabled(bool on);
 bool     nvsGetAlertEnabled();
 void     nvsSetAlertEnabled(bool on);
 
+// Time format (true = 24h, false = 12h AM/PM)
+bool     nvsGet24hFormat();
+void     nvsSet24hFormat(bool on);
+
+// Dashboard layout preset (0=standard, 1=btc_focus, 2=compact)
+uint8_t  nvsGetLayout();
+void     nvsSetLayout(uint8_t idx);
+
 // Factory reset — erases all NVS keys
 void     nvsFactoryReset();

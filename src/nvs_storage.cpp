@@ -67,6 +67,27 @@ void nvsSetAlertEnabled(bool on) {
     prefs.putUChar("alert_on", on ? 1 : 0);
 }
 
+// ── Time Format ──
+
+bool nvsGet24hFormat() {
+    return prefs.getUChar("fmt_24h", 1) != 0;
+}
+
+void nvsSet24hFormat(bool on) {
+    prefs.putUChar("fmt_24h", on ? 1 : 0);
+}
+
+// ── Dashboard Layout ──
+
+uint8_t nvsGetLayout() {
+    return prefs.getUChar("layout", 0);
+}
+
+void nvsSetLayout(uint8_t idx) {
+    if (idx > 2) idx = 0;
+    prefs.putUChar("layout", idx);
+}
+
 // ── Factory Reset ──
 
 void nvsFactoryReset() {
