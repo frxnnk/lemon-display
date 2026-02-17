@@ -49,6 +49,7 @@ TouchEvent touchLoop() {
 
         uint32_t duration = now - touchStartTime;
         int16_t dx = lastValidX - touchStartX;
+        int16_t dy = lastValidY - touchStartY;
 
         // Debounce
         if (now - lastTapTime < DEBOUNCE_MS) {
@@ -58,24 +59,31 @@ TouchEvent touchLoop() {
         evt.x = touchStartX;
         evt.y = touchStartY;
 
-        if (duration >= LONG_PRESS_MS && abs(dx) < SWIPE_MIN_PX) {
+        int16_t absDx = abs(dx);
+        int16_t absDy = abs(dy);
+
+        if (duration >= LONG_PRESS_MS && absDx < SWIPE_MIN_PX && absDy < SWIPE_MIN_PX) {
             evt.gesture = TOUCH_LONG_PRESS;
-        } else if (duration <= SWIPE_MAX_MS && dx > SWIPE_MIN_PX) {
-            evt.gesture = TOUCH_SWIPE_RIGHT;
-        } else if (duration <= SWIPE_MAX_MS && dx < -SWIPE_MIN_PX) {
-            evt.gesture = TOUCH_SWIPE_LEFT;
-        } else if (duration < LONG_PRESS_MS) {
+        } else if (duration <= SWIPE_MAX_MS && (absDx >= SWIPE_MIN_PX || absDy >= SWIPE_MIN_PX)) {
+            // Dominant-axis swipe detection
+            if (absDx >= absDy) {
+                // Horizontal swipe
+                evt.gesture = (dx > 0) ? TOUCH_SWIPE_RIGHT : TOUCH_SWIPE_LEFT;
+            } else {
+                // Vertical swipe (UP = finger moves up = dy < 0)
+                evt.gesture = (dy < 0) ? TOUCH_SWIPE_UP : TOUCH_SWIPE_DOWN;
+            }
+        } else if (duration < LONG_PRESS_MS && absDx < SWIPE_MIN_PX && absDy < SWIPE_MIN_PX) {
             evt.gesture = TOUCH_TAP;
         }
 
         if (evt.gesture != TOUCH_NONE) {
             lastTapTime = now;
+            static const char* gestureNames[] = {
+                "NONE", "TAP", "LONG_PRESS", "SWIPE_LEFT", "SWIPE_RIGHT", "SWIPE_UP", "SWIPE_DOWN"
+            };
             Serial.printf("[Touch] %s at (%d,%d)\n",
-                          evt.gesture == TOUCH_TAP ? "TAP" :
-                          evt.gesture == TOUCH_LONG_PRESS ? "LONG_PRESS" :
-                          evt.gesture == TOUCH_SWIPE_LEFT ? "SWIPE_LEFT" :
-                          evt.gesture == TOUCH_SWIPE_RIGHT ? "SWIPE_RIGHT" : "?",
-                          evt.x, evt.y);
+                          gestureNames[evt.gesture], evt.x, evt.y);
         }
     }
 

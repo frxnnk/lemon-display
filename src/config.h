@@ -19,9 +19,23 @@
 #define COINGECKO_SIMPLE_EP  "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true"
 #define CRIPTOYA_LEMON_EP    "https://criptoya.com/api/lemoncash/usdt/ars"
 
+// ── CoinGecko tether/ARS chart (for dollar sparkline) ──
+#define COINGECKO_TETHER_CHART_EP "https://api.coingecko.com/api/v3/coins/tether/market_chart?vs_currency=ars&days="
+
+// ── Binance endpoints ──
+#define BINANCE_WS_HOST   "stream.binance.com"
+#define BINANCE_WS_PORT   9443
+#define BINANCE_WS_PATH   "/ws/btcusdt@kline_1m"
+#define BINANCE_KLINES_EP "https://api.binance.com/api/v3/klines"
+
+// ── WebSocket timing ──
+#define WS_RECONNECT_MS    5000   // Reconnect every 5s on disconnect
+#define WS_PING_MS        30000   // Ping interval
+#define WS_PONG_TIMEOUT   10000   // Pong timeout
+#define WS_DISCONNECT_CNT 3       // Missed pongs before disconnect
+
 // ── Update intervals (ms) ──
-#define UPDATE_BTC_PRICE_MS     60000   // 60s
-#define UPDATE_BTC_LIVE_MS      10000   // 10s (real-time mode)
+#define UPDATE_BTC_PRICE_MS    300000   // 5min (CoinGecko % changes only, price from WS)
 #define UPDATE_MARKETS_MS       60000   // 60s
 #define UPDATE_GLOBAL_MS       300000   // 5min
 #define UPDATE_SPARKLINE_MS    900000   // 15min
