@@ -76,6 +76,9 @@ void appDrawCurrent() {
             settingsDraw();
             break;
         case SCREEN_DASHBOARD:
+            if (previousScreen == SCREEN_SETTINGS) {
+                dashboardFillGaps();  // Clear settings screen remnants from gap areas
+            }
             if (dashRedrawCB) dashRedrawCB();
             break;
         // SCREEN_BOOT_SPLASH, SCREEN_WIFI_QR, SCREEN_WIFI_CONNECTING,

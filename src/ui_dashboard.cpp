@@ -9,8 +9,7 @@
 #include <cmath>
 
 // ══════════════════════════════════════════
-//  LAYOUT v3.1b (480x480, BTC hero + Lemon dollar)
-//  No dominance bar, no coin pills — BTC/USD only
+//  LAYOUT v4.0 (480x480, BTC hero + Lemon dollar)
 // ══════════════════════════════════════════
 
 #define MARGIN     16
@@ -19,19 +18,35 @@
 #define CARD_W    448   // 480 - 2*MARGIN
 #define CARD_R     16
 
-// Zone definitions (Y, H) — 2 zones only
+// Zone definitions (Y, H) — Z0 is fixed, Z1/Z2 are runtime for layout presets
 #define Z0_Y    0
-#define Z0_H   44      // Header
+#define Z0_H   44      // Header (fixed)
 #define Z1_Y   48
-#define Z1_H  300      // BTC Hero + Chart (expanded)
-#define Z2_Y  354
-#define Z2_H  120      // Lemon Dollar (slightly taller)
 
-// ── Carousel layout (inside Z1, right of price) ──
-#define CAROUSEL_W        80
-#define CAROUSEL_ITEM_H   28
+// Runtime zone heights (set by dashboardSetLayout)
+static int z1H = 300;  // Default: standard layout
+static int z2H = 120;
+static int z2Y = 354;  // Z1_Y + z1H + GAP
+static uint8_t currentLayout = 0;
+
+// ── Pair label + dropdown layout (inside Z1) ──
+#define PAIR_LABEL_X     (MARGIN + CARD_PAD)  // 30
+#define PAIR_LABEL_Y     6
+#define PAIR_LABEL_W     140  // Touch hit area width
+#define PAIR_LABEL_H     28   // Touch hit area height
+
+#define DROPDOWN_X       (MARGIN + CARD_PAD)  // 30
+#define DROPDOWN_Y       28                    // Below label
+#define DROPDOWN_W       130
+#define DROPDOWN_ITEM_H  26
+#define DROPDOWN_PAD     4
+#define DROPDOWN_R       10
+
+// ── Period carousel layout (inside Z1, right of price) ──
+#define CAROUSEL_W        90
+#define CAROUSEL_ITEM_H   34
 #define CAROUSEL_ITEM_GAP  2
-#define CAROUSEL_X        (MARGIN + CARD_W - CARD_PAD - CAROUSEL_W)  // 370
+#define CAROUSEL_X        (MARGIN + CARD_W - CARD_PAD - CAROUSEL_W)
 #define CAROUSEL_CY       58  // Vertical center, aligned with price
 
 // ── Price position (centered) ──
@@ -53,6 +68,49 @@ static bool spritesReady = false;
 // ── Dirty zone bitmask (bit 0=Z0, bit 1=Z1, bit 2=Z2) ──
 static uint8_t dirtyZones = 0x07;  // All dirty initially
 
+// ── Carousel momentum state (global, accessible from main.cpp) ──
+CarouselState btcCarousel     = { 0.0f, 0.0f, false, -1 };
+CarouselState dollarCarouselState = { 0.0f, 0.0f, false, -1 };
+ChartZoomState chartZoom      = { 1.0f, 1.0f, false };  // Default: no zoom, panned to right
+
+// ── Pair dropdown state ──
+static bool    pairDropdownOpen     = false;
+static uint8_t pairDropdownSelected = 0;
+
+void updateCarouselPhysics(CarouselState& cs, int maxItems, float dt) {
+    if (!cs.animating) return;
+
+    // Friction deceleration
+    const float friction = 8.0f;  // items/s^2
+    float decel = friction * dt;
+
+    if (fabsf(cs.velocity) <= decel) {
+        // Snap to nearest integer
+        cs.velocity = 0.0f;
+        cs.scrollOffset = roundf(cs.scrollOffset);
+        // Clamp
+        if (cs.scrollOffset < 0) cs.scrollOffset = 0;
+        if (cs.scrollOffset > maxItems - 1) cs.scrollOffset = maxItems - 1;
+        cs.animating = false;
+    } else {
+        // Apply friction
+        if (cs.velocity > 0) cs.velocity -= decel;
+        else cs.velocity += decel;
+
+        cs.scrollOffset += cs.velocity * dt;
+
+        // Clamp with bounce-back
+        if (cs.scrollOffset < -0.3f) {
+            cs.scrollOffset = -0.3f;
+            cs.velocity = fabsf(cs.velocity) * 0.3f;  // Bounce
+        }
+        if (cs.scrollOffset > maxItems - 1 + 0.3f) {
+            cs.scrollOffset = maxItems - 1 + 0.3f;
+            cs.velocity = -fabsf(cs.velocity) * 0.3f;
+        }
+    }
+}
+
 // ── Helper: draw flash border inside a zone sprite ──
 static void drawFlashBorderIfActive(LGFX_Sprite& spr, uint8_t zoneId, int h) {
     if (flashActive && flashZoneId == zoneId) {
@@ -64,14 +122,14 @@ static void drawFlashBorderIfActive(LGFX_Sprite& spr, uint8_t zoneId, int h) {
 static bool getZoneBounds(uint8_t zoneId, int& y, int& h) {
     switch (zoneId) {
         case 0: y = Z0_Y; h = Z0_H; return true;
-        case 1: y = Z1_Y; h = Z1_H; return true;
-        case 2: y = Z2_Y; h = Z2_H; return true;
+        case 1: y = Z1_Y; h = z1H; return true;
+        case 2: y = z2Y; h = z2H; return true;
         default: return false;
     }
 }
 
-static const char* periodLabels[] = { "15m", "1h", "24h", "7d", "30d", "1Y" };
-static const int PERIOD_COUNT = 6;
+// Period labels come from BTC_PERIODS[] in config.h
+// PERIOD_COUNT replaced by BTC_PERIOD_COUNT
 
 // ── Price flash state (directional color feedback) ──
 static bool     priceFlashUp      = true;
@@ -111,21 +169,64 @@ void dashboardSetup() {
 
     sprZ1.setPsram(true);
     sprZ1.setColorDepth(16);
-    sprZ1.createSprite(SCREEN_W, Z1_H);
+    sprZ1.createSprite(SCREEN_W, z1H);
 
     sprZ2.setPsram(true);
     sprZ2.setColorDepth(16);
-    sprZ2.createSprite(SCREEN_W, Z2_H);
+    sprZ2.createSprite(SCREEN_W, z2H);
 
     spritesReady = true;
 
     // Fill gaps between zones once (static, never need redrawing)
     tft.fillRect(0, Z0_Y + Z0_H, SCREEN_W, Z1_Y - (Z0_Y + Z0_H), Colors::BG_BASE);
-    tft.fillRect(0, Z1_Y + Z1_H, SCREEN_W, Z2_Y - (Z1_Y + Z1_H), Colors::BG_BASE);
-    tft.fillRect(0, Z2_Y + Z2_H, SCREEN_W, SCREEN_H - (Z2_Y + Z2_H), Colors::BG_BASE);
+    tft.fillRect(0, Z1_Y + z1H, SCREEN_W, z2Y - (Z1_Y + z1H), Colors::BG_BASE);
+    tft.fillRect(0, z2Y + z2H, SCREEN_W, SCREEN_H - (z2Y + z2H), Colors::BG_BASE);
 
     Serial.printf("[Dashboard] Zone sprites allocated: Z0=%dB Z1=%dB Z2=%dB\n",
-                  SCREEN_W * Z0_H * 2, SCREEN_W * Z1_H * 2, SCREEN_W * Z2_H * 2);
+                  SCREEN_W * Z0_H * 2, SCREEN_W * z1H * 2, SCREEN_W * z2H * 2);
+}
+
+// ══════════════════════════════════════════
+//  LAYOUT PRESETS
+// ══════════════════════════════════════════
+
+uint8_t dashboardGetLayout() {
+    return currentLayout;
+}
+
+void dashboardSetLayout(uint8_t idx) {
+    if (idx > 2) idx = 0;
+    currentLayout = idx;
+
+    switch (idx) {
+        case 1:  // BTC Focus
+            z1H = 370; z2H = 50; break;
+        case 2:  // Compact
+            z1H = 240; z2H = 180; break;
+        default: // Standard
+            z1H = 300; z2H = 120; break;
+    }
+    z2Y = Z1_Y + z1H + GAP;
+
+    // Recreate sprites at new sizes
+    if (spritesReady) {
+        sprZ1.deleteSprite();
+        sprZ2.deleteSprite();
+
+        sprZ1.setPsram(true);
+        sprZ1.setColorDepth(16);
+        sprZ1.createSprite(SCREEN_W, z1H);
+
+        sprZ2.setPsram(true);
+        sprZ2.setColorDepth(16);
+        sprZ2.createSprite(SCREEN_W, z2H);
+
+        // Refill gaps
+        tft.fillRect(0, Z1_Y + z1H, SCREEN_W, z2Y - (Z1_Y + z1H), Colors::BG_BASE);
+        tft.fillRect(0, z2Y + z2H, SCREEN_W, SCREEN_H - (z2Y + z2H), Colors::BG_BASE);
+
+        Serial.printf("[Dashboard] Layout %d: Z1=%d Z2=%d\n", idx, z1H, z2H);
+    }
 }
 
 // ══════════════════════════════════════════
@@ -178,11 +279,17 @@ void dashboardDrawHeader(const char* timeStr, bool offline, bool wsConnected) {
     dirtyZones |= (1 << 0);
 }
 
-// ── Helper: draw vertical carousel (3 visible items) ──
+// ── Helper: draw vertical carousel (5 visible items, momentum-aware) ──
 static void drawCarousel(LGFX_Sprite& spr, uint8_t selectedPeriod) {
     int cx = CAROUSEL_X + CAROUSEL_W / 2;
+    int step = CAROUSEL_ITEM_H + CAROUSEL_ITEM_GAP;
 
-    // Selected item background
+    // Fractional offset from carousel state for smooth scrolling
+    float offset = btcCarousel.animating
+                   ? (btcCarousel.scrollOffset - (float)selectedPeriod)
+                   : 0.0f;
+
+    // Selected item background (always at center)
     int selY = CAROUSEL_CY - CAROUSEL_ITEM_H / 2;
     spr.fillSmoothRoundRect(CAROUSEL_X, selY, CAROUSEL_W, CAROUSEL_ITEM_H, 6, Colors::BG_ELEVATED);
 
@@ -193,25 +300,67 @@ static void drawCarousel(LGFX_Sprite& spr, uint8_t selectedPeriod) {
     // Green accent dot on left of selected
     spr.fillSmoothCircle(CAROUSEL_X + 8, CAROUSEL_CY, 3, Colors::LEMON_GREEN);
 
-    // Selected label
+    // Draw selected label
     spr.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_ELEVATED);
     spr.setTextDatum(lgfx::middle_center);
-    spr.drawString(periodLabels[selectedPeriod], cx + 4, CAROUSEL_CY, &Satoshi12);
+    spr.drawString(BTC_PERIODS[selectedPeriod].label, cx + 4, CAROUSEL_CY, &Satoshi12);
 
-    // Previous item (above)
-    if (selectedPeriod > 0) {
-        int prevCY = CAROUSEL_CY - CAROUSEL_ITEM_H - CAROUSEL_ITEM_GAP;
-        spr.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
-        spr.setTextDatum(lgfx::middle_center);
-        spr.drawString(periodLabels[selectedPeriod - 1], cx, prevCY, &Satoshi12);
+    // Draw up to 2 items above and 2 below (5 visible total)
+    for (int d = 1; d <= 2; d++) {
+        // Above
+        int idxAbove = (int)selectedPeriod - d;
+        if (idxAbove >= 0) {
+            int itemCY = CAROUSEL_CY - d * step - (int)(offset * step);
+            uint16_t color = (d == 1) ? Colors::TEXT_SECONDARY : Colors::TEXT_TERTIARY;
+            spr.setTextColor(color, Colors::BG_CARD);
+            spr.setTextDatum(lgfx::middle_center);
+            spr.drawString(BTC_PERIODS[idxAbove].label, cx, itemCY, &Satoshi12);
+        }
+
+        // Below
+        int idxBelow = (int)selectedPeriod + d;
+        if (idxBelow < BTC_PERIOD_COUNT) {
+            int itemCY = CAROUSEL_CY + d * step - (int)(offset * step);
+            uint16_t color = (d == 1) ? Colors::TEXT_SECONDARY : Colors::TEXT_TERTIARY;
+            spr.setTextColor(color, Colors::BG_CARD);
+            spr.setTextDatum(lgfx::middle_center);
+            spr.drawString(BTC_PERIODS[idxBelow].label, cx, itemCY, &Satoshi12);
+        }
     }
+}
 
-    // Next item (below)
-    if (selectedPeriod < PERIOD_COUNT - 1) {
-        int nextCY = CAROUSEL_CY + CAROUSEL_ITEM_H + CAROUSEL_ITEM_GAP;
-        spr.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
-        spr.setTextDatum(lgfx::middle_center);
-        spr.drawString(periodLabels[selectedPeriod + 1], cx, nextCY, &Satoshi12);
+// ── Helper: draw pair dropdown overlay (dark card with 5 items) ──
+static void drawPairDropdown(LGFX_Sprite& spr, uint8_t currentPair) {
+    int totalH = DROPDOWN_PAD * 2 + BTC_PAIR_COUNT * DROPDOWN_ITEM_H;
+
+    // Dark overlay background with rounded corners
+    spr.fillSmoothRoundRect(DROPDOWN_X, DROPDOWN_Y, DROPDOWN_W, totalH, DROPDOWN_R, Colors::BG_OVERLAY);
+    spr.drawRoundRect(DROPDOWN_X, DROPDOWN_Y, DROPDOWN_W, totalH, DROPDOWN_R, Colors::CARD_BORDER);
+
+    for (int i = 0; i < BTC_PAIR_COUNT; i++) {
+        int itemY = DROPDOWN_Y + DROPDOWN_PAD + i * DROPDOWN_ITEM_H;
+        int itemCY = itemY + DROPDOWN_ITEM_H / 2;
+
+        if (i == currentPair) {
+            // Selected item: subtle highlight background
+            spr.fillSmoothRoundRect(DROPDOWN_X + 4, itemY + 2, DROPDOWN_W - 8, DROPDOWN_ITEM_H - 4,
+                                     6, Colors::BG_ELEVATED);
+            // Green accent dot
+            spr.fillSmoothCircle(DROPDOWN_X + 16, itemCY, 3, Colors::LEMON_GREEN);
+            spr.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_ELEVATED);
+        } else {
+            spr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_OVERLAY);
+        }
+
+        // Pair label (e.g. "BTC/USD")
+        spr.setTextDatum(lgfx::middle_left);
+        spr.drawString(BTC_PAIRS[i].pairLabel, DROPDOWN_X + 26, itemCY, &Satoshi12);
+
+        // Divider line (except after last item)
+        if (i < BTC_PAIR_COUNT - 1) {
+            spr.drawFastHLine(DROPDOWN_X + 10, itemY + DROPDOWN_ITEM_H - 1,
+                              DROPDOWN_W - 20, Colors::DIVIDER);
+        }
     }
 }
 
@@ -281,11 +430,12 @@ void dashboardUpdateTimeDirect(const char* timeStr) {
 }
 
 // ── Direct-to-framebuffer price update (no pushSprite) ──
-void dashboardUpdatePriceDirect(const BtcPrice& btc) {
+void dashboardUpdatePriceDirect(const BtcPrice& btc, uint8_t selectedPair) {
     if (!spritesReady || !btc.valid) return;
 
-    char priceBuf[20];
-    formatBtcPrice(priceBuf, sizeof(priceBuf), btc.usd);
+    char priceBuf[24];
+    const PairDef& pair = BTC_PAIRS[selectedPair];
+    formatPairPrice(priceBuf, sizeof(priceBuf), btc.usd, pair.prefix, pair.suffix, pair.decimals);
 
     uint16_t priceColor = Colors::TEXT_PRIMARY;
     if (priceFlashActive) {
@@ -299,20 +449,26 @@ void dashboardUpdatePriceDirect(const BtcPrice& btc) {
         }
     }
 
-    // Price area in sprite coords
-    const int STRIP_Y = 26;
-    const int STRIP_H = 48;
-    const int STRIP_X = MARGIN + 1;
-    const int STRIP_W = CAROUSEL_X - MARGIN - 2;
+    // Skip direct price update when dropdown is open (would overwrite overlay)
+    if (pairDropdownOpen) return;
+
+    // Price area in sprite coords (between pair label and period carousel)
+    const int STRIP_Y = 30;
+    const int STRIP_H = 44;
+    const int STRIP_X = MARGIN + CARD_PAD;
+    const int STRIP_W = CAROUSEL_X - STRIP_X - 2;
+
+    // Use smaller font for non-USD pairs
+    const lgfx::IFont* priceFont = (selectedPair == 0) ? &SatoshiBold40 : &SatoshiBold24;
 
     // Update sprZ1 to stay in sync
     sprZ1.fillRect(STRIP_X, STRIP_Y, STRIP_W, STRIP_H, Colors::BG_CARD);
-    drawFixedWidthPrice(sprZ1, priceBuf, PRICE_CX, PRICE_CY, &SatoshiBold40, priceColor);
+    drawFixedWidthPrice(sprZ1, priceBuf, PRICE_CX, PRICE_CY, priceFont, priceColor);
 
     // Write directly to framebuffer (small area, fits in VBlank)
     displayWaitVSync();
     tft.fillRect(STRIP_X, Z1_Y + STRIP_Y, STRIP_W, STRIP_H, Colors::BG_CARD);
-    drawFixedWidthPrice(tft, priceBuf, PRICE_CX, Z1_Y + PRICE_CY, &SatoshiBold40, priceColor);
+    drawFixedWidthPrice(tft, priceBuf, PRICE_CX, Z1_Y + PRICE_CY, priceFont, priceColor);
 }
 
 // ══════════════════════════════════════════
@@ -320,28 +476,42 @@ void dashboardUpdatePriceDirect(const BtcPrice& btc) {
 // ══════════════════════════════════════════
 
 void dashboardDrawBtcHero(const BtcPrice& btc, const SparklineData& spark, uint8_t selectedPeriod,
-                          const float* periodChanges, ChartStyle chartStyle, const OhlcData* ohlc) {
+                          const float* periodChanges, ChartStyle chartStyle, const OhlcData* ohlc,
+                          uint8_t selectedPair) {
     sprZ1.fillSprite(Colors::BG_BASE);
 
     // Hero card (accent border, radius 20)
-    drawHeroCard(sprZ1, MARGIN, 0, CARD_W, Z1_H);
+    drawHeroCard(sprZ1, MARGIN, 0, CARD_W, z1H);
+
+    const PairDef& pair = BTC_PAIRS[selectedPair];
 
     if (!btc.valid) {
-        drawCentered(sprZ1, "BTC/USD...", Z1_H / 2 - 10,
+        char loadBuf[24];
+        snprintf(loadBuf, sizeof(loadBuf), "%s...", pair.pairLabel);
+        drawCentered(sprZ1, loadBuf, z1H / 2 - 10,
                      &SatoshiMedium18, Colors::TEXT_SECONDARY);
         sprZ1.pushSprite(0, Z1_Y);
         dirtyZones |= (1 << 1);
         return;
     }
 
-    // ── Top row: "BTC/USD" label ──
-    sprZ1.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
+    // ── Top row: pair label (tappable — opens dropdown) ──
+    sprZ1.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_CARD);
     sprZ1.setTextDatum(lgfx::top_left);
-    sprZ1.drawString("BTC/USD", MARGIN + CARD_PAD, 10, &Satoshi12);
+    sprZ1.drawString(pair.pairLabel, PAIR_LABEL_X, PAIR_LABEL_Y, &SatoshiMedium18);
+    // Down-chevron triangle (▼) next to label
+    {
+        int chevX = PAIR_LABEL_X + sprZ1.textWidth(pair.pairLabel, &SatoshiMedium18) + 8;
+        int chevY = PAIR_LABEL_Y + 7;
+        sprZ1.fillTriangle(chevX, chevY, chevX + 10, chevY, chevX + 5, chevY + 6, Colors::TEXT_SECONDARY);
+    }
 
-    // ── Main BTC price (no glow, centered) ──
-    char priceBuf[20];
-    formatBtcPrice(priceBuf, sizeof(priceBuf), btc.usd);
+    // ── Main price (no glow, centered) ──
+    // Use smaller font for non-USD pairs (longer text like "29.45 ETH")
+    const lgfx::IFont* priceFont = (selectedPair == 0) ? &SatoshiBold40 : &SatoshiBold24;
+
+    char priceBuf[24];
+    formatPairPrice(priceBuf, sizeof(priceBuf), btc.usd, pair.prefix, pair.suffix, pair.decimals);
 
     // Price flash: blend from green/red toward white over 600ms
     uint16_t priceColor = Colors::TEXT_PRIMARY;
@@ -356,7 +526,7 @@ void dashboardDrawBtcHero(const BtcPrice& btc, const SparklineData& spark, uint8
         }
     }
 
-    drawFixedWidthPrice(sprZ1, priceBuf, PRICE_CX, PRICE_CY, &SatoshiBold40, priceColor);
+    drawFixedWidthPrice(sprZ1, priceBuf, PRICE_CX, PRICE_CY, priceFont, priceColor);
 
     // ── Selected period change text below price ──
     if (periodChanges) {
@@ -365,57 +535,97 @@ void dashboardDrawBtcHero(const BtcPrice& btc, const SparklineData& spark, uint8
             bool pos = change >= 0;
             char changeBuf[24];
             snprintf(changeBuf, sizeof(changeBuf), "%s%.1f%% %s",
-                     pos ? "+" : "", change, periodLabels[selectedPeriod]);
+                     pos ? "+" : "", change, BTC_PERIODS[selectedPeriod].label);
             uint16_t changeColor = pos ? Colors::POSITIVE : Colors::NEGATIVE;
             sprZ1.setTextColor(changeColor);
             sprZ1.setTextDatum(lgfx::middle_center);
-            sprZ1.drawString(changeBuf, PRICE_CX, 80, &Satoshi12);
+            sprZ1.drawString(changeBuf, PRICE_CX, 88, &Satoshi12);
         }
     }
 
-    // ── Vertical carousel (right side) ──
+    // ── Period carousel (right side) ──
     drawCarousel(sprZ1, selectedPeriod);
 
     // ── Chart area (bottom portion) ──
     int chartX = MARGIN + CARD_PAD;
     int chartY = 100;
     int chartW = CARD_W - 2 * CARD_PAD;
-    int chartH = Z1_H - chartY - 10;  // 190px
+    int chartH = z1H - chartY - 10;
 
     if (chartH > 10) {
+        bool zoomed = chartZoom.active && chartZoom.zoomLevel > 1.01f;
+
         switch (chartStyle) {
             case CHART_CANDLE:
                 if (ohlc && ohlc->valid && ohlc->count >= 2) {
                     drawCandlestick(sprZ1, chartX, chartY, chartW, chartH, *ohlc);
                 } else if (spark.valid && spark.count >= 2) {
-                    // Fallback to line if no OHLC data
-                    drawSparkline(sprZ1, chartX, chartY, chartW, chartH,
-                                  spark, Colors::CHART_LINE, Colors::CHART_FILL);
+                    if (zoomed) {
+                        drawSparklineZoomed(sprZ1, chartX, chartY, chartW, chartH,
+                                            spark, Colors::CHART_LINE, Colors::CHART_FILL,
+                                            chartZoom.zoomLevel, chartZoom.panOffset);
+                    } else {
+                        drawSparkline(sprZ1, chartX, chartY, chartW, chartH,
+                                      spark, Colors::CHART_LINE, Colors::CHART_FILL);
+                    }
                 }
                 break;
 
             case CHART_MARKERS:
                 if (spark.valid && spark.count >= 2) {
-                    drawSparkline(sprZ1, chartX, chartY, chartW, chartH,
-                                  spark, Colors::CHART_LINE, Colors::CHART_FILL);
-                    drawChartMarkers(sprZ1, chartX, chartY, chartW, chartH,
-                                    spark, btc.ath);
+                    if (zoomed) {
+                        drawSparklineZoomed(sprZ1, chartX, chartY, chartW, chartH,
+                                            spark, Colors::CHART_LINE, Colors::CHART_FILL,
+                                            chartZoom.zoomLevel, chartZoom.panOffset);
+                    } else {
+                        drawSparkline(sprZ1, chartX, chartY, chartW, chartH,
+                                      spark, Colors::CHART_LINE, Colors::CHART_FILL);
+                    }
+                    if (!zoomed) {
+                        drawChartMarkers(sprZ1, chartX, chartY, chartW, chartH,
+                                        spark, btc.ath);
+                    }
                 }
                 break;
 
             case CHART_LINE:
             default:
                 if (spark.valid && spark.count >= 2) {
-                    drawSparkline(sprZ1, chartX, chartY, chartW, chartH,
-                                  spark, Colors::CHART_LINE, Colors::CHART_FILL);
+                    if (zoomed) {
+                        drawSparklineZoomed(sprZ1, chartX, chartY, chartW, chartH,
+                                            spark, Colors::CHART_LINE, Colors::CHART_FILL,
+                                            chartZoom.zoomLevel, chartZoom.panOffset);
+                    } else {
+                        drawSparkline(sprZ1, chartX, chartY, chartW, chartH,
+                                      spark, Colors::CHART_LINE, Colors::CHART_FILL);
+                    }
                 }
                 break;
         }
 
     }
 
+    // ── Zoom level indicator (pill badge, top-right of chart) ──
+    if (chartZoom.active && chartZoom.zoomLevel > 1.01f && chartH > 10) {
+        char zoomBuf[8];
+        snprintf(zoomBuf, sizeof(zoomBuf), "%.1fx", chartZoom.zoomLevel);
+        int tw = sprZ1.textWidth(zoomBuf, &Satoshi9) + 10;
+        int th = 16;
+        int bx = chartX + chartW - tw - 2;
+        int by = chartY + 4;
+        sprZ1.fillSmoothRoundRect(bx, by, tw, th, 4, Colors::BG_ELEVATED);
+        sprZ1.setTextColor(Colors::LEMON_GREEN, Colors::BG_ELEVATED);
+        sprZ1.setTextDatum(lgfx::middle_center);
+        sprZ1.drawString(zoomBuf, bx + tw / 2, by + th / 2, &Satoshi9);
+    }
+
+    // ── Pair dropdown overlay (drawn on top of chart if open) ──
+    if (pairDropdownOpen) {
+        drawPairDropdown(sprZ1, pairDropdownSelected);
+    }
+
     // Flash border (drawn last, on top of everything)
-    drawFlashBorderIfActive(sprZ1, 1, Z1_H);
+    drawFlashBorderIfActive(sprZ1, 1, z1H);
 
     displayWaitVSync();
     sprZ1.pushSprite(0, Z1_Y);
@@ -423,25 +633,28 @@ void dashboardDrawBtcHero(const BtcPrice& btc, const SparklineData& spark, uint8
 }
 
 // ── Price-only partial update ──
-// Only redraws the price text strip, clipped left of carousel to preserve it.
-void dashboardDrawPriceOnly(const BtcPrice& btc) {
+// Only redraws the price text strip, clipped between pair carousel and period carousel.
+void dashboardDrawPriceOnly(const BtcPrice& btc, uint8_t selectedPair) {
     if (!spritesReady || !btc.valid) return;
 
+    // Skip price-only update when dropdown is open
+    if (pairDropdownOpen) return;
+
     // Generous strip covering full SatoshiBold40 text height around PRICE_CY=50
-    const int STRIP_Y = 24;
-    const int STRIP_H = 56;   // covers y=24..80, well beyond font extents
-    const int CLIP_W  = CAROUSEL_X - 4;  // Stop before carousel area
+    const int STRIP_Y = 30;
+    const int STRIP_H = 50;   // covers y=30..80, avoids clipping pair label
+    const int CLIP_X  = MARGIN + CARD_PAD;
+    const int CLIP_W  = CAROUSEL_X - CLIP_X - 2;
 
-    // Clip sprite drawing to price strip, left of carousel
-    sprZ1.setClipRect(0, STRIP_Y, CLIP_W, STRIP_H);
+    // Clip sprite drawing to price strip, between carousels
+    sprZ1.setClipRect(CLIP_X, STRIP_Y, CLIP_W, STRIP_H);
 
-    // Clear: BG_BASE outside card, BG_CARD inside, accent border
-    sprZ1.fillRect(0, STRIP_Y, CLIP_W, STRIP_H, Colors::BG_BASE);
-    sprZ1.fillRect(MARGIN + 1, STRIP_Y, CLIP_W - MARGIN - 1, STRIP_H, Colors::BG_CARD);
-    sprZ1.drawFastVLine(MARGIN, STRIP_Y, STRIP_H, Colors::CARD_BORDER_ACCENT);
+    // Clear the strip area with card background
+    sprZ1.fillRect(CLIP_X, STRIP_Y, CLIP_W, STRIP_H, Colors::BG_CARD);
 
-    char priceBuf[20];
-    formatBtcPrice(priceBuf, sizeof(priceBuf), btc.usd);
+    const PairDef& pair = BTC_PAIRS[selectedPair];
+    char priceBuf[24];
+    formatPairPrice(priceBuf, sizeof(priceBuf), btc.usd, pair.prefix, pair.suffix, pair.decimals);
 
     uint16_t priceColor = Colors::TEXT_PRIMARY;
     if (priceFlashActive) {
@@ -455,13 +668,14 @@ void dashboardDrawPriceOnly(const BtcPrice& btc) {
         }
     }
 
-    drawFixedWidthPrice(sprZ1, priceBuf, PRICE_CX, PRICE_CY, &SatoshiBold40, priceColor);
+    const lgfx::IFont* priceFont = (selectedPair == 0) ? &SatoshiBold40 : &SatoshiBold24;
+    drawFixedWidthPrice(sprZ1, priceBuf, PRICE_CX, PRICE_CY, priceFont, priceColor);
 
     sprZ1.clearClipRect();
 
     // VSync + push only the price strip (much less PSRAM bus contention than full Z1)
     displayWaitVSync();
-    tft.setClipRect(0, Z1_Y + STRIP_Y, CLIP_W, STRIP_H);
+    tft.setClipRect(CLIP_X, Z1_Y + STRIP_Y, CLIP_W, STRIP_H);
     sprZ1.pushSprite(0, Z1_Y);
     tft.clearClipRect();
 }
@@ -470,43 +684,55 @@ void dashboardDrawPriceOnly(const BtcPrice& btc) {
 //  Z2: DOLAR DIGITAL (120px)
 // ══════════════════════════════════════════
 
-// Dollar period carousel (same style as BTC)
-static const char* dollarPeriodLabels[] = { "24h", "7d", "30d", "1Y" };
-static const int DOLLAR_PERIOD_COUNT = 4;
+// Dollar period labels come from DOLLAR_PERIODS[] in config.h
 
-#define DCAR_W          70
-#define DCAR_ITEM_H     24
+#define DCAR_W          84
+#define DCAR_ITEM_H     28
 #define DCAR_ITEM_GAP    2
 #define DCAR_X          (MARGIN + CARD_W - CARD_PAD - DCAR_W)
-#define DCAR_CY         38
+#define DCAR_CY         50
+
+// Dynamic CY for dollar carousel — centered for compact zone
+static int dollarCarouselCY() {
+    return (z2H <= 60) ? z2H / 2 : DCAR_CY;
+}
 
 static void drawDollarCarousel(LGFX_Sprite& spr, uint8_t selected) {
+    int cy = dollarCarouselCY();
     int cx = DCAR_X + DCAR_W / 2;
+    int step = DCAR_ITEM_H + DCAR_ITEM_GAP;
 
-    int selY = DCAR_CY - DCAR_ITEM_H / 2;
+    int selY = cy - DCAR_ITEM_H / 2;
     spr.fillSmoothRoundRect(DCAR_X, selY, DCAR_W, DCAR_ITEM_H, 6, Colors::BG_ELEVATED);
 
     spr.drawFastHLine(DCAR_X, selY - 1, DCAR_W, Colors::DIVIDER);
     spr.drawFastHLine(DCAR_X, selY + DCAR_ITEM_H, DCAR_W, Colors::DIVIDER);
 
-    spr.fillSmoothCircle(DCAR_X + 8, DCAR_CY, 3, Colors::NEBULA);
+    spr.fillSmoothCircle(DCAR_X + 8, cy, 3, Colors::NEBULA);
 
     spr.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_ELEVATED);
     spr.setTextDatum(lgfx::middle_center);
-    spr.drawString(dollarPeriodLabels[selected], cx + 4, DCAR_CY, &Satoshi12);
+    spr.drawString(DOLLAR_PERIODS[selected].label, cx + 4, cy, &Satoshi12);
 
-    if (selected > 0) {
-        int prevCY = DCAR_CY - DCAR_ITEM_H - DCAR_ITEM_GAP;
-        spr.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
-        spr.setTextDatum(lgfx::middle_center);
-        spr.drawString(dollarPeriodLabels[selected - 1], cx, prevCY, &Satoshi12);
-    }
+    // Draw up to 2 items above and 2 below (5 visible total)
+    for (int d = 1; d <= 2; d++) {
+        int idxAbove = (int)selected - d;
+        if (idxAbove >= 0) {
+            int itemCY = cy - d * step;
+            uint16_t color = (d == 1) ? Colors::TEXT_SECONDARY : Colors::TEXT_TERTIARY;
+            spr.setTextColor(color, Colors::BG_CARD);
+            spr.setTextDatum(lgfx::middle_center);
+            spr.drawString(DOLLAR_PERIODS[idxAbove].label, cx, itemCY, &Satoshi12);
+        }
 
-    if (selected < DOLLAR_PERIOD_COUNT - 1) {
-        int nextCY = DCAR_CY + DCAR_ITEM_H + DCAR_ITEM_GAP;
-        spr.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
-        spr.setTextDatum(lgfx::middle_center);
-        spr.drawString(dollarPeriodLabels[selected + 1], cx, nextCY, &Satoshi12);
+        int idxBelow = (int)selected + d;
+        if (idxBelow < DOLLAR_PERIOD_COUNT) {
+            int itemCY = cy + d * step;
+            uint16_t color = (d == 1) ? Colors::TEXT_SECONDARY : Colors::TEXT_TERTIARY;
+            spr.setTextColor(color, Colors::BG_CARD);
+            spr.setTextDatum(lgfx::middle_center);
+            spr.drawString(DOLLAR_PERIODS[idxBelow].label, cx, itemCY, &Satoshi12);
+        }
     }
 }
 
@@ -515,20 +741,26 @@ void dashboardDrawLemonDollar(const LemonPrice& lemon, const SparklineData* lemo
                               float dollarChange) {
     sprZ2.fillSprite(Colors::BG_BASE);
 
-    drawGlassCard(sprZ2, MARGIN, 0, CARD_W, Z2_H, CARD_R);
+    drawGlassCard(sprZ2, MARGIN, 0, CARD_W, z2H, CARD_R);
 
     if (!lemon.valid) {
-        drawCentered(sprZ2, "USDT/ARS...", Z2_H / 2 - 6,
+        drawCentered(sprZ2, "USDT/ARS...", z2H / 2 - 6,
                      &Satoshi12, Colors::TEXT_SECONDARY);
-        sprZ2.pushSprite(0, Z2_Y);
+        sprZ2.pushSprite(0, z2Y);
         dirtyZones |= (1 << 2);
         return;
     }
 
+    // ── Adaptive layout based on zone height ──
+    bool compact = (z2H <= 60);
+    int labelY  = compact ? 8  : 10;
+    int priceY  = compact ? 30 : 40;
+    const lgfx::IFont* priceFont = compact ? &SatoshiMedium18 : &SatoshiBold24;
+
     // ── "USDT/ARS" top-left ──
     sprZ2.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
     sprZ2.setTextDatum(lgfx::top_left);
-    sprZ2.drawString("USDT/ARS", MARGIN + CARD_PAD, 10, &Satoshi12);
+    sprZ2.drawString("USDT/ARS", MARGIN + CARD_PAD, labelY, compact ? &Satoshi9 : &Satoshi12);
 
     // ── Price + % change (left of carousel) ──
     float avg = (lemon.bid + lemon.ask) / 2.0f;
@@ -546,64 +778,110 @@ void dashboardDrawLemonDollar(const LemonPrice& lemon, const SparklineData* lemo
 
     sprZ2.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_CARD);
     sprZ2.setTextDatum(lgfx::middle_center);
-    sprZ2.drawString(avgBuf, PRICE_CX, 40, &SatoshiBold24);
+    sprZ2.drawString(avgBuf, PRICE_CX, priceY, priceFont);
 
-    if (!isnan(dollarChange) && fabsf(dollarChange) < 1000.0f) {
+    // ── % change (skip in compact layout — no room) ──
+    if (!compact && !isnan(dollarChange) && fabsf(dollarChange) < 1000.0f) {
         char changeBuf[24];
         if (fabsf(dollarChange) >= 100.0f) {
             snprintf(changeBuf, sizeof(changeBuf), "%s%.0f%% %s",
                      dollarChange >= 0 ? "+" : "", dollarChange,
-                     dollarPeriodLabels[dollarPeriod]);
+                     DOLLAR_PERIODS[dollarPeriod].label);
         } else {
             snprintf(changeBuf, sizeof(changeBuf), "%s%.1f%% %s",
                      dollarChange >= 0 ? "+" : "", dollarChange,
-                     dollarPeriodLabels[dollarPeriod]);
+                     DOLLAR_PERIODS[dollarPeriod].label);
         }
         uint16_t changeColor = dollarChange >= 0 ? Colors::POSITIVE : Colors::NEGATIVE;
         sprZ2.setTextColor(changeColor, Colors::BG_CARD);
         sprZ2.setTextDatum(lgfx::middle_center);
-        sprZ2.drawString(changeBuf, PRICE_CX, 60, &Satoshi12);
+        sprZ2.drawString(changeBuf, PRICE_CX, 66, &Satoshi12);
     }
 
     // ── Carousel (right side) ──
     drawDollarCarousel(sprZ2, dollarPeriod);
 
-    // ── Sparkline (bottom) ──
-    if (lemonSpark && lemonSpark->valid && lemonSpark->count >= 2) {
+    // ── Sparkline (bottom, stops before carousel — only if enough room) ──
+    if (!compact && lemonSpark && lemonSpark->valid && lemonSpark->count >= 2) {
         int chartX = MARGIN + CARD_PAD;
-        int chartY = 76;
-        int chartW = CARD_W - 2 * CARD_PAD;
-        int chartH = Z2_H - chartY - 6;
+        int chartY = 82;
+        int chartW = DCAR_X - chartX - 8;
+        int chartH = z2H - chartY - 6;
 
-        drawSparkline(sprZ2, chartX, chartY, chartW, chartH,
-                      *lemonSpark, Colors::NEBULA, Colors::BG_CARD);
-        if (dollarChartStyle == CHART_MARKERS) {
-            drawChartMarkers(sprZ2, chartX, chartY, chartW, chartH,
-                             *lemonSpark, 0.0f);  // no ATH for ARS
+        if (chartH > 10) {
+            drawSparkline(sprZ2, chartX, chartY, chartW, chartH,
+                          *lemonSpark, Colors::NEBULA, Colors::NEBULA_FILL);
+            if (dollarChartStyle == CHART_MARKERS) {
+                drawChartMarkers(sprZ2, chartX, chartY, chartW, chartH,
+                                 *lemonSpark, 0.0f);  // no ATH for ARS
+            }
         }
     }
 
     // Flash border (drawn last, on top of everything)
-    drawFlashBorderIfActive(sprZ2, 2, Z2_H);
+    drawFlashBorderIfActive(sprZ2, 2, z2H);
 
-    sprZ2.pushSprite(0, Z2_Y);
+    displayWaitVSync();
+    sprZ2.pushSprite(0, z2Y);
     dirtyZones |= (1 << 2);
 }
 
 int8_t dashboardHitTestDollarCarousel(int16_t x, int16_t y) {
     if (x < DCAR_X || x >= DCAR_X + DCAR_W) return 0;
 
-    int sprY = y - Z2_Y;
-    int selTop = DCAR_CY - DCAR_ITEM_H / 2;
-    int selBot = DCAR_CY + DCAR_ITEM_H / 2;
+    int cy = dollarCarouselCY();
+    int sprY = y - z2Y;
+    int step = DCAR_ITEM_H + DCAR_ITEM_GAP;
+    int selTop = cy - DCAR_ITEM_H / 2;
+    int selBot = cy + DCAR_ITEM_H / 2;
 
-    int upperTop = selTop - DCAR_ITEM_GAP - DCAR_ITEM_H;
-    if (sprY >= upperTop && sprY < selTop) return -1;
-
-    int lowerBot = selBot + DCAR_ITEM_GAP + DCAR_ITEM_H;
-    if (sprY >= selBot && sprY < lowerBot) return +1;
+    if (sprY >= selTop - 2 * step && sprY < selTop - step) return -2;
+    if (sprY >= selTop - step && sprY < selTop) return -1;
+    if (sprY >= selBot && sprY < selBot + step) return +1;
+    if (sprY >= selBot + step && sprY < selBot + 2 * step) return +2;
 
     return 0;
+}
+
+// ── Pair dropdown functions ──
+
+bool dashboardIsPairDropdownOpen() {
+    return pairDropdownOpen;
+}
+
+void dashboardOpenPairDropdown(uint8_t currentPair) {
+    pairDropdownOpen = true;
+    pairDropdownSelected = currentPair;
+}
+
+void dashboardClosePairDropdown() {
+    pairDropdownOpen = false;
+}
+
+int8_t dashboardHitTestPairDropdown(int16_t x, int16_t y) {
+    if (!pairDropdownOpen) return -1;
+
+    int sprY = y - Z1_Y;
+    int sprX = x;
+
+    // Check if tap is within dropdown bounds
+    int totalH = DROPDOWN_PAD * 2 + BTC_PAIR_COUNT * DROPDOWN_ITEM_H;
+    if (sprX < DROPDOWN_X || sprX >= DROPDOWN_X + DROPDOWN_W) return -1;
+    if (sprY < DROPDOWN_Y || sprY >= DROPDOWN_Y + totalH) return -1;
+
+    // Determine which item was tapped
+    int relY = sprY - DROPDOWN_Y - DROPDOWN_PAD;
+    if (relY < 0) return -1;
+    int idx = relY / DROPDOWN_ITEM_H;
+    if (idx >= 0 && idx < BTC_PAIR_COUNT) return (int8_t)idx;
+
+    return -1;
+}
+
+bool dashboardHitTestPairLabel(int16_t x, int16_t y) {
+    int sprY = y - Z1_Y;
+    return (x >= PAIR_LABEL_X && x < PAIR_LABEL_X + PAIR_LABEL_W &&
+            sprY >= PAIR_LABEL_Y && sprY < PAIR_LABEL_Y + PAIR_LABEL_H);
 }
 
 // ══════════════════════════════════════════
@@ -645,7 +923,7 @@ void dashboardSyncDrawBuffer() {
         sprZ1.pushSprite(0, Z1_Y);
     }
     if (dz & (1 << 2)) {
-        sprZ2.pushSprite(0, Z2_Y);
+        sprZ2.pushSprite(0, z2Y);
     }
 }
 
@@ -655,6 +933,16 @@ void dashboardMarkDirty(uint8_t zoneId) {
 
 void dashboardMarkAllDirty() {
     dirtyZones = 0x07;
+}
+
+void dashboardFillGaps() {
+    displayWaitVSync();
+    // Header-Z1 gap
+    tft.fillRect(0, Z0_Y + Z0_H, SCREEN_W, Z1_Y - (Z0_Y + Z0_H), Colors::BG_BASE);
+    // Z1-Z2 gap
+    tft.fillRect(0, Z1_Y + z1H, SCREEN_W, z2Y - (Z1_Y + z1H), Colors::BG_BASE);
+    // Below Z2
+    tft.fillRect(0, z2Y + z2H, SCREEN_W, SCREEN_H - (z2Y + z2H), Colors::BG_BASE);
 }
 
 // ══════════════════════════════════════════
@@ -683,15 +971,101 @@ static const char* loadStatusTexts[] = {
     "Listo!"
 };
 
+// ── Helper: RGB565 color lerp (for boot animation) ──
+static uint16_t lerpColor565(uint16_t c1, uint16_t c2, float t) {
+    if (t <= 0.0f) return c1;
+    if (t >= 1.0f) return c2;
+    uint8_t r1 = (c1 >> 11) & 0x1F, g1 = (c1 >> 5) & 0x3F, b1 = c1 & 0x1F;
+    uint8_t r2 = (c2 >> 11) & 0x1F, g2 = (c2 >> 5) & 0x3F, b2 = c2 & 0x1F;
+    uint8_t r = r1 + (int)((r2 - r1) * t);
+    uint8_t g = g1 + (int)((g2 - g1) * t);
+    uint8_t b = b1 + (int)((b2 - b1) * t);
+    return (r << 11) | (g << 5) | b;
+}
+
+// ── Helper: convert RGB565 to grayscale RGB565 ──
+static uint16_t toGray565(uint16_t c) {
+    uint8_t r = (c >> 11) & 0x1F;
+    uint8_t g = (c >> 5)  & 0x3F;
+    uint8_t b = c & 0x1F;
+    // Luminance approximation (scale to 5/6/5 bit ranges)
+    uint8_t gray5 = (r * 77 + (g >> 1) * 150 + b * 29) >> 8;  // 5-bit
+    uint8_t gray6 = gray5 << 1;
+    return (gray5 << 11) | (gray6 << 5) | gray5;
+}
+
 void dashboardDrawLoading(LoadPhase phase) {
     if (phase == LOAD_LOGO) {
         tft.fillScreen(Colors::BG_BASE);
 
-        // Full imagotipo (244x56 — icon + LEMON wordmark, centered)
-        drawLemonImagotipo244(tft, LOAD_LOGO_X, LOAD_LOGO_Y);
+        // ── Gray → Color logo fade animation (1.5s at 30fps) ──
+        {
+            // Draw color logo into a temp sprite
+            LGFX_Sprite colorSpr(&tft);
+            colorSpr.setPsram(true);
+            colorSpr.setColorDepth(16);
+            colorSpr.createSprite(LOAD_LOGO_W, LOAD_LOGO_H);
+            colorSpr.fillSprite(Colors::BG_BASE);
+            drawLemonImagotipo244(colorSpr, 0, 0);
 
-        // Progress bar background
-        tft.fillSmoothRoundRect(LOAD_BAR_X, LOAD_BAR_Y, LOAD_BAR_W, LOAD_BAR_H, LOAD_BAR_R, Colors::BG_ELEVATED);
+            // Create grayscale version
+            LGFX_Sprite graySpr(&tft);
+            graySpr.setPsram(true);
+            graySpr.setColorDepth(16);
+            graySpr.createSprite(LOAD_LOGO_W, LOAD_LOGO_H);
+            for (int py = 0; py < LOAD_LOGO_H; py++) {
+                for (int px = 0; px < LOAD_LOGO_W; px++) {
+                    uint16_t c = colorSpr.readPixel(px, py);
+                    graySpr.drawPixel(px, py, toGray565(c));
+                }
+            }
+
+            // Blend sprite for output
+            LGFX_Sprite blendSpr(&tft);
+            blendSpr.setPsram(true);
+            blendSpr.setColorDepth(16);
+            blendSpr.createSprite(LOAD_LOGO_W, LOAD_LOGO_H);
+
+            // Animate: left-to-right color sweep over 2s
+            const int FADE_FRAMES = 60;  // 2s at 30fps
+            const float FRONT_W = 0.20f; // Width of transition zone (fraction of logo)
+
+            for (int f = 0; f < FADE_FRAMES; f++) {
+                float progress = (float)f / (FADE_FRAMES - 1);
+                // Ease-out quad for smooth deceleration at end
+                float ease = 1.0f - (1.0f - progress) * (1.0f - progress);
+                // Front position sweeps from -FRONT_W to 1.0
+                float frontPos = -FRONT_W + ease * (1.0f + FRONT_W);
+
+                for (int py = 0; py < LOAD_LOGO_H; py++) {
+                    for (int px = 0; px < LOAD_LOGO_W; px++) {
+                        float xNorm = (float)px / (LOAD_LOGO_W - 1);
+                        float pixelT;
+                        if (xNorm <= frontPos) {
+                            pixelT = 1.0f;  // Fully colored
+                        } else if (xNorm >= frontPos + FRONT_W) {
+                            pixelT = 0.0f;  // Still gray
+                        } else {
+                            pixelT = 1.0f - (xNorm - frontPos) / FRONT_W;
+                        }
+                        uint16_t gray = graySpr.readPixel(px, py);
+                        uint16_t color = colorSpr.readPixel(px, py);
+                        blendSpr.drawPixel(px, py, lerpColor565(gray, color, pixelT));
+                    }
+                }
+
+                displayWaitVSync();
+                blendSpr.pushSprite(LOAD_LOGO_X, LOAD_LOGO_Y);
+                delay(33);
+            }
+
+            // Final: push full color version
+            colorSpr.pushSprite(LOAD_LOGO_X, LOAD_LOGO_Y);
+
+            graySpr.deleteSprite();
+            blendSpr.deleteSprite();
+            colorSpr.deleteSprite();
+        }
 
         // Version at bottom
         {
@@ -705,13 +1079,6 @@ void dashboardDrawLoading(LoadPhase phase) {
             verSpr.pushSprite(0, SCREEN_H - 30);
             verSpr.deleteSprite();
         }
-    }
-
-    // Progress bar fill (grows with each phase)
-    int fillW = (int)((long)LOAD_BAR_W * (int)phase / (int)LOAD_DONE);
-    if (fillW > 0) {
-        if (fillW < LOAD_BAR_H) fillW = LOAD_BAR_H;  // min width for rounding
-        tft.fillSmoothRoundRect(LOAD_BAR_X, LOAD_BAR_Y, fillW, LOAD_BAR_H, LOAD_BAR_R, Colors::LEMON_GREEN);
     }
 
     // Status text (sprite to cleanly replace previous text)
@@ -765,19 +1132,10 @@ void dashboardUpdateFlash() {
 //  ZONE HIT-TEST
 // ══════════════════════════════════════════
 
-static const int DASH_ZONE_BOUNDS[][2] = {
-    {  Z0_Y, Z0_Y + Z0_H },  // Zone 0: Header
-    {  Z1_Y, Z1_Y + Z1_H },  // Zone 1: BTC Hero
-    {  Z2_Y, Z2_Y + Z2_H },  // Zone 2: Lemon Dollar
-};
-static const int DASH_NUM_ZONES = 3;
-
 static uint8_t dashHitTestZone(int16_t y) {
-    for (int i = 0; i < DASH_NUM_ZONES; i++) {
-        if (y >= DASH_ZONE_BOUNDS[i][0] && y < DASH_ZONE_BOUNDS[i][1]) {
-            return i;
-        }
-    }
+    if (y >= Z0_Y && y < Z0_Y + Z0_H) return 0;
+    if (y >= Z1_Y && y < Z1_Y + z1H) return 1;
+    if (y >= z2Y && y < z2Y + z2H) return 2;
     return 255;
 }
 
@@ -789,18 +1147,23 @@ int8_t dashboardHitTestCarousel(int16_t x, int16_t y) {
 
     // Convert Y to sprite coordinates
     int sprY = y - Z1_Y;
+    int step = CAROUSEL_ITEM_H + CAROUSEL_ITEM_GAP;
 
     // Selected item bounds in sprite space
-    int selTop = CAROUSEL_CY - CAROUSEL_ITEM_H / 2;  // 47
-    int selBot = CAROUSEL_CY + CAROUSEL_ITEM_H / 2;  // 69
+    int selTop = CAROUSEL_CY - CAROUSEL_ITEM_H / 2;
+    int selBot = CAROUSEL_CY + CAROUSEL_ITEM_H / 2;
 
-    // Upper slot (previous period)
-    int upperTop = selTop - CAROUSEL_ITEM_GAP - CAROUSEL_ITEM_H;  // 23
-    if (sprY >= upperTop && sprY < selTop) return -1;
+    // 2 slots above selected
+    if (sprY >= selTop - 2 * step && sprY < selTop - step) return -2;
 
-    // Lower slot (next period)
-    int lowerBot = selBot + CAROUSEL_ITEM_GAP + CAROUSEL_ITEM_H;  // 93
-    if (sprY >= selBot && sprY < lowerBot) return +1;
+    // 1 slot above selected
+    if (sprY >= selTop - step && sprY < selTop) return -1;
+
+    // 1 slot below selected
+    if (sprY >= selBot && sprY < selBot + step) return +1;
+
+    // 2 slots below selected
+    if (sprY >= selBot + step && sprY < selBot + 2 * step) return +2;
 
     return 0;
 }

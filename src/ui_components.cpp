@@ -151,8 +151,7 @@ void drawCandlestick(LGFX_Sprite& spr, int x, int y, int w, int h,
     float barSlot = (float)w / data.count;
     int bodyW = (int)(barSlot * 0.7f);
     if (bodyW < 1) bodyW = 1;
-    if (bodyW > 8) bodyW = 8;
-    int gap = (barSlot > 2) ? 1 : 0;
+    if (bodyW > 10) bodyW = 10;
 
     for (int i = 0; i < data.count; i++) {
         const OhlcBar& bar = data.bars[i];
@@ -165,21 +164,50 @@ void drawCandlestick(LGFX_Sprite& spr, int x, int y, int w, int h,
 
         bool bullish = (bar.close >= bar.open);
         uint16_t bodyColor = bullish ? Colors::CANDLE_BULL : Colors::CANDLE_BEAR;
+        uint16_t glowColor = bullish ? Colors::CANDLE_BULL_GLOW : Colors::CANDLE_BEAR_GLOW;
+        uint16_t hlColor   = bullish ? Colors::CANDLE_BULL_HL : Colors::CANDLE_BEAR_HL;
 
-        // Wick (thin vertical line from high to low)
-        spr.drawFastVLine(cx, yHigh, yLow - yHigh + 1, Colors::CANDLE_WICK);
-
-        // Body (open to close rect)
+        // Body bounds
         int bodyTop = bullish ? yClose : yOpen;
         int bodyBot = bullish ? yOpen  : yClose;
         int bodyH = bodyBot - bodyTop;
         if (bodyH < 1) bodyH = 1;
-
         int bodyX = cx - bodyW / 2;
-        spr.fillRect(bodyX, bodyTop, bodyW, bodyH, bodyColor);
+
+        // Wick: 2px wide with rounded caps if body is wide enough
+        if (bodyW >= 3) {
+            spr.fillRect(cx - 1, yHigh, 2, yLow - yHigh + 1, Colors::CANDLE_WICK);
+            // Rounded wick caps
+            spr.drawPixel(cx, yHigh, Colors::CANDLE_WICK);
+            spr.drawPixel(cx, yLow, Colors::CANDLE_WICK);
+        } else {
+            spr.drawFastVLine(cx, yHigh, yLow - yHigh + 1, Colors::CANDLE_WICK);
+        }
+
+        // Outer glow: 1px larger rect behind body
+        if (bodyW >= 3 && bodyH >= 2) {
+            spr.fillRect(bodyX - 1, bodyTop - 1, bodyW + 2, bodyH + 2, glowColor);
+        }
+
+        // Body: rounded rect
+        if (bodyW >= 4 && bodyH >= 4) {
+            spr.fillSmoothRoundRect(bodyX, bodyTop, bodyW, bodyH, 2, bodyColor);
+        } else {
+            spr.fillRect(bodyX, bodyTop, bodyW, bodyH, bodyColor);
+        }
+
+        // Center highlight: vertical stripe (glass reflection effect)
+        if (bodyW >= 4 && bodyH >= 3) {
+            int hlX = cx;
+            int hlTop = bodyTop + 1;
+            int hlH = bodyH - 2;
+            if (hlH > 0) {
+                spr.drawFastVLine(hlX, hlTop, hlH, hlColor);
+            }
+        }
     }
 
-    // Last price dot with glow
+    // Last bar: dot with glow
     if (data.count > 0) {
         const OhlcBar& last = data.bars[data.count - 1];
         int lastX = x + (int)((data.count - 1) * barSlot + barSlot * 0.5f);
@@ -293,6 +321,94 @@ void drawChartMarkers(LGFX_Sprite& spr, int x, int y, int w, int h,
             drawPricePill(x + w - 40, athY - 20, fullBuf, Colors::ATH_LINE, false);
         }
     }
+}
+
+// ══════════════════════════════════════════
+//  ZOOMED SPARKLINE
+// ══════════════════════════════════════════
+
+void drawSparklineZoomed(LGFX_Sprite& spr, int x, int y, int w, int h,
+                         const SparklineData& data, uint16_t lineColor, uint16_t fillColor,
+                         float zoomLevel, float panOffset) {
+    if (!data.valid || data.count < 2 || zoomLevel <= 1.0f) {
+        // No zoom — fallback to normal sparkline
+        drawSparkline(spr, x, y, w, h, data, lineColor, fillColor);
+        return;
+    }
+
+    // Calculate visible window based on zoom and pan
+    float windowSize = 1.0f / zoomLevel;  // fraction of total data visible
+    float windowStart = panOffset * (1.0f - windowSize);
+    float windowEnd = windowStart + windowSize;
+
+    // Map to data indices
+    int startIdx = (int)(windowStart * (data.count - 1));
+    int endIdx   = (int)(windowEnd * (data.count - 1));
+    if (startIdx < 0) startIdx = 0;
+    if (endIdx >= data.count) endIdx = data.count - 1;
+    int visibleCount = endIdx - startIdx + 1;
+    if (visibleCount < 2) return;
+
+    // Find local min/max for auto-scaling Y
+    float localMin = 1e12f, localMax = -1e12f;
+    for (int i = startIdx; i <= endIdx; i++) {
+        if (data.points[i] < localMin) localMin = data.points[i];
+        if (data.points[i] > localMax) localMax = data.points[i];
+    }
+
+    float range = localMax - localMin;
+    if (range < 0.01f) range = 1.0f;
+
+    // Add 5% padding to Y range
+    float padding = range * 0.05f;
+    localMin -= padding;
+    localMax += padding;
+    range = localMax - localMin;
+
+    auto mapX = [&](int i) -> int {
+        return x + ((i - startIdx) * w) / (visibleCount - 1);
+    };
+    auto mapY = [&](float val) -> int {
+        return y + h - 1 - (int)(((val - localMin) / range) * (h - 2));
+    };
+
+    int bottom = y + h - 1;
+
+    // Gradient fill
+    for (int i = startIdx; i < endIdx; i++) {
+        int x0 = mapX(i);
+        int x1 = mapX(i + 1);
+        int y0 = mapY(data.points[i]);
+        int y1 = mapY(data.points[i + 1]);
+
+        for (int px = x0; px <= x1; px++) {
+            float t = (x1 == x0) ? 0 : (float)(px - x0) / (x1 - x0);
+            int lineY = y0 + (int)(t * (y1 - y0));
+            if (lineY < bottom) {
+                int fillH = bottom - lineY;
+                for (int fy = lineY + 1; fy <= bottom; fy++) {
+                    float grad = (float)(fy - lineY) / fillH;
+                    uint16_t c = lerpColor565(fillColor, Colors::BG_CARD, grad);
+                    spr.drawPixel(px, fy, c);
+                }
+            }
+        }
+    }
+
+    // 2px thick line
+    for (int i = startIdx; i < endIdx; i++) {
+        int x0 = mapX(i);
+        int x1 = mapX(i + 1);
+        int y0 = mapY(data.points[i]);
+        int y1 = mapY(data.points[i + 1]);
+        spr.drawWideLine(x0, y0, x1, y1, 2.0f, lineColor);
+    }
+
+    // Last visible price dot
+    int lastX = mapX(endIdx);
+    int lastY = mapY(data.points[endIdx]);
+    spr.fillSmoothCircle(lastX, lastY, 5, Colors::GLOW_1);
+    spr.fillSmoothCircle(lastX, lastY, 3, lineColor);
 }
 
 // ══════════════════════════════════════════
@@ -534,6 +650,46 @@ void formatArsPrice(char* buf, size_t bufSize, float price) {
     }
 }
 
+void formatPairPrice(char* buf, size_t bufSize, float price,
+                     const char* prefix, const char* suffix, uint8_t decimals) {
+    // ARS style: millions with 1 decimal (prefix="$", suffix="", decimals=0, price>100000)
+    if (decimals == 0 && strcmp(prefix, "$") == 0 && suffix[0] == '\0' && price > 100000.0f) {
+        if (price >= 1000000.0f) {
+            // Millions: $130,4M
+            float millions = price / 1000000.0f;
+            int intM = (int)millions;
+            int decM = ((int)(millions * 10.0f + 0.5f)) % 10;
+            snprintf(buf, bufSize, "$%d,%dM", intM, decM);
+        } else {
+            // 100k-999k: dot separator
+            int intPart = (int)price;
+            snprintf(buf, bufSize, "$%d.%03d", intPart / 1000, intPart % 1000);
+        }
+        return;
+    }
+
+    // Standard BTC/USD style: integer with comma separator
+    if (decimals == 0 && strcmp(prefix, "$") == 0 && suffix[0] == '\0') {
+        formatBtcPrice(buf, bufSize, price);
+        return;
+    }
+
+    // Generic: prefix + number with decimals + suffix
+    if (decimals == 0) {
+        int intPart = (int)price;
+        if (intPart >= 1000000) {
+            snprintf(buf, bufSize, "%s%d,%03d,%03d%s",
+                     prefix, intPart / 1000000, (intPart / 1000) % 1000, intPart % 1000, suffix);
+        } else if (intPart >= 1000) {
+            snprintf(buf, bufSize, "%s%d,%03d%s", prefix, intPart / 1000, intPart % 1000, suffix);
+        } else {
+            snprintf(buf, bufSize, "%s%d%s", prefix, intPart, suffix);
+        }
+    } else {
+        snprintf(buf, bufSize, "%s%.*f%s", prefix, decimals, (double)price, suffix);
+    }
+}
+
 void formatCoinPrice(char* buf, size_t bufSize, float price, CoinId coin) {
     switch (coin) {
         case COIN_BTC:
@@ -583,6 +739,17 @@ void drawSlider(LGFX_Sprite& spr, int x, int y, int w, int h, float value) {
     if (knobX > x + w - r) knobX = x + w - r;
     spr.fillSmoothCircle(knobX, y + h / 2, h / 2 + 4, Colors::TEXT_PRIMARY);
     spr.fillSmoothCircle(knobX, y + h / 2, h / 2 + 1, Colors::LEMON_GREEN);
+}
+
+// ══════════════════════════════════════════
+//  TOGGLE SWITCH (44x24)
+// ══════════════════════════════════════════
+
+void drawToggle(LGFX_Sprite& spr, int x, int y, bool on) {
+    uint16_t trackColor = on ? Colors::GREEN_DIM : Colors::BG_ELEVATED;
+    spr.fillSmoothRoundRect(x, y, 44, 24, 12, trackColor);
+    int knobX = on ? (x + 32) : (x + 12);
+    spr.fillSmoothCircle(knobX, y + 12, 9, Colors::TEXT_PRIMARY);
 }
 
 // ══════════════════════════════════════════

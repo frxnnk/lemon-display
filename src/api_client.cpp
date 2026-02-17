@@ -410,6 +410,209 @@ ApiResult fetchLemonSparkline(SparklineData& out, int days) {
     return API_OK;
 }
 
+// ── Binance: Kline data with parameterized symbol (for pair switching) ──
+ApiResult fetchBinanceKlinesSymbol(SparklineData& out, const char* symbol,
+                                    const char* interval, int limit, bool invert) {
+    char urlBuf[128];
+    snprintf(urlBuf, sizeof(urlBuf),
+             "%s?symbol=%s&interval=%s&limit=%d",
+             BINANCE_KLINES_EP, symbol, interval, limit);
+
+    ApiResult result;
+    String json = httpGet(urlBuf, false, result);
+    if (result != API_OK) return result;
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, json);
+    if (err) {
+        Serial.printf("[API] Binance klines JSON error: %s\n", err.c_str());
+        return API_PARSE_ERROR;
+    }
+
+    JsonArray arr = doc.as<JsonArray>();
+    if (arr.isNull() || arr.size() == 0) return API_PARSE_ERROR;
+
+    int total = arr.size();
+    int targetCount = (total <= SPARKLINE_POINTS) ? total : SPARKLINE_POINTS;
+
+    out.count = targetCount;
+    out.minVal = 1e12f;
+    out.maxVal = -1e12f;
+
+    float step = (float)total / targetCount;
+    int i = 0;
+    for (int t = 0; t < targetCount; t++) {
+        int idx = (int)(t * step);
+        if (idx >= total) idx = total - 1;
+        JsonArray kline = arr[idx];
+        const char* closeStr = kline[4].as<const char*>();
+        float val = closeStr ? atof(closeStr) : 0.0f;
+        if (val <= 0) continue;
+        if (invert) val = 1.0f / val;
+        out.points[i] = val;
+        if (val < out.minVal) out.minVal = val;
+        if (val > out.maxVal) out.maxVal = val;
+        i++;
+    }
+    out.count = i;
+
+    out.valid = (i >= 2);
+    out.lastUpdate = millis();
+
+    Serial.printf("[API] Binance klines %s (%s, %d): %d pts, %.4f-%.4f\n",
+                  symbol, interval, limit, out.count, out.minVal, out.maxVal);
+    return out.valid ? API_OK : API_PARSE_ERROR;
+}
+
+// ── Binance: OHLC with parameterized symbol ──
+ApiResult fetchBinanceOhlcSymbol(OhlcData& out, const char* symbol,
+                                  const char* interval, int limit, bool invert) {
+    char urlBuf[128];
+    snprintf(urlBuf, sizeof(urlBuf),
+             "%s?symbol=%s&interval=%s&limit=%d",
+             BINANCE_KLINES_EP, symbol, interval, limit);
+
+    ApiResult result;
+    String json = httpGet(urlBuf, false, result);
+    if (result != API_OK) return result;
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, json);
+    if (err) {
+        Serial.printf("[API] Binance OHLC JSON error: %s\n", err.c_str());
+        return API_PARSE_ERROR;
+    }
+
+    JsonArray arr = doc.as<JsonArray>();
+    if (arr.isNull() || arr.size() == 0) return API_PARSE_ERROR;
+
+    int total = arr.size();
+    int count = (total <= OHLC_MAX_BARS) ? total : OHLC_MAX_BARS;
+
+    out.count = 0;
+    out.minVal = 1e12f;
+    out.maxVal = -1e12f;
+
+    for (int i = 0; i < count; i++) {
+        JsonArray kline = arr[i];
+        const char* openStr  = kline[1].as<const char*>();
+        const char* highStr  = kline[2].as<const char*>();
+        const char* lowStr   = kline[3].as<const char*>();
+        const char* closeStr = kline[4].as<const char*>();
+
+        float o = openStr  ? atof(openStr)  : 0.0f;
+        float h = highStr  ? atof(highStr)  : 0.0f;
+        float l = lowStr   ? atof(lowStr)   : 0.0f;
+        float c = closeStr ? atof(closeStr) : 0.0f;
+
+        if (o <= 0 || h <= 0 || l <= 0 || c <= 0) continue;
+
+        if (invert) {
+            // Invert all OHLC values; note high/low swap when inverting
+            float io = 1.0f / o;
+            float ih = 1.0f / l;   // 1/low becomes high
+            float il = 1.0f / h;   // 1/high becomes low
+            float ic = 1.0f / c;
+            o = io; h = ih; l = il; c = ic;
+        }
+
+        out.bars[out.count] = { o, h, l, c };
+        if (l < out.minVal) out.minVal = l;
+        if (h > out.maxVal) out.maxVal = h;
+        out.count++;
+    }
+
+    out.valid = (out.count >= 2);
+    out.lastUpdate = millis();
+
+    Serial.printf("[API] Binance OHLC %s (%s, %d): %d bars\n",
+                  symbol, interval, limit, out.count);
+    return out.valid ? API_OK : API_PARSE_ERROR;
+}
+
+// ── CoinGecko: Sparkline with configurable vs_currency ──
+ApiResult fetchSparklineVsCurrency(SparklineData& out, int days,
+                                    const char* vsCurrency, CoinId coin) {
+    const char* geckoId = "bitcoin";
+    switch (coin) {
+        case COIN_ETH: geckoId = "ethereum"; break;
+        case COIN_SOL: geckoId = "solana";   break;
+        default:       geckoId = "bitcoin";  break;
+    }
+
+    char urlBuf[256];
+    snprintf(urlBuf, sizeof(urlBuf),
+             "https://api.coingecko.com/api/v3/coins/%s/market_chart?vs_currency=%s&days=%d",
+             geckoId, vsCurrency, days);
+
+    ApiResult result;
+    String json = httpGet(urlBuf, false, result);
+    if (result != API_OK) return result;
+
+    JsonDocument filter;
+    filter["prices"][0][0] = true;
+    filter["prices"][0][1] = true;
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, json,
+        DeserializationOption::Filter(filter),
+        DeserializationOption::NestingLimit(15));
+
+    if (err) {
+        Serial.printf("[API] Sparkline JSON error: %s\n", err.c_str());
+        return API_PARSE_ERROR;
+    }
+
+    JsonArray prices = doc["prices"];
+    int total = prices.size();
+    if (total == 0) return API_PARSE_ERROR;
+
+    int targetCount = min((int)SPARKLINE_POINTS, total);
+    out.count = targetCount;
+    out.minVal = 1e12;
+    out.maxVal = -1e12;
+
+    float step = (float)total / targetCount;
+    for (int i = 0; i < targetCount; i++) {
+        int idx = (int)(i * step);
+        if (idx >= total) idx = total - 1;
+        float val = prices[idx][1].as<float>();
+        out.points[i] = val;
+        if (val < out.minVal) out.minVal = val;
+        if (val > out.maxVal) out.maxVal = val;
+    }
+
+    out.valid = true;
+    out.lastUpdate = millis();
+    Serial.printf("[API] Sparkline %s vs %s (%dd): %d pts, %.4f-%.4f\n",
+                  geckoId, vsCurrency, days, out.count, out.minVal, out.maxVal);
+    return API_OK;
+}
+
+// ── CoinGecko: Fetch BTC price in arbitrary currency (for XAU, etc.) ──
+ApiResult fetchGeckoBtcPrice(const char* vsCurrency, float& outPrice) {
+    char urlBuf[128];
+    snprintf(urlBuf, sizeof(urlBuf),
+             "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=%s",
+             vsCurrency);
+
+    ApiResult result;
+    String json = httpGet(urlBuf, false, result);
+    if (result != API_OK) return result;
+
+    JsonDocument doc;
+    if (deserializeJson(doc, json)) {
+        return API_PARSE_ERROR;
+    }
+
+    float price = doc["bitcoin"][vsCurrency] | 0.0f;
+    if (price <= 0) return API_PARSE_ERROR;
+
+    outPrice = price;
+    Serial.printf("[API] BTC/%s: %.4f\n", vsCurrency, outPrice);
+    return API_OK;
+}
+
 // ── CriptoYa: Lemon USDT/ARS price ──
 ApiResult fetchLemonPrice(LemonPrice& out) {
     ApiResult result;

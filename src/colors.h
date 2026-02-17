@@ -21,6 +21,7 @@ namespace Colors {
     constexpr uint16_t STARLIGHT    = 0xE73C;  // #E7E7E7  Starlight — light text (5%)
     constexpr uint16_t MOON         = 0x5ACB;  // #5B5B5B  Moon — muted surfaces (5%)
     constexpr uint16_t GREEN_DIM    = 0x0360;  // #006030  Muted green for subtle accents
+    constexpr uint16_t NEBULA_FILL  = 0x2018;  // #200830  Nebula gradient fill (purple→BG)
 
     // ── Coin accent colors ──
     constexpr uint16_t COIN_BTC     = 0xFC20;  // #FF8700  Solar (same as SOLAR)
@@ -52,10 +53,14 @@ namespace Colors {
     constexpr uint16_t CHART_FILL = 0x01C3;  // #003818  Dark green fill
     constexpr uint16_t CHART_GRID = 0x18C3;  // Subtle grid
 
-    // Candlestick colors (reuse status colors)
-    constexpr uint16_t CANDLE_BULL  = POSITIVE;   // Green for bullish
-    constexpr uint16_t CANDLE_BEAR  = NEGATIVE;   // Red for bearish
-    constexpr uint16_t CANDLE_WICK  = 0x5ACB;     // MOON gray for wicks
+    // Candlestick colors (glassmorphism style)
+    constexpr uint16_t CANDLE_BULL      = POSITIVE;    // Green for bullish
+    constexpr uint16_t CANDLE_BEAR      = NEGATIVE;    // Red for bearish
+    constexpr uint16_t CANDLE_WICK      = 0x5ACB;      // MOON gray for wicks
+    constexpr uint16_t CANDLE_BULL_GLOW = 0x0220;      // #003010  Dim green outer glow
+    constexpr uint16_t CANDLE_BEAR_GLOW = 0x3000;      // #300008  Dim red outer glow
+    constexpr uint16_t CANDLE_BULL_HL   = 0x5FED;      // #5BFFA8  Bright green center highlight
+    constexpr uint16_t CANDLE_BEAR_HL   = 0xFCB3;      // #FF9898  Bright red center highlight
 
     // Marker colors
     constexpr uint16_t MARKER_HIGH = POSITIVE;     // Green for period high

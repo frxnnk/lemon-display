@@ -21,3 +21,12 @@ ApiResult fetchLemonPrice(LemonPrice& out);
 ApiResult fetchBinanceKlines(SparklineData& out, const char* interval, int limit);
 ApiResult fetchBinanceOhlc(OhlcData& out, const char* interval, int limit);
 ApiResult fetchLemonSparkline(SparklineData& out, int days);
+
+// Parameterized variants for pair switching
+ApiResult fetchBinanceKlinesSymbol(SparklineData& out, const char* symbol,
+                                    const char* interval, int limit, bool invert = false);
+ApiResult fetchBinanceOhlcSymbol(OhlcData& out, const char* symbol,
+                                  const char* interval, int limit, bool invert = false);
+ApiResult fetchSparklineVsCurrency(SparklineData& out, int days,
+                                    const char* vsCurrency, CoinId coin = COIN_BTC);
+ApiResult fetchGeckoBtcPrice(const char* vsCurrency, float& outPrice);

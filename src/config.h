@@ -8,7 +8,11 @@
 #endif
 
 // ── App version ──
-#define APP_VERSION "3.1.0"
+#define APP_VERSION "4.0.0"
+
+// 0 = normal app
+// 1 = minimal static display diagnostic mode
+#define DISPLAY_DIAG_MODE 0
 
 // ── API endpoints ──
 #define COINGECKO_PRICE_EP   "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true&include_1h_change=true&include_7d_change=true"
@@ -56,5 +60,80 @@
 #define I2S_BCLK  20
 #define I2S_LRCK  46
 
+// ── BTC Period definitions (8 timeframes) ──
+struct PeriodDef {
+    const char* label;       // Display label ("5m", "15m", "1h", etc.)
+    bool        useWsBuf;    // true = derive from WS circular buffer
+    const char* klineInterval; // Binance REST kline interval (null for WS-only)
+    int         limit;       // WS: minutes to trim; REST: kline limit param
+    bool        canOhlc;     // true = can fetch OHLC candlestick data
+};
+
+static const PeriodDef BTC_PERIODS[] = {
+    // idx  label   useWs  kline   limit  ohlc
+    {  "5m",  true,  nullptr,   5,  false },  // 0: 5 minutes
+    { "15m",  true,  nullptr,  15,  false },  // 1: 15 minutes
+    {  "1h",  true,  nullptr,  60,  false },  // 2: 1 hour
+    {  "4h",  false,    "5m",  48,  true  },  // 3: 4 hours
+    { "24h",  false,   "15m",  96,  true  },  // 4: 24 hours
+    {  "1M",  false,    "8h",  90,  true  },  // 5: 1 month
+    {  "6M",  false,    "1d", 180,  true  },  // 6: 6 months
+    {  "1Y",  false,    "1d", 365,  true  },  // 7: 1 year
+};
+static const int BTC_PERIOD_COUNT = sizeof(BTC_PERIODS) / sizeof(BTC_PERIODS[0]);
+
+// ── Dollar (USDT/ARS) period definitions (8 timeframes) ──
+struct DollarPeriodDef {
+    const char* label;
+    int         days;  // CoinGecko chart days parameter
+};
+
+static const DollarPeriodDef DOLLAR_PERIODS[] = {
+    {  "1d",    1 },
+    {  "3d",    3 },
+    {  "1w",    7 },
+    {  "2w",   14 },
+    {  "1M",   30 },
+    {  "3M",   90 },
+    {  "6M",  180 },
+    {  "1Y",  365 },
+};
+static const int DOLLAR_PERIOD_COUNT = sizeof(DOLLAR_PERIODS) / sizeof(DOLLAR_PERIODS[0]);
+
 // ── Audio alert thresholds ──
 #define ALERT_BTC_1H_THRESHOLD_PCT  5.0f   // BTC 1h change > 5% triggers alert
+
+// ── OTA GitHub repo ──
+#define OTA_GITHUB_REPO "pabloleone/lemoninterface"
+
+// ── BTC Pair definitions (5 trading pairs) ──
+enum PairSource : uint8_t {
+    PAIR_BINANCE_DIRECT,   // BTC/USDT — direct WS + REST
+    PAIR_BINANCE_INVERT,   // BTC/ETH, BTC/SOL — invert ETHBTC/SOLBTC
+    PAIR_DERIVED,          // BTC/ARS — BTCUSDT * crossRate
+    PAIR_GECKO_ONLY,       // BTC/ORO — CoinGecko only
+};
+
+struct PairDef {
+    const char* label;        // Dropdown display: "USD", "ETH", "SOL", "ARS", "XAU"
+    const char* pairLabel;    // Full: "BTC/USD", "BTC/ETH", etc.
+    PairSource  source;
+    const char* wsPath;       // Binance WS path (null for DERIVED/GECKO_ONLY)
+    const char* restSymbol;   // Binance REST symbol (null for DERIVED/GECKO_ONLY)
+    bool        inverted;     // true for ETHBTC/SOLBTC
+    const char* geckoVs;      // CoinGecko vs_currency for chart fallback
+    const char* prefix;       // "$", ""
+    const char* suffix;       // "", " ETH", " SOL", " oz"
+    uint8_t     decimals;     // 0=integer, 1-2=decimals
+    uint8_t     minPeriodIdx; // Minimum BTC_PERIODS index (0=all, 3=4h+)
+};
+
+static const PairDef BTC_PAIRS[] = {
+    //                                                                                              dec  minP
+    { "USD","BTC/USD", PAIR_BINANCE_DIRECT, "/ws/btcusdt@kline_1m","BTCUSDT",false,"usd","$","",    0, 0 },
+    { "ETH","BTC/ETH", PAIR_BINANCE_INVERT, "/ws/ethbtc@kline_1m", "ETHBTC", true, "eth","", " ETH",2, 0 },
+    { "SOL","BTC/SOL", PAIR_BINANCE_INVERT, "/ws/solbtc@kline_1m", "SOLBTC", true, "sol","", " SOL",1, 0 },
+    { "ARS","BTC/ARS", PAIR_DERIVED,        nullptr,               nullptr,  false,"ars","$","",    0, 0 },
+    { "ORO","BTC/ORO", PAIR_GECKO_ONLY,     nullptr,               nullptr,  false,"xau","", " oz", 2, 3 },
+};
+static const int BTC_PAIR_COUNT = 5;
