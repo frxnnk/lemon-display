@@ -5,6 +5,7 @@
 #include "data/satoshi_fonts.h"
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 
 // ── Gradient helper: interpolate RGB565 ──
 static uint16_t lerpColor565(uint16_t c1, uint16_t c2, float t) {
@@ -133,6 +134,186 @@ void drawSparkline(LGFX_Sprite& spr, int x, int y, int w, int h,
 }
 
 // ══════════════════════════════════════════
+//  CANDLESTICK CHART
+// ══════════════════════════════════════════
+
+void drawCandlestick(LGFX_Sprite& spr, int x, int y, int w, int h,
+                     const OhlcData& data) {
+    if (!data.valid || data.count < 2) return;
+
+    float range = data.maxVal - data.minVal;
+    if (range < 0.01f) range = 1.0f;
+
+    auto mapY = [&](float val) -> int {
+        return y + h - 1 - (int)(((val - data.minVal) / range) * (h - 2));
+    };
+
+    float barSlot = (float)w / data.count;
+    int bodyW = (int)(barSlot * 0.7f);
+    if (bodyW < 1) bodyW = 1;
+    if (bodyW > 8) bodyW = 8;
+    int gap = (barSlot > 2) ? 1 : 0;
+
+    for (int i = 0; i < data.count; i++) {
+        const OhlcBar& bar = data.bars[i];
+        int cx = x + (int)(i * barSlot + barSlot * 0.5f);
+
+        int yHigh = mapY(bar.high);
+        int yLow  = mapY(bar.low);
+        int yOpen = mapY(bar.open);
+        int yClose = mapY(bar.close);
+
+        bool bullish = (bar.close >= bar.open);
+        uint16_t bodyColor = bullish ? Colors::CANDLE_BULL : Colors::CANDLE_BEAR;
+
+        // Wick (thin vertical line from high to low)
+        spr.drawFastVLine(cx, yHigh, yLow - yHigh + 1, Colors::CANDLE_WICK);
+
+        // Body (open to close rect)
+        int bodyTop = bullish ? yClose : yOpen;
+        int bodyBot = bullish ? yOpen  : yClose;
+        int bodyH = bodyBot - bodyTop;
+        if (bodyH < 1) bodyH = 1;
+
+        int bodyX = cx - bodyW / 2;
+        spr.fillRect(bodyX, bodyTop, bodyW, bodyH, bodyColor);
+    }
+
+    // Last price dot with glow
+    if (data.count > 0) {
+        const OhlcBar& last = data.bars[data.count - 1];
+        int lastX = x + (int)((data.count - 1) * barSlot + barSlot * 0.5f);
+        int lastY = mapY(last.close);
+        bool bull = last.close >= last.open;
+        uint16_t dotColor = bull ? Colors::CANDLE_BULL : Colors::CANDLE_BEAR;
+        spr.fillSmoothCircle(lastX, lastY, 5, Colors::GLOW_1);
+        spr.fillSmoothCircle(lastX, lastY, 3, dotColor);
+    }
+}
+
+// ══════════════════════════════════════════
+//  CHART MARKERS (high/low triangles + ATH line)
+// ══════════════════════════════════════════
+
+void drawChartMarkers(LGFX_Sprite& spr, int x, int y, int w, int h,
+                      const SparklineData& data, float athPrice) {
+    if (!data.valid || data.count < 2) return;
+
+    float range = data.maxVal - data.minVal;
+    if (range < 0.01f) range = 1.0f;
+
+    auto mapX = [&](int i) -> int {
+        return x + (i * w) / (data.count - 1);
+    };
+    auto mapY = [&](float val) -> int {
+        return y + h - 1 - (int)(((val - data.minVal) / range) * (h - 2));
+    };
+
+    // Helper: format price with comma separator
+    auto fmtPrice = [](char* buf, size_t sz, float price) {
+        int v = (int)price;
+        if (v >= 1000)
+            snprintf(buf, sz, "$%d,%03d", v / 1000, v % 1000);
+        else
+            snprintf(buf, sz, "$%d", v);
+    };
+
+    // Helper: draw price label with dark pill background
+    auto drawPricePill = [&](int cx, int cy, const char* text, uint16_t color, bool above) {
+        int tw = spr.textWidth(text, &Satoshi12);
+        int pillW = tw + 10;
+        int pillH = 16;
+        int pillX = cx - pillW / 2;
+        int pillY = above ? (cy - pillH) : cy;
+
+        // Clamp to chart bounds
+        if (pillX < x) pillX = x;
+        if (pillX + pillW > x + w) pillX = x + w - pillW;
+        if (pillY < y) pillY = y;
+        if (pillY + pillH > y + h) pillY = y + h - pillH;
+
+        spr.fillSmoothRoundRect(pillX, pillY, pillW, pillH, 4, Colors::BG_SURFACE);
+        spr.drawRoundRect(pillX, pillY, pillW, pillH, 4, color);
+        spr.setTextColor(color, Colors::BG_SURFACE);
+        spr.setTextDatum(lgfx::middle_center);
+        spr.drawString(text, pillX + pillW / 2, pillY + pillH / 2, &Satoshi12);
+    };
+
+    // Find period high and low indices
+    int highIdx = 0, lowIdx = 0;
+    for (int i = 1; i < data.count; i++) {
+        if (data.points[i] > data.points[highIdx]) highIdx = i;
+        if (data.points[i] < data.points[lowIdx])  lowIdx = i;
+    }
+
+    // Period HIGH marker — green upward triangle + pill label
+    {
+        int hx = mapX(highIdx);
+        int hy = mapY(data.points[highIdx]);
+        int tri = 7;
+        spr.fillTriangle(hx, hy - tri - 2, hx - tri, hy + 3, hx + tri, hy + 3, Colors::MARKER_HIGH);
+
+        char buf[16];
+        fmtPrice(buf, sizeof(buf), data.points[highIdx]);
+        int labelY = hy - tri - 4;
+        bool above = (labelY - 16 >= y);
+        drawPricePill(hx, above ? labelY - 16 : hy + tri + 5, buf, Colors::MARKER_HIGH, false);
+    }
+
+    // Period LOW marker — red downward triangle + pill label
+    {
+        int lx = mapX(lowIdx);
+        int ly = mapY(data.points[lowIdx]);
+        int tri = 7;
+        spr.fillTriangle(lx, ly + tri + 2, lx - tri, ly - 3, lx + tri, ly - 3, Colors::MARKER_LOW);
+
+        char buf[16];
+        fmtPrice(buf, sizeof(buf), data.points[lowIdx]);
+        int labelY = ly + tri + 5;
+        bool below = (labelY + 16 <= y + h);
+        drawPricePill(lx, below ? labelY : ly - tri - 5 - 16, buf, Colors::MARKER_LOW, false);
+    }
+
+    // ATH dashed horizontal line (only if ATH is within visible Y range)
+    if (athPrice > 0 && athPrice >= data.minVal && athPrice <= data.maxVal * 1.05f) {
+        int athY = mapY(athPrice);
+        if (athY >= y && athY < y + h) {
+            // Dashed line (2px thick for visibility)
+            for (int px = x; px < x + w; px += 8) {
+                int dashW = 4;
+                if (px + dashW > x + w) dashW = x + w - px;
+                spr.fillRect(px, athY - 1, dashW, 2, Colors::ATH_LINE);
+            }
+            // ATH pill label
+            char athBuf[20];
+            fmtPrice(athBuf, sizeof(athBuf), athPrice);
+            // Prepend "ATH "
+            char fullBuf[28];
+            snprintf(fullBuf, sizeof(fullBuf), "ATH %s", athBuf);
+            drawPricePill(x + w - 40, athY - 20, fullBuf, Colors::ATH_LINE, false);
+        }
+    }
+}
+
+// ══════════════════════════════════════════
+//  CHART STYLE BADGE
+// ══════════════════════════════════════════
+
+void drawChartStyleBadge(LGFX_Sprite& spr, int x, int y, ChartStyle style) {
+    static const char* labels[] = { "LINE", "OHLC", "MKR" };
+    const char* label = labels[style];
+
+    int badgeW = 38;
+    int badgeH = 16;
+    int r = badgeH / 2;
+
+    spr.fillSmoothRoundRect(x, y, badgeW, badgeH, r, Colors::BG_ELEVATED);
+    spr.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_ELEVATED);
+    spr.setTextDatum(lgfx::middle_center);
+    spr.drawString(label, x + badgeW / 2, y + badgeH / 2, &Satoshi9);
+}
+
+// ══════════════════════════════════════════
 //  DOMINANCE BAR
 // ══════════════════════════════════════════
 
@@ -168,9 +349,11 @@ void drawDominanceBar(LGFX_Sprite& spr, int x, int y, int w, int h,
 
 void drawChangeBadge(LGFX_Sprite& spr, int x, int y, int w, int h,
                      float pct, const char* label, bool selected) {
-    bool positive = pct >= 0;
+    bool hasData = !isnan(pct);
+    bool positive = hasData ? (pct >= 0) : true;
     uint16_t textColor = positive ? Colors::POSITIVE : Colors::NEGATIVE;
-    uint16_t bgColor   = positive ? Colors::BADGE_BG_POS : Colors::BADGE_BG_NEG;
+    uint16_t bgColor   = hasData ? (positive ? Colors::BADGE_BG_POS : Colors::BADGE_BG_NEG)
+                                 : Colors::BG_ELEVATED;
 
     int r = h / 2;
 
@@ -182,7 +365,15 @@ void drawChangeBadge(LGFX_Sprite& spr, int x, int y, int w, int h,
         spr.fillSmoothRoundRect(x, y, w, h, r, bgColor);
     }
 
-    // Label at top ("1h", "24h", "7d") — white for readability
+    if (!hasData) {
+        // No percentage data — draw just the label centered
+        spr.setTextColor(Colors::TEXT_PRIMARY, bgColor);
+        spr.setTextDatum(lgfx::middle_center);
+        spr.drawString(label, x + w / 2, y + h / 2, &Satoshi9);
+        return;
+    }
+
+    // Label at top ("1h", "24h", "7d", etc.) — white for readability
     spr.setTextColor(Colors::TEXT_PRIMARY, bgColor);
     spr.setTextDatum(lgfx::middle_center);
     spr.drawString(label, x + w / 2, y + h / 2 - 7, &Satoshi9);
@@ -359,19 +550,21 @@ void showToast(const char* msg) {
     toastMsg[sizeof(toastMsg) - 1] = '\0';
     toastActive = true;
     toastStartMs = millis();
-
-    int barH = 36;
-    tft.fillSmoothRoundRect(20, 4, SCREEN_W - 40, barH, 10, Colors::BG_SURFACE);
-    tft.drawRoundRect(20, 4, SCREEN_W - 40, barH, 10, Colors::CARD_BORDER);
-    tft.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_SURFACE);
-    tft.setTextDatum(lgfx::middle_center);
-    tft.drawString(toastMsg, SCREEN_W / 2, 4 + barH / 2, &Satoshi12);
+    // No direct tft draws — dashboard header will render the toast in sprZ0
 }
 
 void updateToast() {
     if (!toastActive) return;
     if (millis() - toastStartMs >= TOAST_DURATION_MS) {
-        tft.fillRect(20, 4, SCREEN_W - 40, 36, Colors::BG_BASE);
         toastActive = false;
+        // No direct tft draws — caller will redraw header to clear toast
     }
+}
+
+bool isToastActive() {
+    return toastActive;
+}
+
+const char* getToastMessage() {
+    return toastMsg;
 }

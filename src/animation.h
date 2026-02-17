@@ -70,21 +70,21 @@ public:
 class SparklineAnimator {
     unsigned long startMs_;
     uint16_t durationMs_;
-    uint8_t totalCount_;
+    uint16_t totalCount_;
     bool animating_;
 
 public:
     SparklineAnimator() : startMs_(0), durationMs_(800),
                           totalCount_(0), animating_(false) {}
 
-    void start(uint8_t count, uint16_t ms = 800) {
+    void start(uint16_t count, uint16_t ms = 800) {
         totalCount_ = count;
         startMs_ = millis();
         durationMs_ = ms;
         animating_ = true;
     }
 
-    uint8_t visibleCount() {
+    uint16_t visibleCount() {
         if (!animating_) return totalCount_;
 
         unsigned long elapsed = millis() - startMs_;
@@ -96,7 +96,7 @@ public:
         float t = (float)elapsed / durationMs_;
         // Ease-out quad for smooth reveal
         float ease = 1.0f - (1.0f - t) * (1.0f - t);
-        uint8_t visible = (uint8_t)(ease * totalCount_);
+        uint16_t visible = (uint16_t)(ease * totalCount_);
         return visible < 1 ? 1 : visible;
     }
 

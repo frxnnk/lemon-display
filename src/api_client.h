@@ -18,3 +18,6 @@ ApiResult fetchGlobalData(CryptoGlobal& out);
 ApiResult fetchSparkline(SparklineData& out, int days = 7, CoinId coin = COIN_BTC);
 ApiResult fetchMarketData(MarketData& out);
 ApiResult fetchLemonPrice(LemonPrice& out);
+ApiResult fetchBinanceKlines(SparklineData& out, const char* interval, int limit);
+ApiResult fetchBinanceOhlc(OhlcData& out, const char* interval, int limit);
+ApiResult fetchLemonSparkline(SparklineData& out, int days);

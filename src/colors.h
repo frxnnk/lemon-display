@@ -52,6 +52,16 @@ namespace Colors {
     constexpr uint16_t CHART_FILL = 0x01C3;  // #003818  Dark green fill
     constexpr uint16_t CHART_GRID = 0x18C3;  // Subtle grid
 
+    // Candlestick colors (reuse status colors)
+    constexpr uint16_t CANDLE_BULL  = POSITIVE;   // Green for bullish
+    constexpr uint16_t CANDLE_BEAR  = NEGATIVE;   // Red for bearish
+    constexpr uint16_t CANDLE_WICK  = 0x5ACB;     // MOON gray for wicks
+
+    // Marker colors
+    constexpr uint16_t MARKER_HIGH = POSITIVE;     // Green for period high
+    constexpr uint16_t MARKER_LOW  = NEGATIVE;     // Red for period low
+    constexpr uint16_t ATH_LINE    = SOLAR;        // Orange for ATH
+
     // ── Dominance ──
     constexpr uint16_t DOM_BTC   = 0xFC20;  // SOLAR orange for BTC
     constexpr uint16_t DOM_ETH   = 0x837E;  // NEBULA purple for ETH

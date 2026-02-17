@@ -75,11 +75,13 @@ ApiResult fetchBtcPrice(BtcPrice& out) {
     out.change1h = md["price_change_percentage_1h_in_currency"]["usd"] | 0.0f;
     out.change24h = md["price_change_percentage_24h"] | 0.0f;
     out.change7d = md["price_change_percentage_7d"] | 0.0f;
+    out.ath = md["ath"]["usd"] | 0.0f;
+    out.athChangePercent = md["ath_change_percentage"]["usd"] | 0.0f;
     out.valid = (out.usd > 0);
     out.lastUpdate = millis();
 
-    Serial.printf("[API] BTC: $%.0f (1h:%.2f%% 24h:%.2f%% 7d:%.2f%%)\n",
-                  out.usd, out.change1h, out.change24h, out.change7d);
+    Serial.printf("[API] BTC: $%.0f (1h:%.2f%% 24h:%.2f%% 7d:%.2f%% ATH:$%.0f)\n",
+                  out.usd, out.change1h, out.change24h, out.change7d, out.ath);
     return out.valid ? API_OK : API_PARSE_ERROR;
 }
 
@@ -248,6 +250,164 @@ ApiResult fetchMarketData(MarketData& out) {
 
     // Consider success if at least BTC parsed
     return out.coins[COIN_BTC].valid ? API_OK : API_PARSE_ERROR;
+}
+
+// ── Binance: Kline data for sparkline (24h, 7d views) ──
+ApiResult fetchBinanceKlines(SparklineData& out, const char* interval, int limit) {
+    char urlBuf[128];
+    snprintf(urlBuf, sizeof(urlBuf),
+             "%s?symbol=BTCUSDT&interval=%s&limit=%d",
+             BINANCE_KLINES_EP, interval, limit);
+
+    ApiResult result;
+    String json = httpGet(urlBuf, false, result);
+    if (result != API_OK) return result;
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, json);
+    if (err) {
+        Serial.printf("[API] Binance klines JSON error: %s\n", err.c_str());
+        return API_PARSE_ERROR;
+    }
+
+    JsonArray arr = doc.as<JsonArray>();
+    if (arr.isNull() || arr.size() == 0) return API_PARSE_ERROR;
+
+    int total = arr.size();
+    int targetCount = (total <= SPARKLINE_POINTS) ? total : SPARKLINE_POINTS;
+
+    out.count = targetCount;
+    out.minVal = 1e12f;
+    out.maxVal = -1e12f;
+
+    float step = (float)total / targetCount;
+    int i = 0;
+    for (int t = 0; t < targetCount; t++) {
+        int idx = (int)(t * step);
+        if (idx >= total) idx = total - 1;
+        JsonArray kline = arr[idx];
+        const char* closeStr = kline[4].as<const char*>();
+        float val = closeStr ? atof(closeStr) : 0.0f;
+        if (val <= 0) continue;
+        out.points[i] = val;
+        if (val < out.minVal) out.minVal = val;
+        if (val > out.maxVal) out.maxVal = val;
+        i++;
+    }
+    out.count = i;
+
+    out.valid = (i >= 2);
+    out.lastUpdate = millis();
+
+    Serial.printf("[API] Binance klines (%s, %d): %d pts, $%.0f-$%.0f\n",
+                  interval, limit, out.count, out.minVal, out.maxVal);
+    return out.valid ? API_OK : API_PARSE_ERROR;
+}
+
+// ── Binance: OHLC candlestick data ──
+ApiResult fetchBinanceOhlc(OhlcData& out, const char* interval, int limit) {
+    char urlBuf[128];
+    snprintf(urlBuf, sizeof(urlBuf),
+             "%s?symbol=BTCUSDT&interval=%s&limit=%d",
+             BINANCE_KLINES_EP, interval, limit);
+
+    ApiResult result;
+    String json = httpGet(urlBuf, false, result);
+    if (result != API_OK) return result;
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, json);
+    if (err) {
+        Serial.printf("[API] Binance OHLC JSON error: %s\n", err.c_str());
+        return API_PARSE_ERROR;
+    }
+
+    JsonArray arr = doc.as<JsonArray>();
+    if (arr.isNull() || arr.size() == 0) return API_PARSE_ERROR;
+
+    int total = arr.size();
+    int count = (total <= OHLC_MAX_BARS) ? total : OHLC_MAX_BARS;
+
+    out.count = 0;
+    out.minVal = 1e12f;
+    out.maxVal = -1e12f;
+
+    for (int i = 0; i < count; i++) {
+        JsonArray kline = arr[i];
+        // Binance kline indices: 1=open, 2=high, 3=low, 4=close
+        const char* openStr  = kline[1].as<const char*>();
+        const char* highStr  = kline[2].as<const char*>();
+        const char* lowStr   = kline[3].as<const char*>();
+        const char* closeStr = kline[4].as<const char*>();
+
+        float o = openStr  ? atof(openStr)  : 0.0f;
+        float h = highStr  ? atof(highStr)  : 0.0f;
+        float l = lowStr   ? atof(lowStr)   : 0.0f;
+        float c = closeStr ? atof(closeStr) : 0.0f;
+
+        if (o <= 0 || h <= 0 || l <= 0 || c <= 0) continue;
+
+        out.bars[out.count] = { o, h, l, c };
+        if (l < out.minVal) out.minVal = l;
+        if (h > out.maxVal) out.maxVal = h;
+        out.count++;
+    }
+
+    out.valid = (out.count >= 2);
+    out.lastUpdate = millis();
+
+    Serial.printf("[API] Binance OHLC (%s, %d): %d bars, $%.0f-$%.0f\n",
+                  interval, limit, out.count, out.minVal, out.maxVal);
+    return out.valid ? API_OK : API_PARSE_ERROR;
+}
+
+// ── CoinGecko: Tether/ARS sparkline (for dollar chart) ──
+ApiResult fetchLemonSparkline(SparklineData& out, int days) {
+    char urlBuf[128];
+    snprintf(urlBuf, sizeof(urlBuf), "%s%d", COINGECKO_TETHER_CHART_EP, days);
+
+    ApiResult result;
+    String json = httpGet(urlBuf, false, result);
+    if (result != API_OK) return result;
+
+    JsonDocument filter;
+    filter["prices"][0][0] = true;
+    filter["prices"][0][1] = true;
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, json,
+        DeserializationOption::Filter(filter),
+        DeserializationOption::NestingLimit(15));
+
+    if (err) {
+        Serial.printf("[API] Lemon sparkline JSON error: %s\n", err.c_str());
+        return API_PARSE_ERROR;
+    }
+
+    JsonArray prices = doc["prices"];
+    int total = prices.size();
+    if (total == 0) return API_PARSE_ERROR;
+
+    int targetCount = min((int)SPARKLINE_POINTS, total);
+    out.count = targetCount;
+    out.minVal = 1e12;
+    out.maxVal = -1e12;
+
+    float step = (float)total / targetCount;
+    for (int i = 0; i < targetCount; i++) {
+        int idx = (int)(i * step);
+        if (idx >= total) idx = total - 1;
+        float val = prices[idx][1].as<float>();
+        out.points[i] = val;
+        if (val < out.minVal) out.minVal = val;
+        if (val > out.maxVal) out.maxVal = val;
+    }
+
+    out.valid = true;
+    out.lastUpdate = millis();
+    Serial.printf("[API] Lemon sparkline (%dd): %d pts, $%.0f-$%.0f\n",
+                  days, out.count, out.minVal, out.maxVal);
+    return API_OK;
 }
 
 // ── CriptoYa: Lemon USDT/ARS price ──

@@ -13,7 +13,7 @@ class LGFX : public lgfx::LGFX_Device {
     lgfx::Bus_RGB      _bus_instance;
     lgfx::Panel_ST7701 _panel_instance;
     lgfx::Touch_GT911  _touch_instance;
-    lgfx::Light_PWM    _light_instance;
+    // lgfx::Light_PWM   _light_instance;
 
 public:
     LGFX(void) {
@@ -32,7 +32,6 @@ public:
         // ── Panel detail: ST7701S SPI init pins ──
         {
             auto cfg = _panel_instance.config_detail();
-            cfg.use_psram = 2;  // Double buffer — eliminates tearing/vibration
             cfg.pin_cs   = GPIO_NUM_1;
             cfg.pin_sclk = GPIO_NUM_12;
             cfg.pin_mosi = GPIO_NUM_11;
@@ -84,13 +83,12 @@ public:
         }
         _panel_instance.setBus(&_bus_instance);
 
-        // ── Backlight (GPIO 44) ──
-        {
-            auto cfg = _light_instance.config();
-            cfg.pin_bl = GPIO_NUM_44;
-            _light_instance.config(cfg);
-        }
-        _panel_instance.light(&_light_instance);
+        // {
+        //     auto cfg = _light_instance.config();
+        //     cfg.pin_bl = GPIO_NUM_44;
+        //     _light_instance.config(cfg);
+        // }
+        // _panel_instance.light(&_light_instance);
 
         // ── Touch (GT911) ──
         {

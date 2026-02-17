@@ -21,6 +21,17 @@ void drawCard(LGFX_Sprite& spr, int x, int y, int w, int h, int radius,
 void drawSparkline(LGFX_Sprite& spr, int x, int y, int w, int h,
                    const SparklineData& data, uint16_t lineColor, uint16_t fillColor);
 
+// Candlestick chart (OHLC bars)
+void drawCandlestick(LGFX_Sprite& spr, int x, int y, int w, int h,
+                     const OhlcData& data);
+
+// Chart markers overlay: period high/low triangles + ATH dashed line
+void drawChartMarkers(LGFX_Sprite& spr, int x, int y, int w, int h,
+                      const SparklineData& data, float athPrice);
+
+// Chart style badge pill (e.g. "LINE", "OHLC", "MKR")
+void drawChartStyleBadge(LGFX_Sprite& spr, int x, int y, ChartStyle style);
+
 // Horizontal dominance bar (rounded, segmented)
 void drawDominanceBar(LGFX_Sprite& spr, int x, int y, int w, int h,
                       float btcPct, float ethPct,
@@ -53,3 +64,5 @@ void drawSlider(LGFX_Sprite& spr, int x, int y, int w, int h, float value); // 0
 // ── Toast ──
 void showToast(const char* msg);
 void updateToast();
+bool isToastActive();
+const char* getToastMessage();

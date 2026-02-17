@@ -16,20 +16,29 @@
 #include "audio_manager.h"
 #include "scheduler.h"
 #include "animation.h"
+#include "ws_binance.h"
+#include <cmath>
 
 // ── Dashboard state ──
 struct DashboardState {
-    BtcPrice      btc    = {};
-    SparklineData spark   = {};
-    LemonPrice    lemon   = {};
+    BtcPrice      btc        = {};
+    SparklineData spark       = {};
+    LemonPrice    lemon       = {};
+    OhlcData      ohlc       = {};
+    SparklineData lemonSpark  = {};  // Rolling buffer of dollar avg prices
     bool online     = false;
     bool wasOffline = false;
-    bool liveMode   = false;
 };
 static DashboardState state;
 
 // ── Selection state ──
-static uint8_t selectedPeriod = 2;  // 0=1h, 1=24h, 2=7d
+static uint8_t selectedPeriod = 3;  // 0=15m, 1=1h, 2=24h, 3=7d, 4=30d, 5=1Y
+static float periodChanges[6] = { NAN, NAN, NAN, NAN, NAN, NAN };
+static ChartStyle chartStyle = CHART_LINE;
+static ChartStyle dollarChartStyle = CHART_LINE;
+static float dollarChangePercent = NAN;  // Pre-computed from real sparkline
+static uint8_t dollarPeriod = 1;  // 0=24h, 1=7d, 2=30d, 3=1Y
+static const int dollarPeriodDays[] = { 1, 7, 30, 365 };
 
 // ── Animators ──
 static ValueAnimator btcPriceAnim;
@@ -39,17 +48,36 @@ static SparklineAnimator sparkAnim;
 
 // ── Scheduler & task IDs ──
 static Scheduler scheduler;
-static uint8_t taskClock, taskBtc, taskSparkline, taskLemon;
+static uint8_t taskClock, taskBtc, taskSparkline, taskLemon, taskDollarSpark;
 
-// ── Double-tap detection for live mode ──
-static unsigned long lastTapZ1Ms = 0;
-static const unsigned long DOUBLE_TAP_MS = 400;
+// ── WS price dedup ──
+static float lastRenderedPrice = 0.0f;
+
+// ── Single-swap-per-frame flag ──
+static bool frameDirty = false;
+
+// ── Sparkline morph animation ──
+#define MORPH_POINTS       100
+#define MORPH_DURATION_MS  800
+static float morphOldNorm[MORPH_POINTS];
+static float morphNewNorm[MORPH_POINTS];
+static float morphNewMin, morphNewMax;
+static uint32_t morphStartMs;
+static bool morphActive = false;
+static SparklineData morphedResult;
+
+// ── Dollar sparkline morph animation ──
+static float dollarMorphOldNorm[MORPH_POINTS];
+static float dollarMorphNewNorm[MORPH_POINTS];
+static float dollarMorphNewMin, dollarMorphNewMax;
+static uint32_t dollarMorphStartMs;
+static bool dollarMorphActive = false;
+static SparklineData dollarMorphedResult;
 
 // ── Forward declarations ──
 static void enterDashboard();
 static void tryConnectSavedWifi();
 static void startProvisioning();
-static int periodToDays(uint8_t period);
 
 // ── WiFi failed screen layout ──
 #define FAIL_RETRY_Y    280
@@ -58,39 +86,110 @@ static int periodToDays(uint8_t period);
 #define FAIL_BTN_H       48
 #define FAIL_BTN_X      ((SCREEN_W - FAIL_BTN_W) / 2)
 
-// ── Period to API days mapping ──
-static int periodToDays(uint8_t period) {
-    switch (period) {
-        case 0: return 1;   // 1h — fetch 1 day, use last portion
-        case 1: return 1;   // 24h
-        case 2: return 7;   // 7d
-        default: return 7;
+// ── Morph helpers ──
+static void resampleNormalize(const SparklineData& src, float* dst, int count) {
+    float range = src.maxVal - src.minVal;
+    if (range < 0.01f) range = 1.0f;
+    for (int i = 0; i < count; i++) {
+        float srcIdx = (float)i / (count - 1) * (src.count - 1);
+        int lo = (int)srcIdx;
+        int hi = lo + 1;
+        if (hi >= src.count) hi = src.count - 1;
+        float frac = srcIdx - lo;
+        float val = src.points[lo] + frac * (src.points[hi] - src.points[lo]);
+        dst[i] = (val - src.minVal) / range;
     }
 }
 
-// ── Helper: redraw hero with current state ──
+static SparklineData& getMorphedSparkline() {
+    uint32_t elapsed = millis() - morphStartMs;
+    float t = (float)elapsed / MORPH_DURATION_MS;
+    if (t >= 1.0f) {
+        t = 1.0f;
+        morphActive = false;
+    }
+    float inv = 1.0f - t;
+    float ease = 1.0f - (inv * inv * inv);  // ease-out cubic
+
+    morphedResult.count = MORPH_POINTS;
+    morphedResult.minVal = morphNewMin;
+    morphedResult.maxVal = morphNewMax;
+    float range = morphNewMax - morphNewMin;
+    if (range < 0.01f) range = 1.0f;
+
+    for (int i = 0; i < MORPH_POINTS; i++) {
+        float norm = morphOldNorm[i] + ease * (morphNewNorm[i] - morphOldNorm[i]);
+        morphedResult.points[i] = morphNewMin + norm * range;
+    }
+    morphedResult.valid = true;
+    return morphedResult;
+}
+
+static SparklineData& getDollarMorphedSparkline() {
+    uint32_t elapsed = millis() - dollarMorphStartMs;
+    float t = (float)elapsed / MORPH_DURATION_MS;
+    if (t >= 1.0f) {
+        t = 1.0f;
+        dollarMorphActive = false;
+    }
+    float inv = 1.0f - t;
+    float ease = 1.0f - (inv * inv * inv);  // ease-out cubic
+
+    dollarMorphedResult.count = MORPH_POINTS;
+    dollarMorphedResult.minVal = dollarMorphNewMin;
+    dollarMorphedResult.maxVal = dollarMorphNewMax;
+    float range = dollarMorphNewMax - dollarMorphNewMin;
+    if (range < 0.01f) range = 1.0f;
+
+    for (int i = 0; i < MORPH_POINTS; i++) {
+        float norm = dollarMorphOldNorm[i] + ease * (dollarMorphNewNorm[i] - dollarMorphOldNorm[i]);
+        dollarMorphedResult.points[i] = dollarMorphNewMin + norm * range;
+    }
+    dollarMorphedResult.valid = true;
+    return dollarMorphedResult;
+}
+
+// ── Helper: redraw hero with current state (uses morph if active) ──
 static void redrawHero() {
-    dashboardDrawBtcHero(state.btc, state.spark, selectedPeriod);
+    if (morphActive && chartStyle == CHART_LINE) {
+        SparklineData& morphed = getMorphedSparkline();
+        dashboardDrawBtcHero(state.btc, morphed, selectedPeriod, periodChanges, chartStyle, &state.ohlc);
+    } else {
+        dashboardDrawBtcHero(state.btc, state.spark, selectedPeriod, periodChanges, chartStyle, &state.ohlc);
+    }
 }
 
 // ── Scheduled callbacks ──
 static void updateClock() {
     if (timeReady()) {
-        dashboardDrawHeader(getTimeStr().c_str(), !state.online, state.liveMode);
+        dashboardDrawHeader(getTimeStr().c_str(), !state.online, wsBinanceConnected());
+        frameDirty = true;
     }
 }
 
 static void updateBtc() {
     if (!state.online) return;
-    ApiResult res;
-    if (state.liveMode) {
-        res = fetchBtcPriceSimple(state.btc);
-    } else {
-        res = fetchBtcPrice(state.btc);
-    }
+    // CoinGecko: fetch % changes only (price comes from WebSocket)
+    BtcPrice tmp = {};
+    ApiResult res = fetchBtcPrice(tmp);
     if (res == API_OK) {
-        btcPriceAnim.setTarget(state.btc.usd);
+        state.btc.change1h  = tmp.change1h;
+        state.btc.change24h = tmp.change24h;
+        state.btc.change7d  = tmp.change7d;
+        state.btc.ath       = tmp.ath;
+        state.btc.athChangePercent = tmp.athChangePercent;
+        // Fill periodChanges from CoinGecko (indices shifted: 0=15m, 1=1h, 2=24h, 3=7d)
+        periodChanges[1] = tmp.change1h;
+        periodChanges[2] = tmp.change24h;
+        periodChanges[3] = tmp.change7d;
+        // Only update price from CoinGecko if WS has no price yet
+        if (!wsBinanceHasPrice()) {
+            state.btc.usd = tmp.usd;
+            state.btc.valid = tmp.valid;
+            btcPriceAnim.set(state.btc.usd);
+        }
         redrawHero();
+        frameDirty = true;
         if (nvsGetAlertEnabled() && fabsf(state.btc.change1h) >= ALERT_BTC_1H_THRESHOLD_PCT) {
             if (state.btc.change1h > 0) playAlertUp(); else playAlertDown();
         }
@@ -99,80 +198,232 @@ static void updateBtc() {
 
 static void updateSparkline() {
     if (!state.online) return;
-    int days = periodToDays(selectedPeriod);
-    if (fetchSparkline(state.spark, days) == API_OK) {
-        // For 1h: trim to last 12 points from the fetched data
-        if (selectedPeriod == 0 && state.spark.count > 12) {
-            int offset = state.spark.count - 12;
-            state.spark.minVal = 1e12;
-            state.spark.maxVal = -1e12;
-            for (int i = 0; i < 12; i++) {
+
+    bool ok = false;
+    // OHLC interval/limit map for candlestick mode
+    const char* ohlcInterval = nullptr;
+    int ohlcLimit = 0;
+
+    if (selectedPeriod == 0) {
+        // 15m: use WS circular buffer, trim to last 15 points
+        wsBinanceGetSparkline(state.spark);
+        if (state.spark.valid && state.spark.count > 15) {
+            int offset = state.spark.count - 15;
+            state.spark.minVal = 1e12f;
+            state.spark.maxVal = -1e12f;
+            for (int i = 0; i < 15; i++) {
                 state.spark.points[i] = state.spark.points[offset + i];
                 if (state.spark.points[i] < state.spark.minVal) state.spark.minVal = state.spark.points[i];
                 if (state.spark.points[i] > state.spark.maxVal) state.spark.maxVal = state.spark.points[i];
             }
-            state.spark.count = 12;
+            state.spark.count = 15;
         }
-        sparkAnim.start(state.spark.count);
+        ok = state.spark.valid;
+        // No OHLC for 15m (WS data only)
+    } else if (selectedPeriod == 1) {
+        // 1h: use WS circular buffer (1-minute candles)
+        wsBinanceGetSparkline(state.spark);
+        if (state.spark.valid && state.spark.count > 60) {
+            int offset = state.spark.count - 60;
+            state.spark.minVal = 1e12f;
+            state.spark.maxVal = -1e12f;
+            for (int i = 0; i < 60; i++) {
+                state.spark.points[i] = state.spark.points[offset + i];
+                if (state.spark.points[i] < state.spark.minVal) state.spark.minVal = state.spark.points[i];
+                if (state.spark.points[i] > state.spark.maxVal) state.spark.maxVal = state.spark.points[i];
+            }
+            state.spark.count = 60;
+        }
+        ok = state.spark.valid;
+        // No OHLC for 1h (WS data only)
+    } else if (selectedPeriod == 2) {
+        // 24h: Binance REST 15m klines
+        ok = (fetchBinanceKlines(state.spark, "15m", 96) == API_OK);
+        ohlcInterval = "15m"; ohlcLimit = 96;
+    } else if (selectedPeriod == 3) {
+        // 7d: Binance REST 2h klines, fallback to CoinGecko
+        ok = (fetchBinanceKlines(state.spark, "2h", 84) == API_OK);
+        if (!ok) ok = (fetchSparkline(state.spark, 7) == API_OK);
+        ohlcInterval = "2h"; ohlcLimit = 84;
+    } else if (selectedPeriod == 4) {
+        // 30d: Binance REST 8h klines
+        ok = (fetchBinanceKlines(state.spark, "8h", 90) == API_OK);
+        ohlcInterval = "8h"; ohlcLimit = 90;
+    } else if (selectedPeriod == 5) {
+        // 1Y: Binance REST 1d klines (120 bars for readable candles)
+        ok = (fetchBinanceKlines(state.spark, "1d", 365) == API_OK);
+        ohlcInterval = "1d"; ohlcLimit = 120;
+    }
+
+    // Fetch OHLC data if in candle mode and interval is available
+    if (ok && chartStyle == CHART_CANDLE && ohlcInterval) {
+        fetchBinanceOhlc(state.ohlc, ohlcInterval, ohlcLimit);
+    }
+
+    if (ok) {
+        // Disable sparkline morph animation on RGB panel to avoid tearing artifacts.
+        morphActive = false;
+        // Compute % change from sparkline first/last for periods 4 & 5
+        if (selectedPeriod >= 4 && state.spark.count >= 2) {
+            float first = state.spark.points[0];
+            float last  = state.spark.points[state.spark.count - 1];
+            if (first > 0) {
+                periodChanges[selectedPeriod] = ((last - first) / first) * 100.0f;
+            }
+        }
         redrawHero();
+        frameDirty = true;
     }
 }
 
 static void updateLemon() {
     if (!state.online) return;
     if (fetchLemonPrice(state.lemon) == API_OK) {
-        lemonBidAnim.setTarget(state.lemon.bid);
-        lemonAskAnim.setTarget(state.lemon.ask);
-        dashboardDrawLemonDollar(state.lemon);
+        lemonBidAnim.set(state.lemon.bid);
+        lemonAskAnim.set(state.lemon.ask);
+        dashboardDrawLemonDollar(state.lemon, &state.lemonSpark, dollarPeriod, dollarChartStyle, dollarChangePercent);
+        frameDirty = true;
+    }
+}
+
+static void updateDollarSparkline() {
+    if (!state.online) return;
+
+    if (fetchLemonSparkline(state.lemonSpark, dollarPeriodDays[dollarPeriod]) == API_OK) {
+        // Pre-compute % change from real sparkline (morph won't corrupt it)
+        if (state.lemonSpark.count >= 2) {
+            float first = state.lemonSpark.points[0];
+            float last = state.lemonSpark.points[state.lemonSpark.count - 1];
+            // Sanity check: first must be >0 and within reasonable range of last
+            // (CoinGecko sometimes returns anomalous near-zero points)
+            if (first > 0 && last > 0 && first > last * 0.01f) {
+                dollarChangePercent = ((last - first) / first) * 100.0f;
+            } else {
+                dollarChangePercent = NAN;
+            }
+        }
+        // Disable dollar morph animation on RGB panel to avoid tearing artifacts.
+        dollarMorphActive = false;
+        dashboardDrawLemonDollar(state.lemon, &state.lemonSpark, dollarPeriod, dollarChartStyle, dollarChangePercent);
+        frameDirty = true;
     }
 }
 
 // ── Dashboard touch callback ──
+static const char* pLabels[] = { "15m", "1h", "24h", "7d", "30d", "1Y" };
+
 static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
-    if (evt.gesture == TOUCH_TAP) {
-        if (zoneId == 1) {
-            // Check period badge tap
-            uint8_t badge = dashboardHitTestPeriodBadge(evt.x, evt.y);
-            if (badge != 255 && badge != selectedPeriod) {
-                selectedPeriod = badge;
-                Serial.printf("[Touch] Period: %s\n", (badge == 0) ? "1h" : (badge == 1) ? "24h" : "7d");
-                redrawHero();
-                scheduler.forceRun(taskSparkline);
-                return;
-            }
+    // ── Z1: BTC Hero — tap cycles chart style, carousel + swipe changes period ──
+    if (zoneId == 1) {
+        int8_t dir = 0;
 
-            // Double-tap detection for live mode
-            unsigned long now = millis();
-            if (now - lastTapZ1Ms < DOUBLE_TAP_MS) {
-                state.liveMode = !state.liveMode;
-                Serial.printf("[Touch] Live mode: %s\n", state.liveMode ? "ON" : "OFF");
-                if (state.liveMode) {
-                    scheduler.enable(taskBtc, true);
-                    showToast("Modo LIVE: 10s");
-                } else {
-                    showToast("Modo normal: 60s");
+        if (evt.gesture == TOUCH_TAP) {
+            dir = dashboardHitTestCarousel(evt.x, evt.y);
+        } else if (evt.gesture == TOUCH_SWIPE_LEFT) {
+            dir = +1;  // Next period
+        } else if (evt.gesture == TOUCH_SWIPE_RIGHT) {
+            dir = -1;  // Previous period
+        }
+
+        if (dir != 0) {
+            int8_t newPeriod = (int8_t)selectedPeriod + dir;
+            if (newPeriod >= 0 && newPeriod <= 5) {
+                selectedPeriod = (uint8_t)newPeriod;
+                Serial.printf("[Touch] Period: %s\n", pLabels[selectedPeriod]);
+
+                // Invalidate OHLC on period change
+                state.ohlc.valid = false;
+
+                // Auto-fallback from candle to line for 15m/1h
+                if (chartStyle == CHART_CANDLE && selectedPeriod <= 1) {
+                    chartStyle = CHART_LINE;
+                    showToast("OHLC no disponible en WS");
+                    // Redraw header to show toast in sprite
+                    String t = timeReady() ? getTimeStr() : String("--:--:--");
+                    dashboardDrawHeader(t.c_str(), !state.online, wsBinanceConnected());
                 }
-                dashboardDrawHeader(getTimeStr().c_str(), !state.online, state.liveMode);
-                lastTapZ1Ms = 0;
-                return;
-            }
-            lastTapZ1Ms = now;
 
-            // Single tap elsewhere: force refresh BTC + sparkline
+                redrawHero();
+                frameDirty = true;
+                scheduler.forceRun(taskSparkline);
+            }
+            return;
+        }
+
+        // Tap outside carousel: cycle chart style
+        if (evt.gesture == TOUCH_TAP) {
+            int newStyle = ((int)chartStyle + 1) % CHART_STYLE_COUNT;
+
+            // Skip CHART_CANDLE for 15m/1h (periods 0,1) — no OHLC from WS
+            if ((ChartStyle)newStyle == CHART_CANDLE && selectedPeriod <= 1) {
+                newStyle = (newStyle + 1) % CHART_STYLE_COUNT;
+            }
+
+            chartStyle = (ChartStyle)newStyle;
+            Serial.printf("[Touch] Chart style: %d\n", chartStyle);
+
+            if (chartStyle == CHART_CANDLE && !state.ohlc.valid) {
+                scheduler.forceRun(taskSparkline);
+            }
+
+            redrawHero();
+        }
+        // Long press: force refresh
+        else if (evt.gesture == TOUCH_LONG_PRESS) {
             Serial.println("[Touch] Force refresh: BTC + Sparkline");
             dashboardStartFlash(1);
+            redrawHero();           // Immediate redraw to show flash border
+            frameDirty = true;
             scheduler.forceRun(taskBtc);
             scheduler.forceRun(taskSparkline);
+        }
+        return;
+    }
+
+    // ── Z2: Dollar — carousel + swipe for period, tap outside = refresh ──
+    if (zoneId == 2) {
+        int8_t dir = 0;
+
+        if (evt.gesture == TOUCH_TAP) {
+            dir = dashboardHitTestDollarCarousel(evt.x, evt.y);
+        } else if (evt.gesture == TOUCH_SWIPE_LEFT) {
+            dir = +1;
+        } else if (evt.gesture == TOUCH_SWIPE_RIGHT) {
+            dir = -1;
+        }
+
+        if (dir != 0) {
+            int8_t newP = (int8_t)dollarPeriod + dir;
+            if (newP >= 0 && newP <= 3) {
+                dollarPeriod = (uint8_t)newP;
+                Serial.printf("[Touch] Dollar period: %dd\n", dollarPeriodDays[dollarPeriod]);
+                dollarChangePercent = NAN;  // Will be recomputed from new sparkline
+                dashboardDrawLemonDollar(state.lemon, &state.lemonSpark, dollarPeriod, dollarChartStyle, dollarChangePercent);
+                scheduler.forceRun(taskDollarSpark);
+            }
             return;
         }
 
-        if (zoneId == 2) {
+        // Tap outside carousel: cycle chart style (LINE ↔ MARKERS, skip CANDLE)
+        if (evt.gesture == TOUCH_TAP) {
+            dollarChartStyle = (dollarChartStyle == CHART_LINE) ? CHART_MARKERS : CHART_LINE;
+            Serial.printf("[Touch] Dollar chart style: %d\n", dollarChartStyle);
+            dashboardDrawLemonDollar(state.lemon, &state.lemonSpark, dollarPeriod, dollarChartStyle, dollarChangePercent);
+            frameDirty = true;
+        }
+        // Long press: force refresh
+        else if (evt.gesture == TOUCH_LONG_PRESS) {
             Serial.println("[Touch] Force refresh: Lemon");
             dashboardStartFlash(2);
+            dashboardDrawLemonDollar(state.lemon, &state.lemonSpark, dollarPeriod, dollarChartStyle, dollarChangePercent);  // Immediate flash border
+            frameDirty = true;
             scheduler.forceRun(taskLemon);
-            return;
+            scheduler.forceRun(taskDollarSpark);
         }
+        return;
+    }
 
+    if (evt.gesture == TOUCH_TAP) {
         if (zoneId == 0) {
             updateClock();
         }
@@ -186,7 +437,10 @@ static void redrawDashboard() {
     String timeStr = timeReady() ? getTimeStr() : String("--:--:--");
     dashboardDrawAll(timeStr.c_str(),
                      state.btc, state.spark, selectedPeriod,
-                     state.lemon, !state.online, state.liveMode);
+                     state.lemon, !state.online, wsBinanceConnected(),
+                     periodChanges, chartStyle, &state.ohlc, &state.lemonSpark,
+                     dollarPeriod, dollarChartStyle, dollarChangePercent);
+    frameDirty = true;
 }
 
 // ── Draw WiFi Failed screen ──
@@ -271,17 +525,49 @@ static void enterDashboard() {
     Serial.println("[Main] Initial data fetch...");
     fetchBtcPrice(state.btc);
 
-    // Initialize BTC price animator
+    // Initialize BTC price animator and period changes from CoinGecko
     btcPriceAnim.set(state.btc.usd);
+    if (state.btc.valid) {
+        periodChanges[1] = state.btc.change1h;
+        periodChanges[2] = state.btc.change24h;
+        periodChanges[3] = state.btc.change7d;
+    }
 
     dashboardDrawLoading(LOAD_DOLLAR);
     Serial.println("[Main] Fetching Lemon dollar...");
     fetchLemonPrice(state.lemon);
     lemonBidAnim.set(state.lemon.bid);
     lemonAskAnim.set(state.lemon.ask);
+    // Fetch initial dollar sparkline (default period)
+    fetchLemonSparkline(state.lemonSpark, dollarPeriodDays[dollarPeriod]);
+    if (state.lemonSpark.valid && state.lemonSpark.count >= 2) {
+        float first = state.lemonSpark.points[0];
+        float last = state.lemonSpark.points[state.lemonSpark.count - 1];
+        if (first > 0 && last > 0 && first > last * 0.01f) {
+            dollarChangePercent = ((last - first) / first) * 100.0f;
+        } else {
+            dollarChangePercent = NAN;
+        }
+    }
 
     dashboardDrawLoading(LOAD_CHART);
-    fetchSparkline(state.spark, periodToDays(selectedPeriod));
+    // Backfill sparkline from Binance REST (96 x 1m klines)
+    if (wsBinanceBackfill()) {
+        wsBinanceGetSparkline(state.spark);
+        // Set initial price from backfill if CoinGecko didn't provide one
+        if (wsBinanceHasPrice() && state.btc.usd <= 0) {
+            state.btc.usd = wsBinanceGetPrice();
+            state.btc.valid = true;
+            btcPriceAnim.set(state.btc.usd);
+        }
+    } else {
+        // Fallback to CoinGecko sparkline
+        fetchSparkline(state.spark, 7);
+    }
+
+    // Start WebSocket for real-time price updates
+    wsBinanceSetup();
+    lastRenderedPrice = state.btc.usd;
 
     dashboardDrawLoading(LOAD_DONE);
     delay(300);
@@ -289,7 +575,13 @@ static void enterDashboard() {
     String timeStr = getTimeStr();
     dashboardDrawAll(timeStr.c_str(),
                      state.btc, state.spark, selectedPeriod,
-                     state.lemon, !state.online, state.liveMode);
+                     state.lemon, !state.online, wsBinanceConnected(),
+                     periodChanges, chartStyle, &state.ohlc, &state.lemonSpark,
+                     dollarPeriod, dollarChartStyle, dollarChangePercent);
+
+    // Double buffering disabled — was causing vertical bounce/repeat artifacts.
+    // All draws go through sprites (toast, flash in sprite) so tearing is minimal.
+    // dbuf::enable(tft, dashboardSyncDrawBuffer);
 
     appSetScreen(SCREEN_DASHBOARD);
 }
@@ -302,6 +594,7 @@ void setup() {
 
     displaySetup();
     displaySetBrightness(nvsGetBrightness());
+
     dashboardSetup();
     dashboardDrawLoading(LOAD_LOGO);
 
@@ -318,6 +611,7 @@ void setup() {
     taskBtc       = scheduler.add("btc",       UPDATE_BTC_PRICE_MS,  updateBtc);
     taskSparkline = scheduler.add("sparkline", UPDATE_SPARKLINE_MS,  updateSparkline);
     taskLemon     = scheduler.add("lemon",     UPDATE_LEMON_MS,      updateLemon);
+    taskDollarSpark = scheduler.add("dolarSpark", UPDATE_SPARKLINE_MS, updateDollarSparkline);
 
     // ── Boot flow ──
     if (nvsHasWifi()) {
@@ -394,55 +688,106 @@ void loop() {
         state.online = wifiConnected();
 
         if (!state.online && !state.wasOffline) {
-            dashboardDrawHeader("--:--:--", true);
+            wsBinanceStop();
             state.wasOffline = true;
             showToast("WiFi desconectado");
+            dashboardDrawHeader("--:--:--", true);  // Will render toast bar in sprZ0
+            frameDirty = true;
         } else if (state.online && state.wasOffline) {
             state.wasOffline = false;
             timeSetup();
-            dashboardDrawHeader(getTimeStr().c_str(), false, state.liveMode);
+            wsBinanceSetup();
             showToast("WiFi reconectado");
+            dashboardDrawHeader(getTimeStr().c_str(), false, wsBinanceConnected());  // Toast bar
+            frameDirty = true;
+        }
+
+        // WebSocket loop — must run every iteration
+        wsBinanceLoop();
+
+        // Check if WS has a new price to render
+        if (wsBinanceHasPrice()) {
+            float wsPrice = wsBinanceGetPrice();
+            if (wsPrice != lastRenderedPrice) {
+                // Trigger directional price flash before updating
+                if (lastRenderedPrice > 0) {
+                    dashboardFlashPrice(wsPrice > lastRenderedPrice);
+                }
+                lastRenderedPrice = wsPrice;
+                state.btc.usd = wsPrice;
+                state.btc.valid = true;
+                btcPriceAnim.set(wsPrice);
+                redrawHero();
+                frameDirty = true;
+            }
+
+            // Sync 15m/1h sparkline from WS buffer every second
+            if (selectedPeriod <= 1) {
+                static unsigned long lastSparkSync = 0;
+                unsigned long now = millis();
+                if (now - lastSparkSync >= 1000) {
+                    lastSparkSync = now;
+                    SparklineData tmp;
+                    wsBinanceGetSparkline(tmp);
+                    if (tmp.valid) {
+                        // Trim: 15 points for 15m, 60 for 1h
+                        int trimTo = (selectedPeriod == 0) ? 15 : 60;
+                        if (tmp.count > trimTo) {
+                            int offset = tmp.count - trimTo;
+                            tmp.minVal = 1e12f;
+                            tmp.maxVal = -1e12f;
+                            for (int i = 0; i < trimTo; i++) {
+                                tmp.points[i] = tmp.points[offset + i];
+                                if (tmp.points[i] < tmp.minVal) tmp.minVal = tmp.points[i];
+                                if (tmp.points[i] > tmp.maxVal) tmp.maxVal = tmp.points[i];
+                            }
+                            tmp.count = trimTo;
+                        }
+                        state.spark = tmp;
+                    }
+                }
+            }
         }
 
         scheduler.tick();
 
-        // Live mode: poll BTC more frequently (10s instead of 60s)
-        if (state.liveMode && state.online) {
-            static unsigned long lastLivePoll = 0;
-            unsigned long now = millis();
-            if (now - lastLivePoll >= UPDATE_BTC_LIVE_MS) {
-                lastLivePoll = now;
-                updateBtc();
-            }
-        }
-
-        // Animation frame updates (throttle to ~30fps to reduce tearing)
-        {
-            static unsigned long lastAnimFrame = 0;
-            unsigned long now = millis();
-            if (now - lastAnimFrame >= 33) {
-                lastAnimFrame = now;
-                if (btcPriceAnim.isAnimating() || sparkAnim.isAnimating()) {
-                    btcPriceAnim.update();
-                    redrawHero();
-                }
-                if (lemonBidAnim.isAnimating() || lemonAskAnim.isAnimating()) {
-                    lemonBidAnim.update();
-                    lemonAskAnim.update();
-                    dashboardDrawLemonDollar(state.lemon);
-                }
-            }
-        }
+        // Per-frame animation redraws disabled to keep RGB scanout stable.
+        // Dashboard now redraws only on data/touch events.
     }
 
     // Per-frame updates
-    appTick();
-    updateToast();
-    dashboardUpdateFlash();
+    appTick();           // calls dashboardUpdateFlash() internally for SCREEN_DASHBOARD
+
+    // Toast expiry: redraw header to restore normal content
+    {
+        static bool wasToastActive = false;
+        bool toastNow = isToastActive();
+        updateToast();
+        bool toastAfter = isToastActive();
+        // Toast just expired this frame
+        if (wasToastActive && !toastAfter && screen == SCREEN_DASHBOARD) {
+            String t = timeReady() ? getTimeStr() : String("--:--:--");
+            dashboardDrawHeader(t.c_str(), !state.online, wsBinanceConnected());
+            frameDirty = true;
+        }
+        wasToastActive = toastAfter;  // track for next frame
+        (void)toastNow;
+    }
 
     // Poll touch and dispatch
     TouchEvent evt = touchLoop();
     appHandleTouch(evt);
 
-    delay(20);
+    // ── Frame pacing ──
+    // Double buffering disabled (was causing bounce/repeat artifacts).
+    // Single-buffer mode: sprites write directly to the framebuffer.
+    // VSync wait reduces tearing by aligning draws to blanking period.
+    if (screen == SCREEN_DASHBOARD) {
+        if (frameDirty) {
+            frameDirty = false;
+        }
+        delay(4);              // Yield to RTOS when idle
+    } else {
+        delay(20);
+    }
 }

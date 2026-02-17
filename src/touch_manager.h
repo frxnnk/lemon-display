@@ -7,7 +7,9 @@ enum TouchGesture : uint8_t {
     TOUCH_TAP,
     TOUCH_LONG_PRESS,
     TOUCH_SWIPE_LEFT,
-    TOUCH_SWIPE_RIGHT
+    TOUCH_SWIPE_RIGHT,
+    TOUCH_SWIPE_UP,
+    TOUCH_SWIPE_DOWN
 };
 
 struct TouchEvent {

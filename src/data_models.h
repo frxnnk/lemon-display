@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#define SPARKLINE_POINTS 96
+#define SPARKLINE_POINTS 365
 
 // ── Coin identifiers ──
 enum CoinId : uint8_t {
@@ -37,6 +37,8 @@ struct BtcPrice {
     float change1h;
     float change24h;
     float change7d;
+    float ath;
+    float athChangePercent;
     bool valid;
     unsigned long lastUpdate;
 };
@@ -54,7 +56,7 @@ struct CryptoGlobal {
 // ── Sparkline chart data ──
 struct SparklineData {
     float points[SPARKLINE_POINTS];
-    uint8_t count;
+    uint16_t count;
     float minVal;
     float maxVal;
     bool valid;
@@ -67,4 +69,27 @@ struct LemonPrice {
     float ask;        // Lemon sell price (ARS per USDT)
     bool valid;
     unsigned long lastUpdate;
+};
+
+// ── OHLC candlestick data ──
+#define OHLC_MAX_BARS 365
+
+struct OhlcBar {
+    float open, high, low, close;
+};
+
+struct OhlcData {
+    OhlcBar bars[OHLC_MAX_BARS];
+    uint16_t count;
+    float minVal, maxVal;  // global low/high across all bars
+    bool valid;
+    unsigned long lastUpdate;
+};
+
+// ── Chart display style ──
+enum ChartStyle : uint8_t {
+    CHART_LINE = 0,
+    CHART_CANDLE,
+    CHART_MARKERS,
+    CHART_STYLE_COUNT
 };
