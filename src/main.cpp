@@ -50,8 +50,10 @@ static SparklineAnimator sparkAnim;
 static Scheduler scheduler;
 static uint8_t taskClock, taskBtc, taskSparkline, taskLemon, taskDollarSpark;
 
-// ── WS price dedup ──
+// ── WS price dedup (only redraw when displayed integer changes) ──
 static float lastRenderedPrice = 0.0f;
+static int   lastDisplayedInt  = 0;
+static bool  priceChangedSinceLastDraw = false;
 
 // ── Single-swap-per-frame flag ──
 static bool frameDirty = false;
@@ -162,7 +164,12 @@ static void redrawHero() {
 // ── Scheduled callbacks ──
 static void updateClock() {
     if (timeReady()) {
-        dashboardDrawHeader(getTimeStr().c_str(), !state.online, wsBinanceConnected());
+        // Direct-to-framebuffer updates (no pushSprite, no PSRAM/DMA bounce)
+        dashboardUpdateTimeDirect(getTimeStr().c_str());
+        if (priceChangedSinceLastDraw) {
+            priceChangedSinceLastDraw = false;
+            dashboardUpdatePriceDirect(state.btc);
+        }
         frameDirty = true;
     }
 }
@@ -198,6 +205,10 @@ static void updateBtc() {
 
 static void updateSparkline() {
     if (!state.online) return;
+
+    // Save current sparkline for morph animation (static to avoid stack overflow)
+    static SparklineData oldSpark;
+    oldSpark = state.spark;
 
     bool ok = false;
     // OHLC interval/limit map for candlestick mode
@@ -261,8 +272,15 @@ static void updateSparkline() {
     }
 
     if (ok) {
-        // Disable sparkline morph animation on RGB panel to avoid tearing artifacts.
-        morphActive = false;
+        // Start morph animation: interpolate from old to new sparkline over 800ms
+        if (oldSpark.valid && oldSpark.count >= 2 && chartStyle == CHART_LINE) {
+            resampleNormalize(oldSpark, morphOldNorm, MORPH_POINTS);
+            resampleNormalize(state.spark, morphNewNorm, MORPH_POINTS);
+            morphNewMin = state.spark.minVal;
+            morphNewMax = state.spark.maxVal;
+            morphStartMs = millis();
+            morphActive = true;
+        }
         // Compute % change from sparkline first/last for periods 4 & 5
         if (selectedPeriod >= 4 && state.spark.count >= 2) {
             float first = state.spark.points[0];
@@ -593,6 +611,7 @@ void setup() {
     nvsInit();
 
     displaySetup();
+    displaySetupVSync();
     displaySetBrightness(nvsGetBrightness());
 
     dashboardSetup();
@@ -705,20 +724,20 @@ void loop() {
         // WebSocket loop — must run every iteration
         wsBinanceLoop();
 
-        // Check if WS has a new price to render
+        // Check if WS has a new price — only redraw when displayed integer changes
         if (wsBinanceHasPrice()) {
             float wsPrice = wsBinanceGetPrice();
             if (wsPrice != lastRenderedPrice) {
-                // Trigger directional price flash before updating
-                if (lastRenderedPrice > 0) {
+                int newInt = (int)wsPrice;
+                if (lastRenderedPrice > 0 && newInt != lastDisplayedInt) {
                     dashboardFlashPrice(wsPrice > lastRenderedPrice);
+                    priceChangedSinceLastDraw = true;
                 }
                 lastRenderedPrice = wsPrice;
+                lastDisplayedInt  = newInt;
                 state.btc.usd = wsPrice;
                 state.btc.valid = true;
                 btcPriceAnim.set(wsPrice);
-                redrawHero();
-                frameDirty = true;
             }
 
             // Sync 15m/1h sparkline from WS buffer every second
@@ -751,8 +770,15 @@ void loop() {
 
         scheduler.tick();
 
-        // Per-frame animation redraws disabled to keep RGB scanout stable.
-        // Dashboard now redraws only on data/touch events.
+        // Drive morph animation (~25fps during 800ms transition)
+        if (morphActive && chartStyle == CHART_LINE) {
+            static unsigned long lastMorphFrame = 0;
+            unsigned long now = millis();
+            if (now - lastMorphFrame >= 40) {  // 25fps
+                lastMorphFrame = now;
+                redrawHero();
+            }
+        }
     }
 
     // Per-frame updates

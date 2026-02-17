@@ -22,6 +22,10 @@ void dashboardDrawLemonDollar(const LemonPrice& lemon, const SparklineData* lemo
                               float dollarChange = NAN);
 void dashboardDrawPriceOnly(const BtcPrice& btc);  // Partial update — price strip only
 
+// Direct-to-framebuffer updates (no pushSprite, no PSRAM bus contention)
+void dashboardUpdateTimeDirect(const char* timeStr);
+void dashboardUpdatePriceDirect(const BtcPrice& btc);
+
 // Full redraw
 void dashboardDrawAll(const char* timeStr,
                       const BtcPrice& btc, const SparklineData& spark,
