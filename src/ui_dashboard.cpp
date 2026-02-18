@@ -946,6 +946,159 @@ void dashboardFillGaps() {
 }
 
 // ══════════════════════════════════════════
+//  PREDICTION MODE (Polymarket)
+// ══════════════════════════════════════════
+
+static bool predictionModeActive = false;
+
+// Button geometry (in Z1 sprite coords) — used by hit tests and render
+#define PRED_BTN_Y    124
+#define PRED_BTN_H     56
+#define PRED_BTN_GAP   16
+#define PRED_BTN_W    ((CARD_W - 2 * CARD_PAD - PRED_BTN_GAP) / 2)
+#define PRED_BTN_YES_X (MARGIN + CARD_PAD)
+#define PRED_BTN_NO_X  (PRED_BTN_YES_X + PRED_BTN_W + PRED_BTN_GAP)
+
+bool dashboardIsPredictionMode() {
+    return predictionModeActive;
+}
+
+void dashboardSetPredictionMode(bool active) {
+    predictionModeActive = active;
+}
+
+void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t selected,
+                             const PolyPrediction* activePred, const PolyStats& stats,
+                             bool loading) {
+    sprZ1.fillSprite(Colors::BG_BASE);
+    drawHeroCard(sprZ1, MARGIN, 0, CARD_W, z1H);
+
+    // ── Header: "POLYMARKET" + page indicator ──
+    sprZ1.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
+    sprZ1.setTextDatum(lgfx::top_left);
+    sprZ1.drawString("POLYMARKET", MARGIN + CARD_PAD, 6, &Satoshi12);
+
+    if (count > 0) {
+        char pageBuf[8];
+        snprintf(pageBuf, sizeof(pageBuf), "%d/%d", selected + 1, count);
+        sprZ1.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+        sprZ1.setTextDatum(lgfx::top_right);
+        sprZ1.drawString(pageBuf, MARGIN + CARD_W - CARD_PAD, 6, &Satoshi9);
+    }
+
+    // ── Loading state ──
+    if (loading || count == 0) {
+        const char* msg = loading ? "Cargando mercados..." : "Sin mercados crypto";
+        drawCentered(sprZ1, msg, z1H / 2 - 10, &Satoshi12, Colors::TEXT_SECONDARY);
+        displayWaitVSync();
+        sprZ1.pushSprite(0, Z1_Y);
+        dirtyZones |= (1 << 1);
+        return;
+    }
+
+    const PolyMarket& mkt = markets[selected];
+
+    // ── Question (wrapped, max 3 lines) ──
+    drawWrappedText(sprZ1, mkt.question, MARGIN + CARD_PAD, 28,
+                    CARD_W - 2 * CARD_PAD, 18, &Satoshi12, Colors::TEXT_PRIMARY, 3);
+
+    // ── Probability bar ──
+    drawProbabilityBar(sprZ1, MARGIN + CARD_PAD, 88,
+                       CARD_W - 2 * CARD_PAD, 26, mkt.yesPrice);
+
+    // ── YES / NO buttons ──
+    bool hasActive = (activePred && activePred->conditionId[0] != '\0');
+    drawPredictionButton(sprZ1, PRED_BTN_YES_X, PRED_BTN_Y, PRED_BTN_W, PRED_BTN_H,
+                         "SI", mkt.yesPrice, true, hasActive);
+    drawPredictionButton(sprZ1, PRED_BTN_NO_X, PRED_BTN_Y, PRED_BTN_W, PRED_BTN_H,
+                         "NO", mkt.noPrice, false, hasActive);
+
+    // ── Stats row ──
+    {
+        int sy = 190;
+        int sh = 36;
+        drawGlassCard(sprZ1, MARGIN + CARD_PAD, sy, CARD_W - 2 * CARD_PAD, sh, 8);
+
+        char statsBuf[64];
+        snprintf(statsBuf, sizeof(statsBuf), "W:%d  L:%d | Racha: %d | Best: %d",
+                 stats.wins, stats.losses, stats.streak, stats.bestStreak);
+        sprZ1.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
+        sprZ1.setTextDatum(lgfx::middle_center);
+        sprZ1.drawString(statsBuf, SCREEN_W / 2, sy + sh / 2, &Satoshi9);
+    }
+
+    // ── Active prediction status ──
+    if (hasActive) {
+        int ay = 236;
+        char predBuf[64];
+        if (activePred->resolved == 0) {
+            snprintf(predBuf, sizeof(predBuf), "Tu prediccion: %s @ %.0f%% - Pendiente",
+                     activePred->chosenYes ? "SI" : "NO", activePred->probAtBet * 100);
+            sprZ1.setTextColor(Colors::SOLAR, Colors::BG_CARD);
+        } else if (activePred->resolved == 1) {
+            snprintf(predBuf, sizeof(predBuf), "Ganaste!");
+            sprZ1.setTextColor(Colors::POSITIVE, Colors::BG_CARD);
+        } else {
+            snprintf(predBuf, sizeof(predBuf), "Perdiste");
+            sprZ1.setTextColor(Colors::NEGATIVE, Colors::BG_CARD);
+        }
+        sprZ1.setTextDatum(lgfx::middle_center);
+        sprZ1.drawString(predBuf, SCREEN_W / 2, ay, &Satoshi12);
+    }
+
+    // ── Volume + end date ──
+    {
+        int vy = 262;
+        char volBuf[64];
+        if (mkt.volume24hr >= 1000000.0f) {
+            snprintf(volBuf, sizeof(volBuf), "Vol 24h: $%.1fM", mkt.volume24hr / 1000000.0f);
+        } else if (mkt.volume24hr >= 1000.0f) {
+            snprintf(volBuf, sizeof(volBuf), "Vol 24h: $%.0fK", mkt.volume24hr / 1000.0f);
+        } else {
+            snprintf(volBuf, sizeof(volBuf), "Vol 24h: $%.0f", mkt.volume24hr);
+        }
+        // Append end date if available (truncate to date portion)
+        if (mkt.endDate[0]) {
+            char datePart[11] = "";
+            strncpy(datePart, mkt.endDate, 10);
+            datePart[10] = '\0';
+            char fullBuf[80];
+            snprintf(fullBuf, sizeof(fullBuf), "%s | Cierra: %s", volBuf, datePart);
+            sprZ1.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+            sprZ1.setTextDatum(lgfx::middle_center);
+            sprZ1.drawString(fullBuf, SCREEN_W / 2, vy, &Satoshi9);
+        } else {
+            sprZ1.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+            sprZ1.setTextDatum(lgfx::middle_center);
+            sprZ1.drawString(volBuf, SCREEN_W / 2, vy, &Satoshi9);
+        }
+    }
+
+    // ── Swipe hint ──
+    if (count > 1) {
+        sprZ1.setTextColor(Colors::TEXT_DISABLED, Colors::BG_CARD);
+        sprZ1.setTextDatum(lgfx::middle_center);
+        sprZ1.drawString("< desliza para ver mas >", SCREEN_W / 2, z1H - 14, &Satoshi9);
+    }
+
+    displayWaitVSync();
+    sprZ1.pushSprite(0, Z1_Y);
+    dirtyZones |= (1 << 1);
+}
+
+bool dashboardHitTestPredYes(int16_t x, int16_t y) {
+    int sprY = y - Z1_Y;
+    return (x >= PRED_BTN_YES_X && x < PRED_BTN_YES_X + PRED_BTN_W &&
+            sprY >= PRED_BTN_Y && sprY < PRED_BTN_Y + PRED_BTN_H);
+}
+
+bool dashboardHitTestPredNo(int16_t x, int16_t y) {
+    int sprY = y - Z1_Y;
+    return (x >= PRED_BTN_NO_X && x < PRED_BTN_NO_X + PRED_BTN_W &&
+            sprY >= PRED_BTN_Y && sprY < PRED_BTN_Y + PRED_BTN_H);
+}
+
+// ══════════════════════════════════════════
 //  LOADING SCREEN — Logo + progress bar
 // ══════════════════════════════════════════
 

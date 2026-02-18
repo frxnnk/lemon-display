@@ -30,3 +30,6 @@ ApiResult fetchBinanceOhlcSymbol(OhlcData& out, const char* symbol,
 ApiResult fetchSparklineVsCurrency(SparklineData& out, int days,
                                     const char* vsCurrency, CoinId coin = COIN_BTC);
 ApiResult fetchGeckoBtcPrice(const char* vsCurrency, float& outPrice);
+
+// Polymarket: fetch active crypto prediction markets
+ApiResult fetchPolyMarkets(PolyMarket* out, uint8_t& count, uint8_t limit = 3);

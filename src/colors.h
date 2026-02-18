@@ -83,4 +83,8 @@ namespace Colors {
     constexpr uint16_t GLOW_2 = 0x01A0;  // Mid-dark
     constexpr uint16_t GLOW_3 = 0x0240;  // Mid
     constexpr uint16_t GLOW_4 = 0x0360;  // Brightest ring (still subtle)
+
+    // ── Polymarket prediction mode ──
+    constexpr uint16_t POLY_YES_BG = BADGE_BG_POS;   // Dark green tint
+    constexpr uint16_t POLY_NO_BG  = BADGE_BG_NEG;   // Dark red tint
 }

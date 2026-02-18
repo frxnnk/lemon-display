@@ -633,3 +633,83 @@ ApiResult fetchLemonPrice(LemonPrice& out) {
     Serial.printf("[API] Lemon USDT/ARS: bid=%.2f ask=%.2f\n", out.bid, out.ask);
     return out.valid ? API_OK : API_PARSE_ERROR;
 }
+
+// ── Polymarket: Fetch active crypto prediction markets ──
+ApiResult fetchPolyMarkets(PolyMarket* out, uint8_t& count, uint8_t limit) {
+    char urlBuf[256];
+    snprintf(urlBuf, sizeof(urlBuf),
+             "%s?active=true&closed=false&tag_slug=crypto&order=volume24hr&ascending=false&limit=%d",
+             POLYMARKET_GAMMA_URL, limit * 4);  // fetch extra to filter
+
+    ApiResult result;
+    String json = httpGet(urlBuf, false, result);
+    if (result != API_OK) return result;
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, json, DeserializationOption::NestingLimit(10));
+    if (err) {
+        Serial.printf("[API] Polymarket JSON error: %s\n", err.c_str());
+        return API_PARSE_ERROR;
+    }
+
+    JsonArray arr = doc.as<JsonArray>();
+    if (arr.isNull() || arr.size() == 0) return API_PARSE_ERROR;
+
+    count = 0;
+    for (JsonObject m : arr) {
+        if (count >= limit) break;
+
+        const char* question = m["question"] | "";
+        // Filter: only BTC/Bitcoin-related markets
+        if (!strstr(question, "Bitcoin") && !strstr(question, "bitcoin") &&
+            !strstr(question, "BTC") && !strstr(question, "btc")) {
+            continue;
+        }
+
+        PolyMarket& pm = out[count];
+        memset(&pm, 0, sizeof(PolyMarket));
+
+        strncpy(pm.question, question, PM_QUESTION_LEN - 1);
+        pm.question[PM_QUESTION_LEN - 1] = '\0';
+
+        const char* condId = m["conditionId"] | "";
+        strncpy(pm.conditionId, condId, PM_COND_ID_LEN - 1);
+        pm.conditionId[PM_COND_ID_LEN - 1] = '\0';
+
+        // outcomePrices is a double-encoded JSON string: "[\"0.72\",\"0.28\"]"
+        const char* pricesStr = m["outcomePrices"] | "";
+        if (pricesStr[0] == '[') {
+            JsonDocument pricesDoc;
+            if (!deserializeJson(pricesDoc, pricesStr)) {
+                JsonArray pa = pricesDoc.as<JsonArray>();
+                if (pa.size() >= 2) {
+                    pm.yesPrice = atof(pa[0].as<const char*>());
+                    pm.noPrice  = atof(pa[1].as<const char*>());
+                }
+            }
+        }
+
+        pm.volume24hr = m["volume24hr"] | 0.0f;
+        // Handle volume24hr as string (Polymarket sometimes returns string)
+        if (pm.volume24hr == 0.0f) {
+            const char* volStr = m["volume24hr"];
+            if (volStr) pm.volume24hr = atof(volStr);
+        }
+
+        const char* endDateStr = m["endDate"] | "";
+        strncpy(pm.endDate, endDateStr, sizeof(pm.endDate) - 1);
+        pm.endDate[sizeof(pm.endDate) - 1] = '\0';
+
+        pm.closed = m["closed"] | false;
+        pm.valid = (pm.yesPrice > 0 || pm.noPrice > 0);
+
+        if (pm.valid) {
+            Serial.printf("[API] PolyMarket[%d]: YES=%.0f%% NO=%.0f%% Q=%s\n",
+                          count, pm.yesPrice * 100, pm.noPrice * 100, pm.question);
+            count++;
+        }
+    }
+
+    Serial.printf("[API] Polymarket: %d crypto markets found\n", count);
+    return (count > 0) ? API_OK : API_PARSE_ERROR;
+}

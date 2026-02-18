@@ -784,3 +784,132 @@ bool isToastActive() {
 const char* getToastMessage() {
     return toastMsg;
 }
+
+// ══════════════════════════════════════════
+//  POLYMARKET PREDICTION COMPONENTS
+// ══════════════════════════════════════════
+
+void drawProbabilityBar(LGFX_Sprite& spr, int x, int y, int w, int h, float yesProb) {
+    if (yesProb < 0) yesProb = 0;
+    if (yesProb > 1) yesProb = 1;
+    float noProb = 1.0f - yesProb;
+
+    int r = h / 2;
+    int yesW = (int)(yesProb * w);
+    if (yesW < r * 2 && yesW > 0) yesW = r * 2;
+    int noW = w - yesW;
+
+    // Full background (NO side — red)
+    spr.fillSmoothRoundRect(x, y, w, h, r, Colors::NEGATIVE);
+
+    // YES side (green, left)
+    if (yesW > r * 2) {
+        spr.fillSmoothRoundRect(x, y, yesW, h, r, Colors::POSITIVE);
+    } else if (yesW > 0) {
+        spr.fillSmoothRoundRect(x, y, r * 2, h, r, Colors::POSITIVE);
+    }
+
+    // Labels
+    char yesBuf[12], noBuf[12];
+    snprintf(yesBuf, sizeof(yesBuf), "SI %.0f%%", yesProb * 100);
+    snprintf(noBuf, sizeof(noBuf), "NO %.0f%%", noProb * 100);
+
+    int cy = y + h / 2;
+
+    if (yesW > 50) {
+        spr.setTextColor(Colors::TEXT_PRIMARY, Colors::POSITIVE);
+        spr.setTextDatum(lgfx::middle_center);
+        spr.drawString(yesBuf, x + yesW / 2, cy, &Satoshi9);
+    }
+
+    if (noW > 50) {
+        spr.setTextColor(Colors::TEXT_PRIMARY, Colors::NEGATIVE);
+        spr.setTextDatum(lgfx::middle_center);
+        spr.drawString(noBuf, x + yesW + noW / 2, cy, &Satoshi9);
+    }
+}
+
+int drawWrappedText(LGFX_Sprite& spr, const char* text, int x, int y, int maxW,
+                    int lineH, const lgfx::IFont* font, uint16_t color, int maxLines) {
+    spr.setTextColor(color);
+    spr.setTextDatum(lgfx::top_left);
+
+    int line = 0;
+    int len = strlen(text);
+    int pos = 0;
+
+    while (pos < len && line < maxLines) {
+        // Find how many chars fit in maxW
+        int bestBreak = pos;
+        for (int i = pos; i <= len; i++) {
+            char tmp[PM_QUESTION_LEN];
+            int segLen = i - pos;
+            if (segLen >= (int)sizeof(tmp)) segLen = sizeof(tmp) - 1;
+            memcpy(tmp, text + pos, segLen);
+            tmp[segLen] = '\0';
+
+            int tw = spr.textWidth(tmp, font);
+            if (tw > maxW && bestBreak > pos) break;
+
+            if (i == len || text[i] == ' ') {
+                bestBreak = i;
+            }
+            if (tw > maxW) break;
+        }
+
+        if (bestBreak <= pos) bestBreak = pos + 1;  // Force at least 1 char
+
+        // Draw this line
+        char lineBuf[PM_QUESTION_LEN];
+        int segLen = bestBreak - pos;
+        if (segLen >= (int)sizeof(lineBuf)) segLen = sizeof(lineBuf) - 1;
+        memcpy(lineBuf, text + pos, segLen);
+        lineBuf[segLen] = '\0';
+
+        // Add "..." if this is the last allowed line and there's more text
+        if (line == maxLines - 1 && bestBreak < len) {
+            int ll = strlen(lineBuf);
+            if (ll > 3) {
+                lineBuf[ll - 3] = '.';
+                lineBuf[ll - 2] = '.';
+                lineBuf[ll - 1] = '.';
+            }
+        }
+
+        spr.drawString(lineBuf, x, y + line * lineH, font);
+        line++;
+
+        pos = bestBreak;
+        while (pos < len && text[pos] == ' ') pos++;  // Skip spaces
+    }
+
+    return line;
+}
+
+void drawPredictionButton(LGFX_Sprite& spr, int x, int y, int w, int h,
+                          const char* label, float probability, bool isYes, bool disabled) {
+    uint16_t bgColor = isYes ? Colors::POLY_YES_BG : Colors::POLY_NO_BG;
+    uint16_t borderColor = isYes ? Colors::POSITIVE : Colors::NEGATIVE;
+    uint16_t textColor = disabled ? Colors::TEXT_DISABLED : Colors::TEXT_PRIMARY;
+
+    if (disabled) {
+        bgColor = Colors::BG_ELEVATED;
+        borderColor = Colors::CARD_BORDER;
+    }
+
+    // Button background with border
+    spr.fillSmoothRoundRect(x, y, w, h, 12, borderColor);
+    spr.fillSmoothRoundRect(x + 1, y + 1, w - 2, h - 2, 11, bgColor);
+
+    // Label (SI/NO)
+    spr.setTextColor(textColor, bgColor);
+    spr.setTextDatum(lgfx::middle_center);
+    spr.drawString(label, x + w / 2, y + h / 2 - 8, &SatoshiMedium18);
+
+    // Probability percentage
+    char probBuf[8];
+    snprintf(probBuf, sizeof(probBuf), "%.0f%%", probability * 100);
+    uint16_t probColor = disabled ? Colors::TEXT_DISABLED : (isYes ? Colors::POSITIVE : Colors::NEGATIVE);
+    spr.setTextColor(probColor, bgColor);
+    spr.drawString(probBuf, x + w / 2, y + h / 2 + 12, &Satoshi12);
+}

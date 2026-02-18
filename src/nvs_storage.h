@@ -34,5 +34,15 @@ void     nvsSet24hFormat(bool on);
 uint8_t  nvsGetLayout();
 void     nvsSetLayout(uint8_t idx);
 
+// Polymarket prediction stats
+struct PolyStats;
+struct PolyPrediction;
+void     nvsLoadPolyStats(PolyStats& stats);
+void     nvsSavePolyStats(const PolyStats& stats);
+bool     nvsHasPolyPrediction();
+void     nvsLoadPolyPrediction(PolyPrediction& pred);
+void     nvsSavePolyPrediction(const PolyPrediction& pred);
+void     nvsClearPolyPrediction();
+
 // Factory reset — erases all NVS keys
 void     nvsFactoryReset();

@@ -42,6 +42,14 @@ static float dollarChangePercent = NAN;  // Pre-computed from real sparkline
 static uint8_t dollarPeriod = 2;  // Default: 1w (index into DOLLAR_PERIODS[])
 static float crossRate = 1.0f;     // For ARS: USDT/ARS rate. For XAU: BTC/XAU direct.
 
+// ── Polymarket prediction state ──
+static PolyMarket polyMarkets[PM_MAX_MARKETS];
+static uint8_t polyMarketCount = 0;
+static uint8_t polySelectedIdx = 0;
+static PolyPrediction activePred = {};
+static PolyStats polyStats = {};
+static bool polyDataLoaded = false;
+
 // ── Animators ──
 static ValueAnimator btcPriceAnim;
 static ValueAnimator lemonBidAnim;
@@ -50,7 +58,7 @@ static SparklineAnimator sparkAnim;
 
 // ── Scheduler & task IDs ──
 static Scheduler scheduler;
-static uint8_t taskClock, taskBtc, taskSparkline, taskLemon, taskDollarSpark, taskCrossRate;
+static uint8_t taskClock, taskBtc, taskSparkline, taskLemon, taskDollarSpark, taskCrossRate, taskPolymarket;
 
 // ── WS price dedup (only redraw when displayed integer changes) ──
 static float lastRenderedPrice = 0.0f;
@@ -169,6 +177,15 @@ static SparklineData& getDollarMorphedSparkline() {
 
 // ── Helper: redraw hero with current state (uses morph if active) ──
 static void redrawHero() {
+    // In prediction mode, draw prediction UI instead of BTC hero
+    if (dashboardIsPredictionMode()) {
+        dashboardDrawPrediction(polyMarkets, polyMarketCount, polySelectedIdx,
+                                &activePred, polyStats, !polyDataLoaded);
+        z1DrawnThisFrame = true;
+        z1Dirty = false;
+        return;
+    }
+
     if (morphActive && chartStyle != CHART_CANDLE) {
         SparklineData& morphed = getMorphedSparkline();
         dashboardDrawBtcHero(state.btc, morphed, selectedPeriod, periodChanges, chartStyle, &state.ohlc, selectedPair);
@@ -184,7 +201,7 @@ static void updateClock() {
     if (timeReady()) {
         // Direct-to-framebuffer updates (no pushSprite, no PSRAM/DMA bounce)
         dashboardUpdateTimeDirect(getTimeStr(nvsGet24hFormat()).c_str());
-        if (priceChangedSinceLastDraw && !z1Dirty) {
+        if (priceChangedSinceLastDraw && !z1Dirty && !dashboardIsPredictionMode()) {
             priceChangedSinceLastDraw = false;
             dashboardUpdatePriceDirect(state.btc, selectedPair);
         }
@@ -423,6 +440,130 @@ static void updateCrossRate() {
     Serial.printf("[Main] CrossRate for %s: %.4f\n", pair.label, crossRate);
 }
 
+// ── Polymarket update callback ──
+static void updatePolymarket() {
+    if (!state.online || !dashboardIsPredictionMode()) return;
+
+    uint8_t cnt = 0;
+    ApiResult res = fetchPolyMarkets(polyMarkets, cnt, PM_MAX_MARKETS);
+    if (res == API_OK && cnt > 0) {
+        polyMarketCount = cnt;
+        if (polySelectedIdx >= polyMarketCount) polySelectedIdx = 0;
+        polyDataLoaded = true;
+
+        // Check if active prediction's market resolved
+        if (nvsHasPolyPrediction()) {
+            nvsLoadPolyPrediction(activePred);
+            for (uint8_t i = 0; i < polyMarketCount; i++) {
+                if (strcmp(activePred.conditionId, polyMarkets[i].conditionId) == 0) {
+                    if (polyMarkets[i].closed) {
+                        // Market resolved: yesPrice >= 0.95 means YES won
+                        bool yesWon = (polyMarkets[i].yesPrice >= 0.95f);
+                        bool userWon = (activePred.chosenYes == yesWon);
+
+                        nvsLoadPolyStats(polyStats);
+                        if (userWon) {
+                            polyStats.wins++;
+                            polyStats.streak++;
+                            if (polyStats.streak > polyStats.bestStreak)
+                                polyStats.bestStreak = polyStats.streak;
+                            showToast("Ganaste!");
+                        } else {
+                            polyStats.losses++;
+                            polyStats.streak = 0;
+                            showToast("Perdiste");
+                        }
+                        nvsSavePolyStats(polyStats);
+                        nvsClearPolyPrediction();
+                        memset(&activePred, 0, sizeof(activePred));
+
+                        // Redraw header for toast
+                        String t = timeReady() ? getTimeStr(nvsGet24hFormat()) : String("--:--:--");
+                        dashboardDrawHeader(t.c_str(), !state.online, wsBinanceConnected());
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Redraw prediction UI
+        dashboardDrawPrediction(polyMarkets, polyMarketCount, polySelectedIdx,
+                                &activePred, polyStats, false);
+        z1DrawnThisFrame = true;
+        z1Dirty = false;
+        frameDirty = true;
+    }
+    Serial.printf("[Poly] Update: %d markets, selected=%d\n", polyMarketCount, polySelectedIdx);
+}
+
+// ── Enter/exit prediction mode ──
+static void enterPredictionMode() {
+    dashboardSetPredictionMode(true);
+    polyDataLoaded = false;
+    polySelectedIdx = 0;
+
+    // Load stats and active prediction from NVS
+    nvsLoadPolyStats(polyStats);
+    if (nvsHasPolyPrediction()) {
+        nvsLoadPolyPrediction(activePred);
+    } else {
+        memset(&activePred, 0, sizeof(activePred));
+    }
+
+    // Show loading state immediately
+    dashboardDrawPrediction(nullptr, 0, 0, &activePred, polyStats, true);
+    z1DrawnThisFrame = true;
+    z1Dirty = false;
+    frameDirty = true;
+
+    // Enable scheduler task and force first fetch
+    scheduler.enable(taskPolymarket, true);
+    scheduler.forceRun(taskPolymarket);
+
+    Serial.println("[Poly] Prediction mode entered");
+}
+
+static void exitPredictionMode() {
+    dashboardSetPredictionMode(false);
+    scheduler.enable(taskPolymarket, false);
+    Serial.println("[Poly] Prediction mode exited");
+
+    // Redraw normal hero
+    z1Dirty = true;
+    frameDirty = true;
+}
+
+// ── Place prediction ──
+static void placePrediction(bool chooseYes) {
+    if (nvsHasPolyPrediction()) return;  // Already have active prediction
+    if (!polyDataLoaded || polyMarketCount == 0) return;
+
+    const PolyMarket& mkt = polyMarkets[polySelectedIdx];
+    memset(&activePred, 0, sizeof(activePred));
+    strncpy(activePred.conditionId, mkt.conditionId, PM_COND_ID_LEN - 1);
+    activePred.chosenYes = chooseYes;
+    activePred.probAtBet = chooseYes ? mkt.yesPrice : mkt.noPrice;
+    activePred.timestamp = (uint32_t)(millis() / 1000);
+    activePred.resolved = 0;
+
+    nvsSavePolyPrediction(activePred);
+    polyStats.pending = 1;
+
+    showToast(chooseYes ? "Prediccion: SI" : "Prediccion: NO");
+    String t = timeReady() ? getTimeStr(nvsGet24hFormat()) : String("--:--:--");
+    dashboardDrawHeader(t.c_str(), !state.online, wsBinanceConnected());
+
+    // Redraw prediction UI to show disabled buttons
+    dashboardDrawPrediction(polyMarkets, polyMarketCount, polySelectedIdx,
+                            &activePred, polyStats, false);
+    z1DrawnThisFrame = true;
+    z1Dirty = false;
+    frameDirty = true;
+
+    Serial.printf("[Poly] Prediction placed: %s @ %.0f%%\n",
+                  chooseYes ? "YES" : "NO", activePred.probAtBet * 100);
+}
+
 // ── Switch active trading pair ──
 static void switchPair(uint8_t newPair) {
     if (newPair >= BTC_PAIR_COUNT) return;
@@ -515,6 +656,46 @@ static void switchPair(uint8_t newPair) {
 static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
     // ── Z1: BTC Hero — dropdown selector, chart style, period carousel ──
     if (zoneId == 1) {
+        // ── Prediction mode: handle all Z1 touches differently ──
+        if (dashboardIsPredictionMode()) {
+            if (evt.gesture == TOUCH_TAP) {
+                // YES/NO button taps
+                if (dashboardHitTestPredYes(evt.x, evt.y)) {
+                    placePrediction(true);
+                    return;
+                }
+                if (dashboardHitTestPredNo(evt.x, evt.y)) {
+                    placePrediction(false);
+                    return;
+                }
+            }
+            // Swipe left/right: browse markets
+            if (evt.gesture == TOUCH_SWIPE_LEFT && polyMarketCount > 1) {
+                polySelectedIdx = (polySelectedIdx + 1) % polyMarketCount;
+                dashboardDrawPrediction(polyMarkets, polyMarketCount, polySelectedIdx,
+                                        &activePred, polyStats, false);
+                z1DrawnThisFrame = true;
+                z1Dirty = false;
+                frameDirty = true;
+                return;
+            }
+            if (evt.gesture == TOUCH_SWIPE_RIGHT && polyMarketCount > 1) {
+                polySelectedIdx = (polySelectedIdx == 0) ? polyMarketCount - 1 : polySelectedIdx - 1;
+                dashboardDrawPrediction(polyMarkets, polyMarketCount, polySelectedIdx,
+                                        &activePred, polyStats, false);
+                z1DrawnThisFrame = true;
+                z1Dirty = false;
+                frameDirty = true;
+                return;
+            }
+            // Long press: exit prediction mode
+            if (evt.gesture == TOUCH_LONG_PRESS) {
+                exitPredictionMode();
+                return;
+            }
+            return;  // Swallow all other gestures in prediction mode
+        }
+
         // ── Dropdown guard: swallow all gestures while open ──
         if (dashboardIsPairDropdownOpen()) {
             if (evt.gesture == TOUCH_TAP) {
@@ -649,14 +830,22 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
 
             redrawHero();
         }
-        // Long press: force refresh
+        // Long press: price area → prediction mode, chart area → force refresh
         else if (evt.gesture == TOUCH_LONG_PRESS) {
-            Serial.println("[Touch] Force refresh: BTC + Sparkline");
-            dashboardStartFlash(1);
-            redrawHero();           // Immediate redraw to show flash border
-            frameDirty = true;
-            scheduler.forceRun(taskBtc);
-            scheduler.forceRun(taskSparkline);
+            int sprY = evt.y - 48;  // Z1_Y = 48
+            if (sprY >= 30 && sprY <= 80) {
+                // Price area — enter prediction mode
+                Serial.println("[Touch] Long press on price → prediction mode");
+                enterPredictionMode();
+            } else {
+                // Chart area — force refresh
+                Serial.println("[Touch] Force refresh: BTC + Sparkline");
+                dashboardStartFlash(1);
+                redrawHero();
+                frameDirty = true;
+                scheduler.forceRun(taskBtc);
+                scheduler.forceRun(taskSparkline);
+            }
         }
         return;
     }
@@ -939,6 +1128,8 @@ void setup() {
     taskLemon     = scheduler.add("lemon",     UPDATE_LEMON_MS,      updateLemon);
     taskDollarSpark = scheduler.add("dolarSpark", UPDATE_SPARKLINE_MS, updateDollarSparkline);
     taskCrossRate   = scheduler.add("crossRate", 60000, updateCrossRate);  // 60s for XAU/ARS rates
+    taskPolymarket  = scheduler.add("polymarket", POLYMARKET_REFRESH_MS, updatePolymarket);
+    scheduler.enable(taskPolymarket, false);  // Disabled by default, enabled in prediction mode
 
     // ── Boot flow ──
     if (nvsHasWifi()) {

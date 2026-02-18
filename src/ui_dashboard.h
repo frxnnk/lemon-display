@@ -105,3 +105,12 @@ struct ChartZoomState {
     bool  active;      // true when zoom > 1.0
 };
 extern ChartZoomState chartZoom;
+
+// ── Prediction mode (Polymarket) ──
+void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t selected,
+                             const PolyPrediction* activePred, const PolyStats& stats,
+                             bool loading);
+bool dashboardIsPredictionMode();
+void dashboardSetPredictionMode(bool active);
+bool dashboardHitTestPredYes(int16_t x, int16_t y);
+bool dashboardHitTestPredNo(int16_t x, int16_t y);
