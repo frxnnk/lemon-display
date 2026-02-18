@@ -3,13 +3,14 @@
 #include <cstdint>
 #include "touch_manager.h"
 
-// ── Screen identifiers (v2: simplified to 6) ──
+// ── Screen identifiers ──
 enum AppScreen : uint8_t {
     SCREEN_BOOT_SPLASH,       // Logo + brand (1.5s)
     SCREEN_WIFI_QR,           // QR code + captive portal
     SCREEN_WIFI_CONNECTING,   // Brief spinner
     SCREEN_WIFI_FAILED,       // Connection failed — retry or reconfigure
     SCREEN_LOADING,           // Progress bar (fetch data)
+    SCREEN_PAIRING,           // Pairing code display (pre-dashboard)
     SCREEN_DASHBOARD,         // Main dashboard (5 zones)
     SCREEN_SETTINGS,          // Single-page settings
 };

@@ -34,5 +34,20 @@ void     nvsSet24hFormat(bool on);
 uint8_t  nvsGetLayout();
 void     nvsSetLayout(uint8_t idx);
 
+// ── Supabase pairing ──
+bool     nvsHasPairing();
+void     nvsSavePairing(const char* userId, const char* tag);
+void     nvsLoadPairing(char* userId, size_t uidLen, char* tag, size_t tagLen);
+void     nvsForgetPairing();
+
+// Device ID (persists across unpairing)
+bool     nvsHasDeviceId();
+void     nvsSaveDeviceId(const char* deviceId);
+void     nvsLoadDeviceId(char* deviceId, size_t len);
+
+// Pairing code (shown on screen)
+void     nvsSavePairingCode(const char* code);
+void     nvsLoadPairingCode(char* code, size_t len);
+
 // Factory reset — erases all NVS keys
 void     nvsFactoryReset();

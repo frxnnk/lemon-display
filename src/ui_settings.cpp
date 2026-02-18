@@ -6,6 +6,7 @@
 #include "ui_components.h"
 #include "ui_dashboard.h"
 #include "ota_manager.h"
+#include "supabase_client.h"
 #include "colors.h"
 #include "config.h"
 #include "touch_utils.h"
@@ -21,7 +22,6 @@
 #define VISIBLE_H  (SCREEN_H - HEADER_H)
 
 // ── Content layout (Y positions relative to screen top, before scroll) ──
-// Compacted to fit 480px with minimal/no scroll
 #define DISPLAY_CARD_Y   50
 #define DISPLAY_CARD_H  130
 #define AUDIO_CARD_Y    184
@@ -30,11 +30,13 @@
 #define LAYOUT_CARD_H    44
 #define WIFI_CARD_Y     310
 #define WIFI_CARD_H      56
-#define UPDATE_BTN_Y    372
+#define LINK_CARD_Y     370
+#define LINK_CARD_H      56
+#define UPDATE_BTN_Y    432
 #define UPDATE_BTN_H     40
-#define RESET_BTN_Y     418
+#define RESET_BTN_Y     478
 #define RESET_BTN_H      40
-#define ABOUT_Y         462
+#define ABOUT_Y         524
 #define ABOUT_H          16
 #define CONTENT_TOTAL   (ABOUT_Y + ABOUT_H)
 #define MAX_SCROLL      ((CONTENT_TOTAL > SCREEN_H) ? (CONTENT_TOTAL - SCREEN_H) : 0)
@@ -218,6 +220,54 @@ void settingsDraw() {
     }
 
     // ══════════════════════════════════════
+    //  VINCULACIÓN CARD
+    // ══════════════════════════════════════
+    if (isVisible(LINK_CARD_Y, LINK_CARD_H)) {
+        int cardScreenY = LINK_CARD_Y - scrollY;
+
+        settSpr.setColorDepth(16);
+        settSpr.createSprite(CARD_W, LINK_CARD_H);
+        settSpr.fillSprite(Colors::BG_BASE);
+        drawGlassCard(settSpr, 0, 0, CARD_W, LINK_CARD_H, CARD_R);
+
+        settSpr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
+        settSpr.setTextDatum(lgfx::top_left);
+        settSpr.drawString("Vinculacion", 16, 10, &Satoshi9);
+
+        if (supabaseGetPairingState() == PAIRING_PAIRED) {
+            // Paired: show @tag + Desvincular
+            char tagBuf[40];
+            snprintf(tagBuf, sizeof(tagBuf), "@%s", supabaseGetLemonTag());
+            settSpr.setTextColor(Colors::LEMON_GREEN, Colors::BG_CARD);
+            settSpr.setTextDatum(lgfx::top_left);
+            settSpr.drawString(tagBuf, 16, 28, &Satoshi12);
+
+            settSpr.setTextColor(Colors::NEGATIVE, Colors::BG_CARD);
+            settSpr.setTextDatum(lgfx::top_right);
+            settSpr.drawString("Desvincular", CARD_W - 16, 28, &Satoshi12);
+        } else if (supabaseGetPairingState() == PAIRING_REGISTERED) {
+            // Not paired: show code
+            char codeBuf[24];
+            snprintf(codeBuf, sizeof(codeBuf), "Codigo: %s", supabaseGetPairingCode());
+            settSpr.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_CARD);
+            settSpr.setTextDatum(lgfx::top_left);
+            settSpr.drawString(codeBuf, 16, 28, &Satoshi12);
+
+            settSpr.setTextColor(Colors::LEMON_GREEN, Colors::BG_CARD);
+            settSpr.setTextDatum(lgfx::top_right);
+            settSpr.drawString("Vincular con Lemon", CARD_W - 16, 28, &Satoshi12);
+        } else {
+            // Not registered
+            settSpr.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+            settSpr.setTextDatum(lgfx::top_left);
+            settSpr.drawString("No registrado", 16, 28, &Satoshi12);
+        }
+
+        settSpr.pushSprite(MARGIN, cardScreenY);
+        settSpr.deleteSprite();
+    }
+
+    // ══════════════════════════════════════
     //  UPDATE BUTTON (green outline)
     // ══════════════════════════════════════
     if (isVisible(UPDATE_BTN_Y, UPDATE_BTN_H)) {
@@ -268,9 +318,14 @@ void settingsDraw() {
     if (isVisible(ABOUT_Y, ABOUT_H)) {
         int aboutScreenY = ABOUT_Y - scrollY;
         unsigned long sec = millis() / 1000;
-        char verBuf[48];
+        char verBuf[64];
+#if PRESS_EDITION
+        snprintf(verBuf, sizeof(verBuf), "v%s PRESS EDITION  |  Up %luh%lum", APP_VERSION, sec / 3600, (sec / 60) % 60);
+        tft.setTextColor(Colors::SOLAR, Colors::BG_BASE);
+#else
         snprintf(verBuf, sizeof(verBuf), "v%s  |  Up %luh%lum", APP_VERSION, sec / 3600, (sec / 60) % 60);
         tft.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
+#endif
         tft.setTextDatum(lgfx::top_center);
         tft.drawString(verBuf, SCREEN_W / 2, aboutScreenY, &Satoshi9);
     }
@@ -407,6 +462,21 @@ void settingsHandleTouch(const TouchEvent& evt) {
         nvsSetLayout(next);
         dashboardSetLayout(next);
         settingsDraw();
+        return;
+    }
+
+    // ══════════ VINCULACIÓN CARD ══════════
+    if (touchInRect(tx, cy, MARGIN, LINK_CARD_Y, CARD_W, LINK_CARD_H)) {
+        if (supabaseGetPairingState() == PAIRING_PAIRED) {
+            // Tap "Desvincular" (right side)
+            if (tx > SCREEN_W / 2) {
+                supabaseUnpair();
+                settingsDraw();
+            }
+        } else if (supabaseGetPairingState() == PAIRING_REGISTERED) {
+            // Tap "Vincular con Lemon" — switch to pairing screen
+            appSetScreen(SCREEN_PAIRING);
+        }
         return;
     }
 

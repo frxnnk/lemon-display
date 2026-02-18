@@ -8,7 +8,10 @@
 #endif
 
 // ── App version ──
-#define APP_VERSION "4.0.0"
+#define APP_VERSION "5.0.0"
+
+// ── Press Edition flag (1 = press/influencer, 0 = retail) ──
+#define PRESS_EDITION 1
 
 // 0 = normal app
 // 1 = minimal static display diagnostic mode
@@ -105,6 +108,27 @@ static const int DOLLAR_PERIOD_COUNT = sizeof(DOLLAR_PERIODS) / sizeof(DOLLAR_PE
 
 // ── OTA GitHub repo ──
 #define OTA_GITHUB_REPO "pabloleone/lemoninterface"
+
+// ── Supabase backend ──
+// Override these in secrets.h for production
+#ifndef SUPABASE_URL
+    #define SUPABASE_URL       "https://YOUR_PROJECT.supabase.co"
+#endif
+#ifndef SUPABASE_ANON_KEY
+    #define SUPABASE_ANON_KEY  "YOUR_ANON_KEY"
+#endif
+#define SUPABASE_WS_HOST       "YOUR_PROJECT.supabase.co"
+#define SUPABASE_WS_PORT       443
+#define SUPABASE_WS_PATH       "/realtime/v1/websocket"
+#define SUPABASE_FUNCTIONS_EP  SUPABASE_URL "/functions/v1"
+
+// ── Supabase timing ──
+#define SUPA_HEARTBEAT_MS      25000   // Phoenix channel heartbeat (25s)
+#define SUPA_RECONNECT_BASE_MS  5000   // Reconnect backoff: 5s, 10s, 20s, max 60s
+#define SUPA_RECONNECT_MAX_MS  60000
+#define SUPA_DEVICE_HEARTBEAT_MS 60000 // Device heartbeat to edge function (60s)
+#define SUPA_REGISTER_TIMEOUT_MS 10000 // Max wait for register-device response
+#define SUPA_PAIRING_SHOW_MS   8000    // Auto-skip pairing screen after 8s
 
 // ── BTC Pair definitions (5 trading pairs) ──
 enum PairSource : uint8_t {
