@@ -64,6 +64,12 @@ static bool frameDirty = false;
 static bool wsVisualDirty = false;
 static unsigned long lastWsVisualDrawMs = 0;
 
+// ── Dirty-flag rendering coordinator ──
+static bool z1Dirty = false;
+static bool z2Dirty = false;
+static bool z1DrawnThisFrame = false;
+static bool z2DrawnThisFrame = false;
+
 // ── Sparkline morph animation ──
 #define MORPH_POINTS       120
 #define MORPH_DURATION_MS  800
@@ -169,6 +175,8 @@ static void redrawHero() {
     } else {
         dashboardDrawBtcHero(state.btc, state.spark, selectedPeriod, periodChanges, chartStyle, &state.ohlc, selectedPair);
     }
+    z1DrawnThisFrame = true;
+    z1Dirty = false;
 }
 
 // ── Scheduled callbacks ──
@@ -176,7 +184,7 @@ static void updateClock() {
     if (timeReady()) {
         // Direct-to-framebuffer updates (no pushSprite, no PSRAM/DMA bounce)
         dashboardUpdateTimeDirect(getTimeStr(nvsGet24hFormat()).c_str());
-        if (priceChangedSinceLastDraw) {
+        if (priceChangedSinceLastDraw && !z1Dirty) {
             priceChangedSinceLastDraw = false;
             dashboardUpdatePriceDirect(state.btc, selectedPair);
         }
@@ -204,7 +212,7 @@ static void updateBtc() {
             state.btc.valid = tmp.valid;
             btcPriceAnim.set(state.btc.usd);
         }
-        redrawHero();
+        z1Dirty = true;
         frameDirty = true;
         if (nvsGetAlertEnabled() && fabsf(state.btc.change1h) >= ALERT_BTC_1H_THRESHOLD_PCT) {
             if (state.btc.change1h > 0) playAlertUp(); else playAlertDown();
@@ -329,8 +337,8 @@ static void updateSparkline() {
             // Morph driver in loop() handles redraws at 30fps — skip immediate push
             // to avoid double-push bounce (touch handler already pushed Z1)
         } else {
-            // No morph possible — redraw immediately with new data
-            redrawHero();
+            // No morph possible — mark dirty for consolidated render
+            z1Dirty = true;
         }
         frameDirty = true;
     }
@@ -350,7 +358,7 @@ static void updateLemon() {
 
         // Skip redraw during morph — the morph driver handles Z2 at 30fps
         if (!dollarMorphActive) {
-            dashboardDrawLemonDollar(state.lemon, &state.lemonSpark, dollarPeriod, dollarChartStyle, dollarChangePercent);
+            z2Dirty = true;
         }
         frameDirty = true;
     }
@@ -384,7 +392,7 @@ static void updateDollarSparkline() {
             dollarMorphActive = true;
             // Morph driver in loop() handles redraws at 30fps — skip immediate push
         } else {
-            dashboardDrawLemonDollar(state.lemon, &state.lemonSpark, dollarPeriod, dollarChartStyle, dollarChangePercent);
+            z2Dirty = true;
         }
         frameDirty = true;
     }
@@ -499,7 +507,7 @@ static void switchPair(uint8_t newPair) {
 
     // Force sparkline refresh + redraw with new data
     scheduler.forceRun(taskSparkline);
-    redrawHero();
+    z1Dirty = true;
 }
 
 // ── Dashboard touch callback ──
@@ -685,6 +693,8 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
                 Serial.printf("[Touch] Dollar period: %s\n", DOLLAR_PERIODS[dollarPeriod].label);
                 dollarChangePercent = NAN;
                 dashboardDrawLemonDollar(state.lemon, &state.lemonSpark, dollarPeriod, dollarChartStyle, dollarChangePercent);
+                z2DrawnThisFrame = true;
+                z2Dirty = false;
                 frameDirty = true;
                 scheduler.forceRun(taskDollarSpark);
             }
@@ -696,6 +706,8 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
             dollarChartStyle = (dollarChartStyle == CHART_LINE) ? CHART_MARKERS : CHART_LINE;
             Serial.printf("[Touch] Dollar chart style: %d\n", dollarChartStyle);
             dashboardDrawLemonDollar(state.lemon, &state.lemonSpark, dollarPeriod, dollarChartStyle, dollarChangePercent);
+            z2DrawnThisFrame = true;
+            z2Dirty = false;
             frameDirty = true;
         }
         // Long press: force refresh
@@ -703,6 +715,8 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
             Serial.println("[Touch] Force refresh: Lemon");
             dashboardStartFlash(2);
             dashboardDrawLemonDollar(state.lemon, &state.lemonSpark, dollarPeriod, dollarChartStyle, dollarChangePercent);  // Immediate flash border
+            z2DrawnThisFrame = true;
+            z2Dirty = false;
             frameDirty = true;
             scheduler.forceRun(taskLemon);
             scheduler.forceRun(taskDollarSpark);
@@ -945,6 +959,9 @@ void loop() {
     return;
 #endif
 
+    z1DrawnThisFrame = false;
+    z2DrawnThisFrame = false;
+
     AppScreen screen = appGetScreen();
 
     // ── WiFi QR Provisioning mode ──
@@ -1113,7 +1130,7 @@ void loop() {
             if (wsVisualDirty && (now - lastWsVisualDrawMs >= 2000)) {
                 lastWsVisualDrawMs = now;
                 wsVisualDirty = false;
-                redrawHero();
+                z1Dirty = true;
                 frameDirty = true;
             }
         }
@@ -1126,7 +1143,7 @@ void loop() {
             unsigned long now = millis();
             if (now - lastMorphFrame >= 33) {  // 30fps
                 lastMorphFrame = now;
-                redrawHero();
+                z1Dirty = true;
             }
         }
 
@@ -1137,8 +1154,9 @@ void loop() {
             if (now - lastDollarMorphFrame >= 33) {
                 lastDollarMorphFrame = now;
                 SparklineData& morphed = getDollarMorphedSparkline();
-                displayWaitVSync();
                 dashboardDrawLemonDollar(state.lemon, &morphed, dollarPeriod, dollarChartStyle, dollarChangePercent);
+                z2DrawnThisFrame = true;
+                z2Dirty = false;
             }
         }
 
@@ -1169,7 +1187,7 @@ void loop() {
                         }
                         btcCarousel.snappedIndex = snapped;
                     }
-                    redrawHero();
+                    z1Dirty = true;
                     frameDirty = true;
                 }
 
@@ -1186,11 +1204,25 @@ void loop() {
                         }
                         dollarCarouselState.snappedIndex = snapped;
                     }
-                    dashboardDrawLemonDollar(state.lemon, &state.lemonSpark, dollarPeriod, dollarChartStyle, dollarChangePercent);
+                    z2Dirty = true;
                     frameDirty = true;
                 }
 
             }
+        }
+
+        // ── Consolidated zone rendering (max 1 push per zone per frame) ──
+        if (z1Dirty && !z1DrawnThisFrame) {
+            redrawHero();       // sets z1DrawnThisFrame, clears z1Dirty
+            frameDirty = true;
+        }
+        if (z2Dirty && !z2DrawnThisFrame) {
+            dashboardDrawLemonDollar(state.lemon,
+                dollarMorphActive ? &getDollarMorphedSparkline() : &state.lemonSpark,
+                dollarPeriod, dollarChartStyle, dollarChangePercent);
+            z2DrawnThisFrame = true;
+            z2Dirty = false;
+            frameDirty = true;
         }
     }
 
