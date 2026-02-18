@@ -74,6 +74,13 @@ void drawSparklineZoomed(LGFX_Sprite& spr, int x, int y, int w, int h,
                          const SparklineData& data, uint16_t lineColor, uint16_t fillColor,
                          float zoomLevel, float panOffset);
 
+// ── Polymarket prediction components ──
+void drawProbabilityBar(LGFX_Sprite& spr, int x, int y, int w, int h, float yesProb);
+int  drawWrappedText(LGFX_Sprite& spr, const char* text, int x, int y, int maxW,
+                     int lineH, const lgfx::IFont* font, uint16_t color, int maxLines = 3);
+void drawPredictionButton(LGFX_Sprite& spr, int x, int y, int w, int h,
+                          const char* label, float probability, bool isYes, bool disabled);
+
 // ── Toast ──
 void showToast(const char* msg);
 void updateToast();

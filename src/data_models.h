@@ -93,3 +93,32 @@ enum ChartStyle : uint8_t {
     CHART_MARKERS,
     CHART_STYLE_COUNT
 };
+
+// ── Polymarket prediction data ──
+#define PM_MAX_MARKETS     3
+#define PM_QUESTION_LEN  120
+#define PM_COND_ID_LEN    68
+
+struct PolyMarket {
+    char   question[PM_QUESTION_LEN];
+    char   conditionId[PM_COND_ID_LEN];
+    float  yesPrice;          // 0.0–1.0
+    float  noPrice;
+    float  volume24hr;
+    char   endDate[24];
+    bool   closed;
+    bool   valid;
+};
+
+struct PolyPrediction {
+    char     conditionId[PM_COND_ID_LEN];
+    bool     chosenYes;
+    float    probAtBet;
+    uint32_t timestamp;
+    uint8_t  resolved;        // 0=pending, 1=won, 2=lost
+};
+
+struct PolyStats {
+    uint16_t wins, losses, pending;
+    uint16_t streak, bestStreak;
+};
