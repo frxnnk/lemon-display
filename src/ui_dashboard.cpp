@@ -4,6 +4,7 @@
 #include "colors.h"
 #include "config.h"
 #include "touch_utils.h"
+#include "supabase_client.h"
 #include "data/lemon_logo.h"
 #include "data/satoshi_fonts.h"
 #include <cmath>
@@ -252,10 +253,21 @@ void dashboardDrawHeader(const char* timeStr, bool offline, bool wsConnected) {
         return;
     }
 
-    // Full imagotipo (122x28 — icon + LEMON wordmark)
+    // Header left side: isotipo + greeting when paired, or full imagotipo
     int logoX = MARGIN;
     int logoY = (Z0_H - 28) / 2;
-    drawLemonImagotipo122(sprZ0, logoX, logoY);
+    if (supabaseGetPairingState() == PAIRING_PAIRED && supabaseGetLemonTag()[0] != '\0') {
+        // Paired: isotipo (28x28) + "Hola @tag"
+        drawLemonIsotipo28(sprZ0, logoX, logoY);
+        char greetBuf[48];
+        snprintf(greetBuf, sizeof(greetBuf), "Hola @%s", supabaseGetLemonTag());
+        sprZ0.setTextColor(Colors::LEMON_GREEN, Colors::BG_BASE);
+        sprZ0.setTextDatum(lgfx::middle_left);
+        sprZ0.drawString(greetBuf, logoX + 34, Z0_H / 2, &Satoshi12);
+    } else {
+        // Default: full imagotipo (122x28 — icon + LEMON wordmark)
+        drawLemonImagotipo122(sprZ0, logoX, logoY);
+    }
 
     if (offline) {
         int badgeW = 90, badgeH = 24;

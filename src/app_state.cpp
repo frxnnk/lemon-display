@@ -2,6 +2,7 @@
 #include "touch_utils.h"
 #include "ui_dashboard.h"
 #include "ui_settings.h"
+#include "pairing_screen.h"
 #include "audio_manager.h"
 #include "nvs_storage.h"
 #include <Arduino.h>
@@ -50,6 +51,9 @@ void appHandleTouch(const TouchEvent& evt) {
         case SCREEN_SETTINGS:
             settingsHandleTouch(evt);
             break;
+        case SCREEN_PAIRING:
+            pairingScreenHandleTouch(evt);
+            break;
         default:
             break;
     }
@@ -64,6 +68,9 @@ void appTick() {
         case SCREEN_SETTINGS:
             settingsTick();
             break;
+        case SCREEN_PAIRING:
+            pairingScreenTick();
+            break;
         default:
             break;
     }
@@ -75,9 +82,12 @@ void appDrawCurrent() {
         case SCREEN_SETTINGS:
             settingsDraw();
             break;
+        case SCREEN_PAIRING:
+            pairingScreenDraw(nullptr);
+            break;
         case SCREEN_DASHBOARD:
-            if (previousScreen == SCREEN_SETTINGS) {
-                dashboardFillGaps();  // Clear settings screen remnants from gap areas
+            if (previousScreen == SCREEN_SETTINGS || previousScreen == SCREEN_PAIRING) {
+                dashboardFillGaps();
             }
             if (dashRedrawCB) dashRedrawCB();
             break;

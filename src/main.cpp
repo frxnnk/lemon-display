@@ -18,6 +18,8 @@
 #include "scheduler.h"
 #include "animation.h"
 #include "ws_binance.h"
+#include "supabase_client.h"
+#include "pairing_screen.h"
 #include <cmath>
 
 // ── Dashboard state ──
@@ -50,7 +52,7 @@ static SparklineAnimator sparkAnim;
 
 // ── Scheduler & task IDs ──
 static Scheduler scheduler;
-static uint8_t taskClock, taskBtc, taskSparkline, taskLemon, taskDollarSpark, taskCrossRate;
+static uint8_t taskClock, taskBtc, taskSparkline, taskLemon, taskDollarSpark, taskCrossRate, taskSupaHeartbeat;
 
 // ── WS price dedup (only redraw when displayed integer changes) ──
 static float lastRenderedPrice = 0.0f;
@@ -92,6 +94,8 @@ static SparklineData dollarMorphedResult;
 static void enterDashboard();
 static void tryConnectSavedWifi();
 static void startProvisioning();
+static void applyRemoteConfig(const RemoteConfig& rc);
+static void switchPair(uint8_t newPair);
 
 // ── Carousel item height for velocity conversion ──
 #define CAROUSEL_ITEM_H_PX 34
@@ -165,6 +169,77 @@ static SparklineData& getDollarMorphedSparkline() {
     }
     dollarMorphedResult.valid = true;
     return dollarMorphedResult;
+}
+
+// ── Supabase heartbeat callback ──
+static void supabaseHeartbeatCb() {
+    supabaseSendHeartbeat();
+}
+
+// ── Apply remote config from Supabase (remote wins when paired) ──
+static void applyRemoteConfig(const RemoteConfig& rc) {
+    if (!rc.valid) return;
+    Serial.println("[Main] Applying remote config");
+
+    // Brightness
+    if (rc.brightness != nvsGetBrightness()) {
+        nvsSetBrightness(rc.brightness);
+        displaySetBrightness(rc.brightness);
+    }
+
+    // Layout
+    if (rc.layoutPreset != nvsGetLayout()) {
+        nvsSetLayout(rc.layoutPreset);
+        dashboardSetLayout(rc.layoutPreset);
+    }
+
+    // Sound
+    if (rc.soundEnabled != nvsGetSoundEnabled()) {
+        nvsSetSoundEnabled(rc.soundEnabled);
+        audioSetEnabled(rc.soundEnabled);
+    }
+
+    // Alerts
+    if (rc.alertEnabled != nvsGetAlertEnabled()) {
+        nvsSetAlertEnabled(rc.alertEnabled);
+    }
+
+    // Time format
+    if (rc.use24h != nvsGet24hFormat()) {
+        nvsSet24hFormat(rc.use24h);
+    }
+
+    // Chart style
+    if (rc.chartStyle < CHART_STYLE_COUNT && (ChartStyle)rc.chartStyle != chartStyle) {
+        chartStyle = (ChartStyle)rc.chartStyle;
+    }
+
+    // Pair switch (triggers network reconnect)
+    if (rc.selectedPair < BTC_PAIR_COUNT && rc.selectedPair != selectedPair) {
+        switchPair(rc.selectedPair);
+    }
+
+    // Period
+    if (rc.selectedPeriod < BTC_PERIOD_COUNT && rc.selectedPeriod != selectedPeriod) {
+        selectedPeriod = rc.selectedPeriod;
+        state.ohlc.valid = false;
+        scheduler.forceRun(taskSparkline);
+    }
+
+    // Dollar period
+    if (rc.dollarPeriod < DOLLAR_PERIOD_COUNT && rc.dollarPeriod != dollarPeriod) {
+        dollarPeriod = rc.dollarPeriod;
+        dollarChangePercent = NAN;
+        scheduler.forceRun(taskDollarSpark);
+    }
+
+    // Show toast
+    showToast("Config actualizada");
+
+    // Force full redraw
+    z1Dirty = true;
+    z2Dirty = true;
+    frameDirty = true;
 }
 
 // ── Helper: redraw hero with current state (uses morph if active) ──
@@ -819,7 +894,17 @@ static void enterDashboard() {
     drawLemonImagotipo244(tft, (SCREEN_W - 244) / 2, 170);
     tft.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
     tft.setTextDatum(lgfx::top_center);
+#if PRESS_EDITION
+    tft.drawString("v" APP_VERSION " Press Edition", SCREEN_W / 2, SCREEN_H - 30, &Satoshi9);
+#else
     tft.drawString("v" APP_VERSION, SCREEN_W / 2, SCREEN_H - 30, &Satoshi9);
+#endif
+
+    // ── Supabase: register device if needed (non-blocking on failure) ──
+    supabaseInit();
+    if (!nvsHasDeviceId()) {
+        supabaseRegister();  // Blocking HTTP, max 10s timeout
+    }
 
     dashboardDrawLoading(LOAD_NTP);
     timeSetup();
@@ -891,7 +976,18 @@ static void enterDashboard() {
     // All draws go through sprites (toast, flash in sprite) so tearing is minimal.
     // dbuf::enable(tft, dashboardSyncDrawBuffer);
 
-    appSetScreen(SCREEN_DASHBOARD);
+    // ── Show pairing screen if not paired, then transition to dashboard ──
+    if (supabaseGetPairingState() == PAIRING_REGISTERED) {
+        pairingScreenDraw(supabaseGetPairingCode());
+        appSetScreen(SCREEN_PAIRING);
+        // pairingScreenTick() handles auto-skip and transition to dashboard
+    } else {
+        // Already paired or registration failed — go straight to dashboard
+        if (supabaseGetPairingState() == PAIRING_PAIRED) {
+            // Show subtle toast after 5s (will be triggered in dashboard loop)
+        }
+        appSetScreen(SCREEN_DASHBOARD);
+    }
 }
 
 void setup() {
@@ -939,6 +1035,7 @@ void setup() {
     taskLemon     = scheduler.add("lemon",     UPDATE_LEMON_MS,      updateLemon);
     taskDollarSpark = scheduler.add("dolarSpark", UPDATE_SPARKLINE_MS, updateDollarSparkline);
     taskCrossRate   = scheduler.add("crossRate", 60000, updateCrossRate);  // 60s for XAU/ARS rates
+    taskSupaHeartbeat = scheduler.add("supaHB", SUPA_DEVICE_HEARTBEAT_MS, supabaseHeartbeatCb);
 
     // ── Boot flow ──
     if (nvsHasWifi()) {
@@ -1061,6 +1158,14 @@ void loop() {
 
         // WebSocket loop — must run every iteration
         wsBinanceLoop();
+
+        // Supabase Realtime loop
+        supabaseLoop();
+
+        // Check for remote config updates (remote wins when paired)
+        if (supabaseGetPairingState() == PAIRING_PAIRED && supabaseConfigChanged()) {
+            applyRemoteConfig(supabaseGetConfig());
+        }
 
         // Check if WS has a new price — only redraw when displayed integer changes
         if (wsBinanceHasPrice()) {

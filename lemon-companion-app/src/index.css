@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-lemon-green: #00E676;
+  --color-lemon-bg: #0D0D0D;
+  --color-lemon-surface: #1A1A1A;
+  --color-lemon-card: #1E1E1E;
+  --color-lemon-border: #2A2A2A;
+  --color-solar: #FF9800;
+  --color-negative: #FF5252;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+body {
+  background-color: var(--color-lemon-bg);
+  color: #ffffff;
+}
+
+/* Safe area padding for iOS notch */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Custom scrollbar for WebView */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-lemon-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-lemon-border);
+  border-radius: 2px;
+}
+
+/* Input styling overrides */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}

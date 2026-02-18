@@ -88,6 +88,64 @@ void nvsSetLayout(uint8_t idx) {
     prefs.putUChar("layout", idx);
 }
 
+// ── Supabase Pairing ──
+
+bool nvsHasPairing() {
+    return prefs.isKey("supa_uid") && prefs.getString("supa_uid", "").length() > 0;
+}
+
+void nvsSavePairing(const char* userId, const char* tag) {
+    prefs.putString("supa_uid", userId);
+    prefs.putString("supa_tag", tag);
+    prefs.putUChar("supa_paired", 1);
+    Serial.printf("[NVS] Pairing saved: %s @%s\n", userId, tag);
+}
+
+void nvsLoadPairing(char* userId, size_t uidLen, char* tag, size_t tagLen) {
+    String u = prefs.getString("supa_uid", "");
+    String t = prefs.getString("supa_tag", "");
+    strncpy(userId, u.c_str(), uidLen - 1);
+    userId[uidLen - 1] = '\0';
+    strncpy(tag, t.c_str(), tagLen - 1);
+    tag[tagLen - 1] = '\0';
+}
+
+void nvsForgetPairing() {
+    prefs.remove("supa_uid");
+    prefs.remove("supa_tag");
+    prefs.putUChar("supa_paired", 0);
+    Serial.println("[NVS] Pairing erased");
+}
+
+// ── Device ID ──
+
+bool nvsHasDeviceId() {
+    return prefs.isKey("supa_devid") && prefs.getString("supa_devid", "").length() > 0;
+}
+
+void nvsSaveDeviceId(const char* deviceId) {
+    prefs.putString("supa_devid", deviceId);
+    Serial.printf("[NVS] Device ID saved: %s\n", deviceId);
+}
+
+void nvsLoadDeviceId(char* deviceId, size_t len) {
+    String d = prefs.getString("supa_devid", "");
+    strncpy(deviceId, d.c_str(), len - 1);
+    deviceId[len - 1] = '\0';
+}
+
+// ── Pairing Code ──
+
+void nvsSavePairingCode(const char* code) {
+    prefs.putString("supa_code", code);
+}
+
+void nvsLoadPairingCode(char* code, size_t len) {
+    String c = prefs.getString("supa_code", "------");
+    strncpy(code, c.c_str(), len - 1);
+    code[len - 1] = '\0';
+}
+
 // ── Factory Reset ──
 
 void nvsFactoryReset() {
