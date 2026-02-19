@@ -96,7 +96,8 @@ void drawSparkline(LGFX_Sprite& spr, int x, int y, int w, int h,
 
     int bottom = y + h - 1;
 
-    // Filled area with vertical gradient
+    // Filled area with banded vertical gradient (drawFastVLine, ~8x faster than per-pixel)
+    static const int GRAD_BANDS = 8;
     for (int i = 0; i < data.count - 1; i++) {
         int x0 = mapX(i);
         int x1 = mapX(i + 1);
@@ -108,10 +109,15 @@ void drawSparkline(LGFX_Sprite& spr, int x, int y, int w, int h,
             int lineY = y0 + (int)(t * (y1 - y0));
             if (lineY < bottom) {
                 int fillH = bottom - lineY;
-                for (int fy = lineY + 1; fy <= bottom; fy++) {
-                    float grad = (float)(fy - lineY) / fillH;
-                    uint16_t c = lerpColor565(fillColor, Colors::BG_CARD, grad);
-                    spr.drawPixel(px, fy, c);
+                for (int b = 0; b < GRAD_BANDS; b++) {
+                    int bandTop = lineY + 1 + (fillH * b) / GRAD_BANDS;
+                    int bandBot = lineY + 1 + (fillH * (b + 1)) / GRAD_BANDS;
+                    int bandH = bandBot - bandTop;
+                    if (bandH > 0) {
+                        float grad = ((float)b + 0.5f) / GRAD_BANDS;
+                        uint16_t c = lerpColor565(fillColor, Colors::BG_CARD, grad);
+                        spr.drawFastVLine(px, bandTop, bandH, c);
+                    }
                 }
             }
         }
@@ -374,7 +380,8 @@ void drawSparklineZoomed(LGFX_Sprite& spr, int x, int y, int w, int h,
 
     int bottom = y + h - 1;
 
-    // Gradient fill
+    // Gradient fill (banded drawFastVLine, ~8x faster than per-pixel)
+    static const int GRAD_BANDS = 8;
     for (int i = startIdx; i < endIdx; i++) {
         int x0 = mapX(i);
         int x1 = mapX(i + 1);
@@ -386,10 +393,15 @@ void drawSparklineZoomed(LGFX_Sprite& spr, int x, int y, int w, int h,
             int lineY = y0 + (int)(t * (y1 - y0));
             if (lineY < bottom) {
                 int fillH = bottom - lineY;
-                for (int fy = lineY + 1; fy <= bottom; fy++) {
-                    float grad = (float)(fy - lineY) / fillH;
-                    uint16_t c = lerpColor565(fillColor, Colors::BG_CARD, grad);
-                    spr.drawPixel(px, fy, c);
+                for (int b = 0; b < GRAD_BANDS; b++) {
+                    int bandTop = lineY + 1 + (fillH * b) / GRAD_BANDS;
+                    int bandBot = lineY + 1 + (fillH * (b + 1)) / GRAD_BANDS;
+                    int bandH = bandBot - bandTop;
+                    if (bandH > 0) {
+                        float grad = ((float)b + 0.5f) / GRAD_BANDS;
+                        uint16_t c = lerpColor565(fillColor, Colors::BG_CARD, grad);
+                        spr.drawFastVLine(px, bandTop, bandH, c);
+                    }
                 }
             }
         }
@@ -575,18 +587,31 @@ void drawCentered(LGFX_Sprite& spr, const char* text, int y, const lgfx::IFont* 
 //  FIXED-WIDTH PRICE RENDERING
 // ══════════════════════════════════════════
 
+// Per-font max digit width cache (supports up to 4 price fonts)
+struct FontDigitCache { const lgfx::IFont* font; int maxW; };
+static FontDigitCache _fdCache[4] = {};
+static int _fdCacheN = 0;
+
+static int getMaxDigitW(LovyanGFX& gfx, const lgfx::IFont* font) {
+    for (int i = 0; i < _fdCacheN; i++) {
+        if (_fdCache[i].font == font) return _fdCache[i].maxW;
+    }
+    int maxW = 0;
+    char d[2] = {0, 0};
+    for (int i = 0; i <= 9; i++) {
+        d[0] = '0' + i;
+        int w = gfx.textWidth(d, font);
+        if (w > maxW) maxW = w;
+    }
+    if (_fdCacheN < 4) {
+        _fdCache[_fdCacheN++] = { font, maxW };
+    }
+    return maxW;
+}
+
 void drawFixedWidthPrice(LovyanGFX& gfx, const char* text, int cx, int cy,
                          const lgfx::IFont* font, uint16_t color) {
-    // Measure max digit width once (cached across calls for same font)
-    static int maxDigitW = 0;
-    if (maxDigitW == 0) {
-        char d[2] = {0, 0};
-        for (int i = 0; i <= 9; i++) {
-            d[0] = '0' + i;
-            int w = gfx.textWidth(d, font);
-            if (w > maxDigitW) maxDigitW = w;
-        }
-    }
+    int maxDigitW = getMaxDigitW(gfx, font);
 
     // Calculate total width: digits use fixed maxDigitW, others use natural width
     int len = strlen(text);
@@ -608,12 +633,47 @@ void drawFixedWidthPrice(LovyanGFX& gfx, const char* text, int cx, int cy,
     for (int i = 0; i < len; i++) {
         char c[2] = { text[i], 0 };
         if (text[i] >= '0' && text[i] <= '9') {
-            // Digit: draw centered in fixed-width cell
             gfx.drawString(c, x + maxDigitW / 2, cy, font);
             x += maxDigitW;
         } else {
-            // Non-digit ($, comma): use natural width
             int cw = gfx.textWidth(c, font);
+            gfx.drawString(c, x + cw / 2, cy, font);
+            x += cw;
+        }
+    }
+}
+
+void drawFixedWidthPriceDirect(LovyanGFX& gfx, const char* text, int cx, int cy,
+                               const lgfx::IFont* font, uint16_t color,
+                               uint16_t bgColor, int cellH) {
+    int maxDigitW = getMaxDigitW(gfx, font);
+
+    int len = strlen(text);
+    int totalW = 0;
+    for (int i = 0; i < len; i++) {
+        if (text[i] >= '0' && text[i] <= '9') {
+            totalW += maxDigitW;
+        } else {
+            char c[2] = { text[i], 0 };
+            totalW += gfx.textWidth(c, font);
+        }
+    }
+
+    int x = cx - totalW / 2;
+    int cellY = cy - cellH / 2;
+    gfx.setTextColor(color);
+    gfx.setTextDatum(lgfx::middle_center);
+
+    // Per-cell fill+draw: eliminates blank flash on direct framebuffer writes
+    for (int i = 0; i < len; i++) {
+        char c[2] = { text[i], 0 };
+        if (text[i] >= '0' && text[i] <= '9') {
+            gfx.fillRect(x, cellY, maxDigitW, cellH, bgColor);
+            gfx.drawString(c, x + maxDigitW / 2, cy, font);
+            x += maxDigitW;
+        } else {
+            int cw = gfx.textWidth(c, font);
+            gfx.fillRect(x, cellY, cw, cellH, bgColor);
             gfx.drawString(c, x + cw / 2, cy, font);
             x += cw;
         }
@@ -783,4 +843,132 @@ bool isToastActive() {
 
 const char* getToastMessage() {
     return toastMsg;
+}
+
+// ══════════════════════════════════════════
+//  POLYMARKET PREDICTION COMPONENTS
+// ══════════════════════════════════════════
+
+void drawProbabilityBar(LGFX_Sprite& spr, int x, int y, int w, int h, float yesProb) {
+    if (yesProb < 0) yesProb = 0;
+    if (yesProb > 1) yesProb = 1;
+    float noProb = 1.0f - yesProb;
+
+    int r = h / 2;
+    int yesW = (int)(yesProb * w);
+    if (yesW < r * 2 && yesW > 0) yesW = r * 2;
+    int noW = w - yesW;
+
+    // Full background (NO side tint)
+    spr.fillSmoothRoundRect(x, y, w, h, r, Colors::POLY_NO_BG);
+
+    // YES side (green tint, left)
+    if (yesW > r * 2) {
+        spr.fillSmoothRoundRect(x, y, yesW, h, r, Colors::POLY_YES_BG);
+    } else if (yesW > 0) {
+        spr.fillSmoothRoundRect(x, y, r * 2, h, r, Colors::POLY_YES_BG);
+    }
+    spr.drawRoundRect(x, y, w, h, r, Colors::CARD_BORDER);
+
+    // Labels
+    char yesBuf[12], noBuf[12];
+    snprintf(yesBuf, sizeof(yesBuf), "SUBE %.0f%%", yesProb * 100);
+    snprintf(noBuf, sizeof(noBuf), "BAJA %.0f%%", noProb * 100);
+
+    int cy = y + h / 2;
+
+    if (yesW > 58) {
+        spr.setTextColor(Colors::POSITIVE, Colors::POLY_YES_BG);
+        spr.setTextDatum(lgfx::middle_center);
+        spr.drawString(yesBuf, x + yesW / 2, cy, &Satoshi12);
+    }
+
+    if (noW > 58) {
+        spr.setTextColor(Colors::NEGATIVE, Colors::POLY_NO_BG);
+        spr.setTextDatum(lgfx::middle_center);
+        spr.drawString(noBuf, x + yesW + noW / 2, cy, &Satoshi12);
+    }
+}
+
+int drawWrappedText(LGFX_Sprite& spr, const char* text, int x, int y, int maxW,
+                    int lineH, const lgfx::IFont* font, uint16_t color, int maxLines,
+                    bool centered) {
+    spr.setTextColor(color);
+    spr.setTextDatum(lgfx::top_left);
+
+    int line = 0;
+    int len = strlen(text);
+    int pos = 0;
+
+    while (pos < len && line < maxLines) {
+        int bestBreak = pos;
+        for (int i = pos; i <= len; i++) {
+            char tmp[PM_QUESTION_LEN];
+            int segLen = i - pos;
+            if (segLen >= (int)sizeof(tmp)) segLen = sizeof(tmp) - 1;
+            memcpy(tmp, text + pos, segLen);
+            tmp[segLen] = '\0';
+
+            int tw = spr.textWidth(tmp, font);
+            if (tw > maxW && bestBreak > pos) break;
+
+            if (i == len || text[i] == ' ') {
+                bestBreak = i;
+            }
+            if (tw > maxW) break;
+        }
+
+        if (bestBreak <= pos) bestBreak = pos + 1;
+
+        char lineBuf[PM_QUESTION_LEN];
+        int segLen = bestBreak - pos;
+        if (segLen >= (int)sizeof(lineBuf)) segLen = sizeof(lineBuf) - 1;
+        memcpy(lineBuf, text + pos, segLen);
+        lineBuf[segLen] = '\0';
+
+        // Add "..." if this is the last allowed line and there's more text
+        if (line == maxLines - 1 && bestBreak < len) {
+            int ll = strlen(lineBuf);
+            if (ll > 3) {
+                lineBuf[ll - 3] = '.';
+                lineBuf[ll - 2] = '.';
+                lineBuf[ll - 1] = '.';
+            }
+        }
+
+        if (centered) {
+            int tw = spr.textWidth(lineBuf, font);
+            int tx = x + (maxW - tw) / 2;
+            spr.drawString(lineBuf, tx, y + line * lineH, font);
+        } else {
+            spr.drawString(lineBuf, x, y + line * lineH, font);
+        }
+        line++;
+
+        pos = bestBreak;
+        while (pos < len && text[pos] == ' ') pos++;
+    }
+
+    return line;
+}
+
+void drawPredictionButton(LGFX_Sprite& spr, int x, int y, int w, int h,
+                          const char* label, float probability, bool isYes, bool disabled) {
+    (void)probability;
+
+    uint16_t bgColor = isYes ? Colors::POLY_YES_BG : Colors::POLY_NO_BG;
+    uint16_t borderColor = isYes ? Colors::POSITIVE : Colors::NEGATIVE;
+    uint16_t textColor = disabled ? Colors::TEXT_TERTIARY : Colors::TEXT_PRIMARY;
+
+    if (disabled) {
+        bgColor = Colors::BG_ELEVATED;
+        borderColor = Colors::CARD_BORDER;
+    }
+
+    spr.fillSmoothRoundRect(x, y, w, h, 14, borderColor);
+    spr.fillSmoothRoundRect(x + 1, y + 1, w - 2, h - 2, 13, bgColor);
+
+    spr.setTextColor(textColor, bgColor);
+    spr.setTextDatum(lgfx::middle_center);
+    spr.drawString(label, x + w / 2, y + h / 2, &SatoshiBold24);
 }

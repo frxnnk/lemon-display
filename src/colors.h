@@ -78,6 +78,10 @@ namespace Colors {
     constexpr uint16_t CARD_HIGHLIGHT    = 0x2965;  // Top highlight line (subtle)
     constexpr uint16_t DIVIDER           = 0x2104;  // #222222 Horizontal dividers
 
+    // ── Polymarket prediction mode ──
+    constexpr uint16_t POLY_YES_BG = BADGE_BG_POS;   // Dark green tint
+    constexpr uint16_t POLY_NO_BG  = BADGE_BG_NEG;   // Dark red tint
+
     // ── Price glow (concentric circles behind main price) ──
     constexpr uint16_t GLOW_1 = 0x0120;  // Darkest green ring
     constexpr uint16_t GLOW_2 = 0x01A0;  // Mid-dark

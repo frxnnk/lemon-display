@@ -13,7 +13,7 @@ class LGFX : public lgfx::LGFX_Device {
     lgfx::Bus_RGB      _bus_instance;
     lgfx::Panel_ST7701 _panel_instance;
     lgfx::Touch_GT911  _touch_instance;
-    // lgfx::Light_PWM   _light_instance;
+    lgfx::Light_PWM    _light_instance;
 
 public:
     LGFX(void) {
@@ -83,12 +83,13 @@ public:
         }
         _panel_instance.setBus(&_bus_instance);
 
-        // {
-        //     auto cfg = _light_instance.config();
-        //     cfg.pin_bl = GPIO_NUM_44;
-        //     _light_instance.config(cfg);
-        // }
-        // _panel_instance.light(&_light_instance);
+        // Backlight PWM (MaTouch 4.0" BL pin)
+        {
+            auto cfg = _light_instance.config();
+            cfg.pin_bl = GPIO_NUM_44;
+            _light_instance.config(cfg);
+        }
+        _panel_instance.light(&_light_instance);
 
         // ── Touch (GT911) ──
         {

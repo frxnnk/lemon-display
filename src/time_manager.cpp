@@ -29,7 +29,7 @@ String getTimeStr(bool use24h) {
         int h = t.tm_hour % 12;
         if (h == 0) h = 12;
         const char* ampm = (t.tm_hour >= 12) ? "PM" : "AM";
-        snprintf(buf, sizeof(buf), "%d:%02d %s", h, t.tm_min, ampm);
+        snprintf(buf, sizeof(buf), "%02d:%02d %s", h, t.tm_min, ampm);
     }
     return String(buf);
 }

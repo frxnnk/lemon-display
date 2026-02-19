@@ -58,6 +58,11 @@ void drawCentered(LGFX_Sprite& spr, const char* text, int y, const lgfx::IFont* 
 void drawFixedWidthPrice(LovyanGFX& gfx, const char* text, int cx, int cy,
                          const lgfx::IFont* font, uint16_t color);
 
+// Direct version: per-cell fill+draw for flicker-free framebuffer writes
+void drawFixedWidthPriceDirect(LovyanGFX& gfx, const char* text, int cx, int cy,
+                               const lgfx::IFont* font, uint16_t color,
+                               uint16_t bgColor, int cellH);
+
 // ── Formatters ──
 void formatBtcPrice(char* buf, size_t bufSize, float price);
 void formatCoinPrice(char* buf, size_t bufSize, float price, CoinId coin);
@@ -73,6 +78,14 @@ void drawToggle(LGFX_Sprite& spr, int x, int y, bool on); // 44x24 toggle switch
 void drawSparklineZoomed(LGFX_Sprite& spr, int x, int y, int w, int h,
                          const SparklineData& data, uint16_t lineColor, uint16_t fillColor,
                          float zoomLevel, float panOffset);
+
+// ── Polymarket prediction components ──
+void drawProbabilityBar(LGFX_Sprite& spr, int x, int y, int w, int h, float yesProb);
+int  drawWrappedText(LGFX_Sprite& spr, const char* text, int x, int y, int maxW,
+                     int lineH, const lgfx::IFont* font, uint16_t color, int maxLines = 3,
+                     bool centered = false);
+void drawPredictionButton(LGFX_Sprite& spr, int x, int y, int w, int h,
+                          const char* label, float probability, bool isYes, bool disabled);
 
 // ── Toast ──
 void showToast(const char* msg);

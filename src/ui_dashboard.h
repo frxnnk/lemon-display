@@ -34,6 +34,7 @@ void dashboardDrawLemonDollar(const LemonPrice& lemon, const SparklineData* lemo
                               uint8_t dollarPeriod = 1, ChartStyle dollarChartStyle = CHART_LINE,
                               float dollarChange = NAN);
 void dashboardDrawPriceOnly(const BtcPrice& btc, uint8_t selectedPair = 0);  // Partial update — price strip only
+void dashboardRedrawChartOnly(const SparklineData& spark, ChartStyle chartStyle, const OhlcData* ohlc = nullptr, float ath = NAN);  // Partial update — chart area only
 
 // Direct-to-framebuffer updates (no pushSprite, no PSRAM bus contention)
 void dashboardUpdateTimeDirect(const char* timeStr);
@@ -43,6 +44,7 @@ void dashboardUpdatePriceDirect(const BtcPrice& btc, uint8_t selectedPair = 0);
 void dashboardDrawAll(const char* timeStr,
                       const BtcPrice& btc, const SparklineData& spark,
                       uint8_t selectedPeriod,
+                      uint8_t selectedPair,
                       const LemonPrice& lemon,
                       bool offline = false, bool wsConnected = false,
                       const float* periodChanges = nullptr,
@@ -92,6 +94,9 @@ void dashboardOpenPairDropdown(uint8_t currentPair);
 void dashboardClosePairDropdown();
 int8_t dashboardHitTestPairDropdown(int16_t x, int16_t y);  // returns pair idx 0-4 or -1
 bool dashboardHitTestPairLabel(int16_t x, int16_t y);
+void dashboardSetPairSelectorEnabled(bool enabled);
+void dashboardSetBtcCarouselFilter(const uint8_t* idxList, uint8_t count, uint8_t selectedRealIdx);
+void dashboardSetDollarCarouselFilter(const uint8_t* idxList, uint8_t count, uint8_t selectedRealIdx);
 
 // ── Carousel momentum ──
 extern CarouselState btcCarousel;
@@ -105,3 +110,17 @@ struct ChartZoomState {
     bool  active;      // true when zoom > 1.0
 };
 extern ChartZoomState chartZoom;
+
+// ── Prediction mode (Polymarket) — renders in Z2 ──
+struct PolyMarket;
+struct PolyPrediction;
+struct PolyStats;
+void dashboardSetPredictionLayout(bool active);
+void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t selected,
+                             const PolyPrediction* activePred, const PolyStats& stats,
+                             bool loading, const char* statusMsg = nullptr,
+                             float refPriceUsd = NAN);
+bool dashboardIsPredictionMode();
+void dashboardSetPredictionMode(bool active);
+bool dashboardHitTestPredYes(int16_t x, int16_t y);
+bool dashboardHitTestPredNo(int16_t x, int16_t y);
