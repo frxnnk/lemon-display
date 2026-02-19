@@ -88,6 +88,90 @@ void nvsSetLayout(uint8_t idx) {
     prefs.putUChar("layout", idx);
 }
 
+bool nvsGetProMode() {
+    return prefs.getUChar("pro_mode", 0) != 0;
+}
+
+void nvsSetProMode(bool on) {
+    prefs.putUChar("pro_mode", on ? 1 : 0);
+}
+
+// ── Polymarket Predictions ──
+
+#include "data_models.h"
+
+static void polyStatsKeys(uint8_t periodIdx, char* kWins, size_t kWinsLen,
+                          char* kLosses, size_t kLossesLen,
+                          char* kStreak, size_t kStreakLen,
+                          char* kBest, size_t kBestLen) {
+    snprintf(kWins,   kWinsLen,   "pw%u", (unsigned)periodIdx);
+    snprintf(kLosses, kLossesLen, "pl%u", (unsigned)periodIdx);
+    snprintf(kStreak, kStreakLen, "ps%u", (unsigned)periodIdx);
+    snprintf(kBest,   kBestLen,   "pb%u", (unsigned)periodIdx);
+}
+
+void nvsLoadPolyStats(uint8_t periodIdx, PolyStats& stats) {
+    char kWins[8], kLosses[8], kStreak[8], kBest[8];
+    polyStatsKeys(periodIdx, kWins, sizeof(kWins), kLosses, sizeof(kLosses),
+                  kStreak, sizeof(kStreak), kBest, sizeof(kBest));
+
+    stats.wins      = prefs.getUShort(kWins, 0);
+    stats.losses    = prefs.getUShort(kLosses, 0);
+    stats.pending   = 0;
+    stats.streak    = prefs.getUShort(kStreak, 0);
+    stats.bestStreak = prefs.getUShort(kBest, 0);
+}
+
+void nvsSavePolyStats(uint8_t periodIdx, const PolyStats& stats) {
+    char kWins[8], kLosses[8], kStreak[8], kBest[8];
+    polyStatsKeys(periodIdx, kWins, sizeof(kWins), kLosses, sizeof(kLosses),
+                  kStreak, sizeof(kStreak), kBest, sizeof(kBest));
+
+    prefs.putUShort(kWins, stats.wins);
+    prefs.putUShort(kLosses, stats.losses);
+    prefs.putUShort(kStreak, stats.streak);
+    prefs.putUShort(kBest, stats.bestStreak);
+}
+
+bool nvsHasPolyPrediction() {
+    return prefs.getUChar("pm_active", 0) != 0;
+}
+
+void nvsLoadPolyPrediction(PolyPrediction& pred) {
+    memset(&pred, 0, sizeof(pred));
+    if (!nvsHasPolyPrediction()) return;
+
+    String condId = prefs.getString("pm_cond", "");
+    strncpy(pred.conditionId, condId.c_str(), PM_COND_ID_LEN - 1);
+    pred.conditionId[PM_COND_ID_LEN - 1] = '\0';
+    pred.chosenYes = prefs.getUChar("pm_yes", 1) != 0;
+    pred.probAtBet = prefs.getFloat("pm_prob", 0.5f);
+    pred.timestamp = prefs.getULong("pm_ts", 0);
+    pred.periodIdx = prefs.getUChar("pm_pidx", 255);
+    pred.resolved  = 0;  // Active = pending
+}
+
+void nvsSavePolyPrediction(const PolyPrediction& pred) {
+    prefs.putUChar("pm_active", 1);
+    prefs.putString("pm_cond", pred.conditionId);
+    prefs.putUChar("pm_yes", pred.chosenYes ? 1 : 0);
+    prefs.putFloat("pm_prob", pred.probAtBet);
+    prefs.putULong("pm_ts", pred.timestamp);
+    prefs.putUChar("pm_pidx", pred.periodIdx);
+    Serial.printf("[NVS] Poly prediction saved: %s @ %.0f%%\n",
+                  pred.chosenYes ? "YES" : "NO", pred.probAtBet * 100);
+}
+
+void nvsClearPolyPrediction() {
+    prefs.putUChar("pm_active", 0);
+    prefs.remove("pm_cond");
+    prefs.remove("pm_yes");
+    prefs.remove("pm_prob");
+    prefs.remove("pm_ts");
+    prefs.remove("pm_pidx");
+    Serial.println("[NVS] Poly prediction cleared");
+}
+
 // ── Factory Reset ──
 
 void nvsFactoryReset() {

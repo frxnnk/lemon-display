@@ -26,6 +26,10 @@
 // ── CoinGecko tether/ARS chart (for dollar sparkline) ──
 #define COINGECKO_TETHER_CHART_EP "https://api.coingecko.com/api/v3/coins/tether/market_chart?vs_currency=ars&days="
 
+// ── Polymarket endpoints ──
+#define POLYMARKET_GAMMA_URL "https://gamma-api.polymarket.com/markets"
+#define POLYMARKET_REFRESH_MS 15000
+
 // ── Binance endpoints ──
 #define BINANCE_WS_HOST   "stream.binance.com"
 #define BINANCE_WS_PORT   9443
