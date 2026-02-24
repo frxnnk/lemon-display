@@ -783,188 +783,127 @@ static bool parsePolyMarket(JsonObjectConst m, PolyMarket& pm) {
     return pm.valid;
 }
 
-static const char* CHAINLINK_BTC_FEED_ID =
-    "0x00039d9e45394f473ab1f050a1b963e6b05351e52d71e507509ada0c95ed75b8";
-static const uint8_t CHAINLINK_BTC_ABI_INDEX = 0;
-static const uint8_t CHAINLINK_REF_CACHE_SIZE = 8;
+// ── Reference price via Binance kline (1m candle open at interval start) ──
+// Much more reliable than Chainlink scraping — 1-minute resolution for all timeframes.
 
-struct ChainlinkRefCacheEntry {
+// Simple cache: avoid re-fetching the same startTime
+static const uint8_t REF_CACHE_SIZE = 8;
+struct RefCacheEntry {
     char startTime[32];
-    float refPrice;
+    float price;
     bool valid;
 };
+static RefCacheEntry refCache[REF_CACHE_SIZE] = {};
+static uint8_t refCacheCount = 0;
+static uint8_t refCacheHead = 0;
 
-static ChainlinkRefCacheEntry chainlinkRefCache[CHAINLINK_REF_CACHE_SIZE] = {};
-static uint8_t chainlinkRefCacheCount = 0;
-static uint8_t chainlinkRefCacheHead = 0;
-
-static bool extractMinuteKey(const char* iso, char* out, size_t outSize) {
-    if (!iso || !out || outSize < 17) return false;
-    size_t len = strlen(iso);
-    if (len < 16) return false;
-    memcpy(out, iso, 16);
-    out[16] = '\0';
-    return true;
-}
-
-static bool parseCandlestickOpen(const char* candlestick, float& outOpen) {
-    if (!candlestick || !candlestick[0]) return false;
-    const char* open = strstr(candlestick, "open:(");
-    if (!open) return false;
-    const char* val = strstr(open, "val:");
-    if (!val) return false;
-    val += 4;
-    outOpen = atof(val);
-    return outOpen > 0.0f;
-}
-
-static bool findOpenForMinute(JsonArrayConst nodes, const char* targetMinute, float& outPrice) {
-    if (nodes.isNull() || !targetMinute || !targetMinute[0]) return false;
-
-    bool foundPrevious = false;
-    float previousOpen = 0.0f;
-    char previousMinute[17] = "";
-
-    for (JsonObjectConst node : nodes) {
-        const char* bucket = node["bucket"] | "";
-        const char* candlestick = node["candlestick"] | "";
-        char bucketMinute[17];
-        if (!extractMinuteKey(bucket, bucketMinute, sizeof(bucketMinute))) continue;
-
-        float openVal = 0.0f;
-        if (!parseCandlestickOpen(candlestick, openVal)) continue;
-
-        int cmp = strcmp(bucketMinute, targetMinute);
-        if (cmp == 0) {
-            outPrice = openVal;
-            return true;
-        }
-
-        if (cmp < 0) {
-            if (!foundPrevious || strcmp(bucketMinute, previousMinute) > 0) {
-                strncpy(previousMinute, bucketMinute, sizeof(previousMinute) - 1);
-                previousMinute[sizeof(previousMinute) - 1] = '\0';
-                previousOpen = openVal;
-                foundPrevious = true;
-            }
-        }
-    }
-
-    if (foundPrevious) {
-        outPrice = previousOpen;
-        return true;
-    }
-
-    return false;
-}
-
-static bool chainlinkRefCacheLookup(const char* startTime, float& outPrice) {
-    if (!startTime || !startTime[0]) return false;
-    for (uint8_t i = 0; i < chainlinkRefCacheCount; i++) {
-        if (strcmp(chainlinkRefCache[i].startTime, startTime) == 0) {
-            if (chainlinkRefCache[i].valid) {
-                outPrice = chainlinkRefCache[i].refPrice;
-                return true;
-            }
+static bool refCacheLookup(const char* startTime, float& outPrice) {
+    for (uint8_t i = 0; i < refCacheCount; i++) {
+        if (strcmp(refCache[i].startTime, startTime) == 0) {
+            if (refCache[i].valid) { outPrice = refCache[i].price; return true; }
             return false;
         }
     }
     return false;
 }
 
-static bool chainlinkRefCacheHasInvalid(const char* startTime) {
-    if (!startTime || !startTime[0]) return false;
-    for (uint8_t i = 0; i < chainlinkRefCacheCount; i++) {
-        if (strcmp(chainlinkRefCache[i].startTime, startTime) == 0 && !chainlinkRefCache[i].valid) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static void chainlinkRefCacheStore(const char* startTime, float refPrice, bool valid) {
+static void refCacheStore(const char* startTime, float price, bool valid) {
     if (!startTime || !startTime[0]) return;
-
-    for (uint8_t i = 0; i < chainlinkRefCacheCount; i++) {
-        if (strcmp(chainlinkRefCache[i].startTime, startTime) == 0) {
-            chainlinkRefCache[i].refPrice = refPrice;
-            chainlinkRefCache[i].valid = valid;
+    for (uint8_t i = 0; i < refCacheCount; i++) {
+        if (strcmp(refCache[i].startTime, startTime) == 0) {
+            refCache[i].price = price;
+            refCache[i].valid = valid;
             return;
         }
     }
-
-    uint8_t idx;
-    if (chainlinkRefCacheCount < CHAINLINK_REF_CACHE_SIZE) {
-        idx = chainlinkRefCacheCount++;
-    } else {
-        idx = chainlinkRefCacheHead;
-        chainlinkRefCacheHead = (uint8_t)((chainlinkRefCacheHead + 1) % CHAINLINK_REF_CACHE_SIZE);
+    uint8_t idx = (refCacheCount < REF_CACHE_SIZE) ? refCacheCount++ : refCacheHead;
+    if (refCacheCount > REF_CACHE_SIZE) {
+        refCacheHead = (uint8_t)((refCacheHead + 1) % REF_CACHE_SIZE);
     }
-
-    strncpy(chainlinkRefCache[idx].startTime, startTime, sizeof(chainlinkRefCache[idx].startTime) - 1);
-    chainlinkRefCache[idx].startTime[sizeof(chainlinkRefCache[idx].startTime) - 1] = '\0';
-    chainlinkRefCache[idx].refPrice = refPrice;
-    chainlinkRefCache[idx].valid = valid;
+    strncpy(refCache[idx].startTime, startTime, sizeof(refCache[idx].startTime) - 1);
+    refCache[idx].startTime[sizeof(refCache[idx].startTime) - 1] = '\0';
+    refCache[idx].price = price;
+    refCache[idx].valid = valid;
 }
 
-static bool fetchChainlinkReferencePrice(const char* startTime, float& outPrice) {
-    if (!startTime || !startTime[0]) return false;
-    if (chainlinkRefCacheLookup(startTime, outPrice)) return true;
-    if (chainlinkRefCacheHasInvalid(startTime)) return false;
+// Parse ISO 8601 "YYYY-MM-DDTHH:MM:SSZ" → epoch seconds
+static uint32_t isoToEpoch(const char* iso) {
+    if (!iso || strlen(iso) < 19) return 0;
+    struct tm t = {};
+    // "2026-02-24T08:30:00Z"
+    sscanf(iso, "%d-%d-%dT%d:%d:%d",
+           &t.tm_year, &t.tm_mon, &t.tm_mday, &t.tm_hour, &t.tm_min, &t.tm_sec);
+    t.tm_year -= 1900;
+    t.tm_mon -= 1;
+    // mktime uses local time; we need UTC. Use timegm-equivalent.
+    // ESP32 Arduino: set TZ=UTC temporarily or compute manually.
+    // Simple approach: use mktime and adjust for known GMT offset.
+    time_t epoch = mktime(&t);
+    // mktime interprets as local time (GMT_OFFSET_SEC applied by NTP config).
+    // Undo the offset to get true UTC epoch.
+    epoch -= GMT_OFFSET_SEC;
+    return (epoch > 0) ? (uint32_t)epoch : 0;
+}
 
-    char targetMinute[17];
-    if (!extractMinuteKey(startTime, targetMinute, sizeof(targetMinute))) {
-        chainlinkRefCacheStore(startTime, 0.0f, false);
+static bool fetchBinanceRefPrice(const char* startTime, float& outPrice) {
+    if (!startTime || !startTime[0]) return false;
+
+    // Check cache first
+    if (refCacheLookup(startTime, outPrice)) return true;
+
+    uint32_t epochSec = isoToEpoch(startTime);
+    if (epochSec == 0) {
+        refCacheStore(startTime, 0.0f, false);
         return false;
     }
 
-    char urlBuf[320];
+    // Binance kline API: get 1-minute candle at the exact interval start
+    uint64_t epochMs = (uint64_t)epochSec * 1000ULL;
+    char urlBuf[160];
     snprintf(urlBuf, sizeof(urlBuf),
-             "https://data.chain.link/api/historical-data-engine-stream-data?feedId=%s&abiIndex=%u&timeRange=1D",
-             CHAINLINK_BTC_FEED_ID, (unsigned)CHAINLINK_BTC_ABI_INDEX);
+             "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&startTime=%llu&limit=1",
+             (unsigned long long)epochMs);
 
     ApiResult result;
     String json = httpGet(urlBuf, false, result);
     if (result != API_OK || json.isEmpty()) {
-        chainlinkRefCacheStore(startTime, 0.0f, false);
+        refCacheStore(startTime, 0.0f, false);
         return false;
     }
 
-    JsonDocument filter;
-    filter["data"]["allStreamValuesGeneric1Minutes"]["nodes"][0]["bucket"] = true;
-    filter["data"]["allStreamValuesGeneric1Minutes"]["nodes"][0]["candlestick"] = true;
-    filter["data"]["allStreamValuesGeneric1Hours"]["nodes"][0]["bucket"] = true;
-    filter["data"]["allStreamValuesGeneric1Hours"]["nodes"][0]["candlestick"] = true;
-    filter["data"]["allStreamValuesGeneric1Days"]["nodes"][0]["bucket"] = true;
-    filter["data"]["allStreamValuesGeneric1Days"]["nodes"][0]["candlestick"] = true;
-
+    // Response: [[openTime,"open","high","low","close",...]]
     JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, json,
-        DeserializationOption::Filter(filter),
-        DeserializationOption::NestingLimit(12));
+    DeserializationError err = deserializeJson(doc, json);
     json = String();
     if (err) {
-        chainlinkRefCacheStore(startTime, 0.0f, false);
+        refCacheStore(startTime, 0.0f, false);
         return false;
     }
 
-    float ref = 0.0f;
-    JsonArrayConst minuteNodes = doc["data"]["allStreamValuesGeneric1Minutes"]["nodes"].as<JsonArrayConst>();
-    if (!findOpenForMinute(minuteNodes, targetMinute, ref)) {
-        JsonArrayConst hourNodes = doc["data"]["allStreamValuesGeneric1Hours"]["nodes"].as<JsonArrayConst>();
-        if (!findOpenForMinute(hourNodes, targetMinute, ref)) {
-            JsonArrayConst dayNodes = doc["data"]["allStreamValuesGeneric1Days"]["nodes"].as<JsonArrayConst>();
-            if (!findOpenForMinute(dayNodes, targetMinute, ref)) {
-                chainlinkRefCacheStore(startTime, 0.0f, false);
-                return false;
-            }
-        }
+    JsonArrayConst arr = doc.as<JsonArrayConst>();
+    if (arr.isNull() || arr.size() == 0) {
+        refCacheStore(startTime, 0.0f, false);
+        return false;
     }
 
-    outPrice = ref;
-    chainlinkRefCacheStore(startTime, ref, true);
-    Serial.printf("[API] Chainlink ref: start=%s target=%s price=%.2f\n",
-                  startTime, targetMinute, ref);
+    JsonArrayConst candle = arr[0].as<JsonArrayConst>();
+    if (candle.isNull() || candle.size() < 5) {
+        refCacheStore(startTime, 0.0f, false);
+        return false;
+    }
+
+    // Index 1 = open price (string)
+    const char* openStr = candle[1] | "";
+    float openPrice = atof(openStr);
+    if (openPrice <= 0.0f) {
+        refCacheStore(startTime, 0.0f, false);
+        return false;
+    }
+
+    outPrice = openPrice;
+    refCacheStore(startTime, openPrice, true);
+    Serial.printf("[API] Binance ref: start=%s epoch=%lu open=%.2f\n",
+                  startTime, (unsigned long)epochSec, openPrice);
     return true;
 }
 
@@ -974,7 +913,7 @@ void enrichPolyReference(PolyMarket& pm) {
     if (pm.startTime[0] == '\0') return;
 
     float ref = 0.0f;
-    if (fetchChainlinkReferencePrice(pm.startTime, ref) && ref > 0.0f) {
+    if (fetchBinanceRefPrice(pm.startTime, ref) && ref > 0.0f) {
         pm.refPrice = ref;
         pm.refPriceValid = true;
     }
