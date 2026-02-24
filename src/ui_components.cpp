@@ -84,6 +84,11 @@ void drawSparkline(LGFX_Sprite& spr, int x, int y, int w, int h,
                    const SparklineData& data, uint16_t lineColor, uint16_t fillColor) {
     if (!data.valid || data.count < 2) return;
 
+    // Reject sparkline if any point is NaN/Inf (prevents runaway Y mapping)
+    for (int i = 0; i < data.count; i++) {
+        if (!isfinite(data.points[i])) return;
+    }
+
     float range = data.maxVal - data.minVal;
     if (range < 0.01f) range = 1.0f;
 
@@ -376,6 +381,11 @@ void drawSparklineZoomed(LGFX_Sprite& spr, int x, int y, int w, int h,
         // No zoom — fallback to normal sparkline
         drawSparkline(spr, x, y, w, h, data, lineColor, fillColor);
         return;
+    }
+
+    // Reject if any point is NaN/Inf
+    for (int i = 0; i < data.count; i++) {
+        if (!isfinite(data.points[i])) return;
     }
 
     // Calculate visible window based on zoom and pan
