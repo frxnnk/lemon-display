@@ -8,7 +8,7 @@
 #endif
 
 // ── App version ──
-#define APP_VERSION "4.2.4"
+#define APP_VERSION "4.2.5"
 
 // 0 = normal app
 // 1 = minimal static display diagnostic mode

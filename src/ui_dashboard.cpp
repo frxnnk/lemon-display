@@ -1010,7 +1010,9 @@ void dashboardDrawLemonDollar(const LemonPrice& lemon, const SparklineData* lemo
             // Scale sparkline so last point matches Lemon avg price.
             // CoinGecko USDC/ARS (global rate) differs from Lemon's spread.
             // Without scaling, chart markers show ~$1,370 while hero shows ~$1,420.
-            SparklineData scaled = *lemonSpark;
+            // Static to avoid ~1.5KB stack allocation (365 floats) on every frame.
+            static SparklineData scaled;
+            scaled = *lemonSpark;
             float lastPt = lemonSpark->points[lemonSpark->count - 1];
             if (lastPt > 0 && avg > 0) {
                 float factor = avg / lastPt;
