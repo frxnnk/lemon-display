@@ -110,10 +110,6 @@ void settingsDraw() {
 
         drawGlassCard(settScr, MARGIN, cy, CARD_W, DISPLAY_CARD_H, CARD_R);
 
-        settScr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
-        settScr.setTextDatum(lgfx::top_left);
-        settScr.drawString("Pantalla", MARGIN + 16, cy + 10, &Satoshi12);
-
         // "Formato hora" + toggle
         settScr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
         settScr.setTextDatum(lgfx::middle_left);
