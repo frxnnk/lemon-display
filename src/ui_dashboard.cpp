@@ -1007,12 +1007,28 @@ void dashboardDrawLemonDollar(const LemonPrice& lemon, const SparklineData* lemo
         int chartH = z2H - chartY - CHART_PAD_B;
 
         if (chartH > 10) {
+            // Scale sparkline so last point matches Lemon avg price.
+            // CoinGecko USDC/ARS (global rate) differs from Lemon's spread.
+            // Without scaling, chart markers show ~$1,370 while hero shows ~$1,420.
+            SparklineData scaled = *lemonSpark;
+            float lastPt = lemonSpark->points[lemonSpark->count - 1];
+            if (lastPt > 0 && avg > 0) {
+                float factor = avg / lastPt;
+                scaled.minVal = 1e12f;
+                scaled.maxVal = -1e12f;
+                for (int i = 0; i < scaled.count; i++) {
+                    scaled.points[i] *= factor;
+                    if (scaled.points[i] < scaled.minVal) scaled.minVal = scaled.points[i];
+                    if (scaled.points[i] > scaled.maxVal) scaled.maxVal = scaled.points[i];
+                }
+            }
+
             sprZ2.setClipRect(chartX, chartY, chartW, chartH);
             drawSparkline(sprZ2, chartX, chartY, chartW, chartH,
-                          *lemonSpark, Colors::NEBULA, Colors::NEBULA_FILL);
+                          scaled, Colors::NEBULA, Colors::NEBULA_FILL);
             if (dollarChartStyle == CHART_MARKERS) {
                 drawChartMarkers(sprZ2, chartX, chartY, chartW, chartH,
-                                 *lemonSpark, 0.0f, true);  // ARS format, no ATH
+                                 scaled, 0.0f, true);  // ARS format, no ATH
             }
             sprZ2.clearClipRect();
         }
