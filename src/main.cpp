@@ -476,7 +476,9 @@ static void updateClock() {
     if (timeReady()) {
         // Skip direct framebuffer writes while tutorial overlay or toast is active
         // (toast replaces the entire header — time writes would corrupt it)
-        if (!tutorialIsActive() && !isToastActive()) {
+        // Also skip during BTC morph — morph driver handles Z1 at 30fps,
+        // direct writes would push stale sprite clips between morph frames.
+        if (!tutorialIsActive() && !isToastActive() && !morphActive) {
             dashboardUpdateTimeDirect(getTimeStr(nvsGet24hFormat()).c_str());
             if (priceChangedSinceLastDraw && !z1Dirty) {
                 priceChangedSinceLastDraw = false;
@@ -1729,6 +1731,12 @@ void loop() {
                         dashboardRedrawChartOnly(morphed, chartStyle, &state.ohlc, state.btc.ath);
                     }
                     frameDirty = true;
+                    // Morph just ended — mark Z1 dirty for a clean full redraw
+                    // (last morph frame was chart-only; labels/price need refresh)
+                    if (!morphActive) {
+                        z1Dirty = true;
+                        z1DrawnThisFrame = false;
+                    }
                 }
             }
             wasMorphing = morphActive;

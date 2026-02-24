@@ -165,6 +165,8 @@ static uint16_t blendColor565(uint16_t c1, uint16_t c2, float t) {
 }
 
 void dashboardFlashPrice(bool up) {
+    // Don't restart flash mid-animation (prevents color direction flip on rapid updates)
+    if (priceFlashActive) return;
     priceFlashUp = up;
     priceFlashStartMs = millis();
     priceFlashActive = true;
