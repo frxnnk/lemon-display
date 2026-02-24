@@ -727,7 +727,8 @@ void drawFixedWidthPriceDirect(LovyanGFX& gfx, const char* text, int cx, int cy,
             x += maxDigitW;
         } else {
             int cw = gfx.textWidth(c, font);
-            gfx.fillRect(x, cellY, cw, cellH, bgColor);
+            // Pad 2px per side — $ tip and comma serifs can exceed textWidth
+            gfx.fillRect(x - 2, cellY, cw + 4, cellH, bgColor);
             gfx.drawString(c, x + cw / 2, cy, font);
             x += cw;
         }
