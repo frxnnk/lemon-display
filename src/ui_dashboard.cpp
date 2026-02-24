@@ -1622,16 +1622,6 @@ void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t s
             sprZ2.setTextColor(Colors::SOLAR, Colors::BG_CARD);
             sprZ2.setTextDatum(lgfx::middle_center);
             sprZ2.drawString(priceBuf, SCREEN_W / 2, 18, &SatoshiMedium18);
-        } else if (refPriceUsd > 0.0f) {
-            // Approximate threshold: show current BTC price while Chainlink loads
-            char priceBuf[24];
-            snprintf(priceBuf, sizeof(priceBuf), "~");
-            char numBuf[20];
-            formatBtcPrice(numBuf, sizeof(numBuf), refPriceUsd);
-            strncat(priceBuf, numBuf, sizeof(priceBuf) - 2);
-            sprZ2.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
-            sprZ2.setTextDatum(lgfx::middle_center);
-            sprZ2.drawString(priceBuf, SCREEN_W / 2, 18, &SatoshiMedium18);
         } else {
             sprZ2.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
             sprZ2.setTextDatum(lgfx::middle_center);
