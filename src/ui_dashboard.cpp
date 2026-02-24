@@ -1616,9 +1616,15 @@ void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t s
     // ── Threshold price (prominent, centered) ──
     {
         if (mkt.refPriceValid && mkt.refPrice > 0.0f) {
-            // Exact Chainlink reference price
+            // Exact Binance reference price — show 2 decimals for per-period precision
             char priceBuf[24];
-            formatBtcPrice(priceBuf, sizeof(priceBuf), mkt.refPrice);
+            int intP = (int)mkt.refPrice;
+            int decP = (int)((mkt.refPrice - intP) * 100 + 0.5f);
+            if (decP >= 100) { intP++; decP = 0; }
+            if (intP >= 1000)
+                snprintf(priceBuf, sizeof(priceBuf), "$%d,%03d.%02d", intP / 1000, intP % 1000, decP);
+            else
+                snprintf(priceBuf, sizeof(priceBuf), "$%d.%02d", intP, decP);
             sprZ2.setTextColor(Colors::SOLAR, Colors::BG_CARD);
             sprZ2.setTextDatum(lgfx::middle_center);
             sprZ2.drawString(priceBuf, SCREEN_W / 2, 18, &SatoshiMedium18);

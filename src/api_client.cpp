@@ -912,12 +912,19 @@ static bool fetchBinanceRefPrice(const char* startTime, float& outPrice) {
 void enrichPolyReference(PolyMarket& pm) {
     pm.refPrice = 0.0f;
     pm.refPriceValid = false;
-    if (pm.startTime[0] == '\0') return;
+    if (pm.startTime[0] == '\0') {
+        Serial.println("[API] enrichPoly: startTime is empty, skipping");
+        return;
+    }
 
+    Serial.printf("[API] enrichPoly: startTime=%s\n", pm.startTime);
     float ref = 0.0f;
     if (fetchBinanceRefPrice(pm.startTime, ref) && ref > 0.0f) {
         pm.refPrice = ref;
         pm.refPriceValid = true;
+        Serial.printf("[API] enrichPoly: OK refPrice=%.2f\n", ref);
+    } else {
+        Serial.printf("[API] enrichPoly: FAILED for startTime=%s\n", pm.startTime);
     }
 }
 
