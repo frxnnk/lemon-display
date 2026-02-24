@@ -1694,16 +1694,14 @@ void loop() {
 
         // Stability mode: limit WS-driven chart redraw rate.
         // Use chart-only partial push (~80KB) instead of full Z1 (288KB) to avoid bounce.
-        // Skip when CHART_MARKERS is active — marker overlays (triangles, pills, ATH line)
-        // shift visibly each redraw because min/max change with new WS data points.
-        // In markers mode the chart stays stable from the last full draw; real-time
-        // price still updates via dashboardDrawPriceOnly.
+        // Markers mode: slower rate (10s) because min/max shifts cause pill jitter.
         {
             unsigned long now = millis();
-            if (wsVisualDirty && !tutorialIsActive() && (now - lastWsVisualDrawMs >= 2000)) {
+            unsigned long interval = (chartStyle == CHART_MARKERS) ? 5000 : 2000;
+            if (wsVisualDirty && !tutorialIsActive() && (now - lastWsVisualDrawMs >= interval)) {
                 lastWsVisualDrawMs = now;
                 wsVisualDirty = false;
-                if (!morphActive && chartStyle != CHART_MARKERS) {
+                if (!morphActive) {
                     dashboardRedrawChartOnly(state.spark, chartStyle, &state.ohlc, state.btc.ath);
                 }
                 frameDirty = true;
