@@ -8,7 +8,7 @@
 #endif
 
 // ── App version ──
-#define APP_VERSION "4.0.0"
+#define APP_VERSION "4.1.0"
 
 // 0 = normal app
 // 1 = minimal static display diagnostic mode
@@ -21,10 +21,10 @@
 #define COINGECKO_CHART_EP_FMT "https://api.coingecko.com/api/v3/coins/%s/market_chart?vs_currency=usd&days="
 #define COINGECKO_MARKETS_EP "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum,solana,tether,usd-coin&order=market_cap_desc&per_page=5&page=1&sparkline=false&price_change_percentage=1h,24h,7d"
 #define COINGECKO_SIMPLE_EP  "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true"
-#define CRIPTOYA_LEMON_EP    "https://criptoya.com/api/lemoncash/usdt/ars"
+#define CRIPTOYA_LEMON_EP    "https://criptoya.com/api/lemoncash/usdc/ars"
 
-// ── CoinGecko tether/ARS chart (for dollar sparkline) ──
-#define COINGECKO_TETHER_CHART_EP "https://api.coingecko.com/api/v3/coins/tether/market_chart?vs_currency=ars&days="
+// ── CoinGecko USDC/ARS chart (for dollar sparkline) ──
+#define COINGECKO_TETHER_CHART_EP "https://api.coingecko.com/api/v3/coins/usd-coin/market_chart?vs_currency=ars&days="
 
 // ── Polymarket endpoints ──
 #define POLYMARKET_GAMMA_URL "https://gamma-api.polymarket.com/markets"
@@ -108,7 +108,7 @@ static const int DOLLAR_PERIOD_COUNT = sizeof(DOLLAR_PERIODS) / sizeof(DOLLAR_PE
 #define ALERT_BTC_1H_THRESHOLD_PCT  5.0f   // BTC 1h change > 5% triggers alert
 
 // ── OTA GitHub repo ──
-#define OTA_GITHUB_REPO "pabloleone/lemoninterface"
+#define OTA_GITHUB_REPO "frxnnk/lemon-display"
 
 // ── BTC Pair definitions (5 trading pairs) ──
 enum PairSource : uint8_t {

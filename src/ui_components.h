@@ -27,7 +27,7 @@ void drawCandlestick(LGFX_Sprite& spr, int x, int y, int w, int h,
 
 // Chart markers overlay: period high/low triangles + ATH dashed line
 void drawChartMarkers(LGFX_Sprite& spr, int x, int y, int w, int h,
-                      const SparklineData& data, float athPrice);
+                      const SparklineData& data, float athPrice, bool arsFormat = false);
 
 // Chart style badge pill (e.g. "LINE", "OHLC", "MKR")
 void drawChartStyleBadge(LGFX_Sprite& spr, int x, int y, ChartStyle style);
@@ -56,7 +56,8 @@ void drawCentered(LGFX_Sprite& spr, const char* text, int y, const lgfx::IFont* 
 // ── Fixed-width price rendering (eliminates bounce from proportional font) ──
 // Accepts both LGFX_Sprite and tft (LGFX) via common base class
 void drawFixedWidthPrice(LovyanGFX& gfx, const char* text, int cx, int cy,
-                         const lgfx::IFont* font, uint16_t color);
+                         const lgfx::IFont* font, uint16_t color,
+                         uint16_t bgColor = 0);
 
 // Direct version: per-cell fill+draw for flicker-free framebuffer writes
 void drawFixedWidthPriceDirect(LovyanGFX& gfx, const char* text, int cx, int cy,

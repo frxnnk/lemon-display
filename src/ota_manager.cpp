@@ -2,6 +2,7 @@
 #include "config.h"
 #include <Arduino.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <Update.h>
 #include <WiFi.h>
 
@@ -20,16 +21,23 @@ OtaInfo otaCheck(const char* repo) {
     OtaInfo info = {};
     info.available = false;
 
+    static WiFiClientSecure client;
+    client.setInsecure();
+
     HTTPClient http;
     char url[256];
     snprintf(url, sizeof(url), "https://api.github.com/repos/%s/releases/latest", repo);
 
-    http.begin(url);
+    http.begin(client, url);
     http.addHeader("Accept", "application/vnd.github.v3+json");
+#ifdef GITHUB_PAT
+    http.addHeader("Authorization", "Bearer " GITHUB_PAT);
+#endif
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     http.setTimeout(10000);
 
     int code = http.GET();
+    info.httpCode = code;
     if (code != 200) {
         Serial.printf("[OTA] GitHub API error: %d\n", code);
         http.end();
@@ -57,22 +65,20 @@ OtaInfo otaCheck(const char* repo) {
         return info;
     }
 
-    // Find .bin asset URL in browser_download_url
-    int binIdx = body.indexOf(".bin\"");
-    if (binIdx < 0) {
-        Serial.println("[OTA] No .bin asset found in release");
+    // Find API asset URL (works for private repos with token auth)
+    // Look for "url":"https://api.github.com/.../releases/assets/..."
+    int assetIdx = body.indexOf("/releases/assets/");
+    if (assetIdx < 0) {
+        Serial.println("[OTA] No asset found in release");
         return info;
     }
-
-    // Search backwards for "browser_download_url":"
-    int urlKey = body.lastIndexOf("\"browser_download_url\"", binIdx);
-    if (urlKey < 0) return info;
-    int urlStart = body.indexOf('"', urlKey + 22) + 1;
-    int urlEnd = body.indexOf('"', urlStart);
+    // Walk backwards to find the opening quote of this URL
+    int urlStart = body.lastIndexOf('"', assetIdx) + 1;
+    int urlEnd = body.indexOf('"', assetIdx);
     if (urlStart <= 0 || urlEnd <= urlStart) return info;
 
-    String binUrl = body.substring(urlStart, urlEnd);
-    strncpy(info.url, binUrl.c_str(), sizeof(info.url) - 1);
+    String assetUrl = body.substring(urlStart, urlEnd);
+    strncpy(info.url, assetUrl.c_str(), sizeof(info.url) - 1);
     info.available = true;
 
     Serial.printf("[OTA] Update available: %s -> %s\n", APP_VERSION, info.version);
@@ -80,11 +86,21 @@ OtaInfo otaCheck(const char* repo) {
     return info;
 }
 
-bool otaFlash(const char* binUrl) {
+bool otaFlash(const char* binUrl, void(*progressCB)(int pct)) {
+    static WiFiClientSecure client;
+    client.setInsecure();
+
     HTTPClient http;
-    http.begin(binUrl);
+    http.begin(client, binUrl);
+#ifdef GITHUB_PAT
+    http.addHeader("Authorization", "Bearer " GITHUB_PAT);
+#endif
+    http.addHeader("Accept", "application/octet-stream");
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    http.setTimeout(30000);
+    http.setTimeout(60000);
+
+    Serial.printf("[OTA] Requesting: %s\n", binUrl);
+    Serial.printf("[OTA] Free heap: %d\n", ESP.getFreeHeap());
 
     int code = http.GET();
     if (code != 200) {
@@ -109,7 +125,48 @@ bool otaFlash(const char* binUrl) {
     }
 
     WiFiClient* stream = http.getStreamPtr();
-    size_t written = Update.writeStream(*stream);
+    static uint8_t buf[4096];
+    size_t written = 0;
+    int lastPct = -1;
+
+    while (written < (size_t)contentLen) {
+        size_t available = stream->available();
+        if (available == 0) {
+            // Wait for data with timeout
+            unsigned long waitStart = millis();
+            while (stream->available() == 0 && millis() - waitStart < 10000) {
+                delay(10);
+            }
+            if (stream->available() == 0) {
+                Serial.println("[OTA] Stream timeout");
+                Update.abort();
+                http.end();
+                return false;
+            }
+            continue;
+        }
+
+        size_t toRead = (available < sizeof(buf)) ? available : sizeof(buf);
+        int bytesRead = stream->readBytes(buf, toRead);
+        if (bytesRead <= 0) break;
+
+        size_t w = Update.write(buf, bytesRead);
+        if (w != (size_t)bytesRead) {
+            Serial.printf("[OTA] Write mismatch: %d vs %d\n", (int)w, bytesRead);
+            Update.abort();
+            http.end();
+            return false;
+        }
+
+        written += bytesRead;
+        int pct = (int)((written * 100) / contentLen);
+        if (pct != lastPct) {
+            lastPct = pct;
+            Serial.printf("[OTA] Progress: %d%%\n", pct);
+            if (progressCB) progressCB(pct);
+        }
+    }
+
     Serial.printf("[OTA] Written: %d / %d\n", (int)written, contentLen);
 
     if (!Update.end()) {

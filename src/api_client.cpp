@@ -6,6 +6,7 @@
 #include <ArduinoJson.h>
 #include <time.h>
 #include <cctype>
+#include <cmath>
 #include <cstring>
 
 static WiFiClientSecure secureClient;
@@ -15,7 +16,7 @@ void apiSetup() {
 }
 
 // ── Helper: perform HTTPS GET with 1 retry ──
-static String httpGet(const char* url, bool addCoinGeckoKey, ApiResult& result) {
+static String httpGet(const char* url, bool addCoinGeckoKey, ApiResult& result, int timeoutMs = 10000) {
     for (int attempt = 0; attempt < 2; attempt++) {
         if (attempt > 0) {
             Serial.printf("[API] Retry %d for %s\n", attempt, url);
@@ -24,7 +25,7 @@ static String httpGet(const char* url, bool addCoinGeckoKey, ApiResult& result) 
 
         HTTPClient http;
         http.setConnectTimeout(5000);
-        http.setTimeout(10000);
+        http.setTimeout(timeoutMs);
 
         String fullUrl = String(url);
         if (addCoinGeckoKey) {
@@ -364,14 +365,19 @@ ApiResult fetchBinanceOhlc(OhlcData& out, const char* interval, int limit) {
     return out.valid ? API_OK : API_PARSE_ERROR;
 }
 
-// ── CoinGecko: Tether/ARS sparkline (for dollar chart) ──
+// ── CoinGecko: USDC/ARS sparkline (for dollar chart) ──
 ApiResult fetchLemonSparkline(SparklineData& out, int days) {
-    char urlBuf[128];
-    snprintf(urlBuf, sizeof(urlBuf), "%s%d", COINGECKO_TETHER_CHART_EP, days);
+    // precision=2 reduces response size ~40% (ARS prices don't need 15 decimals)
+    char urlBuf[160];
+    snprintf(urlBuf, sizeof(urlBuf), "%s%d&precision=2", COINGECKO_TETHER_CHART_EP, days);
 
+    // Longer timeout for large periods (90d+ = hourly data, big response)
+    int timeout = (days > 30) ? 15000 : 10000;
     ApiResult result;
-    String json = httpGet(urlBuf, false, result);
+    String json = httpGet(urlBuf, false, result, timeout);
     if (result != API_OK) return result;
+
+    Serial.printf("[API] Lemon sparkline response: %d bytes\n", json.length());
 
     JsonDocument filter;
     filter["prices"][0][0] = true;
@@ -381,6 +387,7 @@ ApiResult fetchLemonSparkline(SparklineData& out, int days) {
     DeserializationError err = deserializeJson(doc, json,
         DeserializationOption::Filter(filter),
         DeserializationOption::NestingLimit(15));
+    json = String();  // free memory immediately after parse
 
     if (err) {
         Serial.printf("[API] Lemon sparkline JSON error: %s\n", err.c_str());
@@ -389,23 +396,39 @@ ApiResult fetchLemonSparkline(SparklineData& out, int days) {
 
     JsonArray prices = doc["prices"];
     int total = prices.size();
+    Serial.printf("[API] Lemon sparkline parsed: %d points for %dd\n", total, days);
     if (total == 0) return API_PARSE_ERROR;
 
-    int targetCount = min((int)SPARKLINE_POINTS, total);
-    out.count = targetCount;
-    out.minVal = 1e12;
-    out.maxVal = -1e12;
-
+    // Build into temp to avoid corrupting `out` on bad data
+    // For longer periods (30d+), cap points for smoother chart (hourly data gets noisy)
+    int maxTarget = (days >= 30) ? 180 : (int)SPARKLINE_POINTS;
+    int targetCount = min(maxTarget, total);
+    float tempMin = 1e12f, tempMax = -1e12f;
     float step = (float)total / targetCount;
+    float lastGood = 0;
+    static float tempPoints[SPARKLINE_POINTS];
+
     for (int i = 0; i < targetCount; i++) {
         int idx = (int)(i * step);
         if (idx >= total) idx = total - 1;
         float val = prices[idx][1].as<float>();
-        out.points[i] = val;
-        if (val < out.minVal) out.minVal = val;
-        if (val > out.maxVal) out.maxVal = val;
+        if (!isfinite(val) || val <= 0) val = lastGood;
+        tempPoints[i] = val;
+        lastGood = val;
+        if (val > 0 && val < tempMin) tempMin = val;
+        if (val > 0 && val > tempMax) tempMax = val;
     }
 
+    if (tempMax <= 0) {
+        Serial.printf("[API] Lemon sparkline %dd: all data invalid\n", days);
+        return API_PARSE_ERROR;
+    }
+
+    // Data is valid — commit to output
+    out.count = targetCount;
+    out.minVal = tempMin;
+    out.maxVal = tempMax;
+    memcpy(out.points, tempPoints, targetCount * sizeof(float));
     out.valid = true;
     out.lastUpdate = millis();
     Serial.printf("[API] Lemon sparkline (%dd): %d pts, $%.0f-$%.0f\n",
@@ -616,7 +639,7 @@ ApiResult fetchGeckoBtcPrice(const char* vsCurrency, float& outPrice) {
     return API_OK;
 }
 
-// ── CriptoYa: Lemon USDT/ARS price ──
+// ── CriptoYa: Lemon USDC/ARS price ──
 ApiResult fetchLemonPrice(LemonPrice& out) {
     ApiResult result;
     String json = httpGet(CRIPTOYA_LEMON_EP, false, result);
@@ -633,7 +656,7 @@ ApiResult fetchLemonPrice(LemonPrice& out) {
     out.valid = (out.ask > 0 && out.bid > 0);
     out.lastUpdate = millis();
 
-    Serial.printf("[API] Lemon USDT/ARS: bid=%.2f ask=%.2f\n", out.bid, out.ask);
+    Serial.printf("[API] Lemon USDC/ARS: bid=%.2f ask=%.2f\n", out.bid, out.ask);
     return out.valid ? API_OK : API_PARSE_ERROR;
 }
 
@@ -945,7 +968,7 @@ static bool fetchChainlinkReferencePrice(const char* startTime, float& outPrice)
     return true;
 }
 
-static void enrichPolyReference(PolyMarket& pm) {
+void enrichPolyReference(PolyMarket& pm) {
     pm.refPrice = 0.0f;
     pm.refPriceValid = false;
     if (pm.startTime[0] == '\0') return;
@@ -1077,7 +1100,7 @@ static ApiResult fetchPolyUpDownForPeriod(PolyMarket* out, uint8_t& count, uint8
     Serial.printf("[API] Polymarket up/down: now=%lld base=%lld step=%lu tf=%s\n",
                   (long long)now, (long long)baseTs, (unsigned long)spec.stepSec, spec.tf);
 
-    static const int8_t CANDIDATE_BUCKETS[] = { 0, -1, 1, -2, 2, -3, 3 };
+    static const int8_t CANDIDATE_BUCKETS[] = { 0, -1, 1, -2 };
     for (int8_t delta : CANDIDATE_BUCKETS) {
         int64_t ts = baseTs + (int64_t)delta * (int64_t)spec.stepSec;
         char slug[64];
@@ -1252,22 +1275,13 @@ ApiResult fetchPolyMarkets(PolyMarket* out, uint8_t& count, uint8_t limit, uint8
 
     ApiResult tsRes = fetchPolyUpDownForPeriod(out, count, btcPeriod);
     if (tsRes == API_OK && count > 0) {
-        for (uint8_t i = 0; i < count; i++) enrichPolyReference(out[i]);
+        // Markets returned without Chainlink enrichment — caller handles that
         return API_OK;
     }
 
-    ApiResult recentRes = fetchPolyUpDownRecent(out, count, btcPeriod);
-    if (recentRes == API_OK && count > 0) {
-        for (uint8_t i = 0; i < count; i++) enrichPolyReference(out[i]);
-        return API_OK;
-    }
-
-    Serial.printf("[API] Polymarket miss for period idx=%d (tsRes=%d recentRes=%d)\n",
-                  btcPeriod, (int)tsRes, (int)recentRes);
-
-    // Do not fall back to generic BTC markets; that keeps stale/out-of-scope questions.
-    if (tsRes != API_PARSE_ERROR) return tsRes;
-    return recentRes;
+    Serial.printf("[API] Polymarket miss for period idx=%d (tsRes=%d)\n",
+                  btcPeriod, (int)tsRes);
+    return tsRes;
 }
 
 ApiResult fetchPolyMarketByConditionId(const char* conditionId, PolyMarket& out) {
