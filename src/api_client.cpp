@@ -826,23 +826,25 @@ static void refCacheStore(const char* startTime, float price, bool valid) {
     refCache[idx].valid = valid;
 }
 
-// Parse ISO 8601 "YYYY-MM-DDTHH:MM:SSZ" → epoch seconds
+// Parse ISO 8601 "YYYY-MM-DDTHH:MM:SSZ" → UTC epoch seconds
+// Manual calculation — avoids mktime timezone issues entirely.
 static uint32_t isoToEpoch(const char* iso) {
     if (!iso || strlen(iso) < 19) return 0;
-    struct tm t = {};
-    // "2026-02-24T08:30:00Z"
-    sscanf(iso, "%d-%d-%dT%d:%d:%d",
-           &t.tm_year, &t.tm_mon, &t.tm_mday, &t.tm_hour, &t.tm_min, &t.tm_sec);
-    t.tm_year -= 1900;
-    t.tm_mon -= 1;
-    // mktime uses local time; we need UTC. Use timegm-equivalent.
-    // ESP32 Arduino: set TZ=UTC temporarily or compute manually.
-    // Simple approach: use mktime and adjust for known GMT offset.
-    time_t epoch = mktime(&t);
-    // mktime interprets as local time (GMT_OFFSET_SEC applied by NTP config).
-    // Undo the offset to get true UTC epoch.
-    epoch -= GMT_OFFSET_SEC;
-    return (epoch > 0) ? (uint32_t)epoch : 0;
+    int yr, mo, dy, hr, mn, sc;
+    if (sscanf(iso, "%d-%d-%dT%d:%d:%d", &yr, &mo, &dy, &hr, &mn, &sc) < 6) return 0;
+    if (yr < 1970 || mo < 1 || mo > 12 || dy < 1) return 0;
+
+    static const int mdays[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    uint32_t days = 0;
+    for (int y = 1970; y < yr; y++) {
+        days += (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) ? 366 : 365;
+    }
+    for (int m = 1; m < mo; m++) {
+        days += mdays[m];
+        if (m == 2 && (yr % 4 == 0 && (yr % 100 != 0 || yr % 400 == 0))) days++;
+    }
+    days += dy - 1;
+    return days * 86400UL + hr * 3600UL + mn * 60UL + sc;
 }
 
 static bool fetchBinanceRefPrice(const char* startTime, float& outPrice) {
