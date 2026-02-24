@@ -1627,7 +1627,17 @@ void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t s
                 snprintf(priceBuf, sizeof(priceBuf), "$%d.%02d", intP, decP);
             sprZ2.setTextColor(Colors::SOLAR, Colors::BG_CARD);
             sprZ2.setTextDatum(lgfx::middle_center);
-            sprZ2.drawString(priceBuf, SCREEN_W / 2, 18, &SatoshiMedium18);
+            sprZ2.drawString(priceBuf, SCREEN_W / 2, 14, &SatoshiMedium18);
+
+            // Show market start time (HH:MM UTC) below threshold
+            if (mkt.startTime[0] != '\0') {
+                int hh = 0, mm = 0;
+                sscanf(mkt.startTime, "%*d-%*d-%*dT%d:%d", &hh, &mm);
+                char timeBuf[24];
+                snprintf(timeBuf, sizeof(timeBuf), "Inicio %02d:%02d UTC", hh, mm);
+                sprZ2.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+                sprZ2.drawString(timeBuf, SCREEN_W / 2, 28, &Satoshi12);
+            }
         } else {
             sprZ2.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
             sprZ2.setTextDatum(lgfx::middle_center);
