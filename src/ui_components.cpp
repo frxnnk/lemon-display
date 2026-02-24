@@ -674,20 +674,23 @@ void drawFixedWidthPrice(LovyanGFX& gfx, const char* text, int cx, int cy,
 
     // Draw each char, starting from left edge so total is centered on cx
     int x = cx - totalW / 2;
-    if (bgColor != 0) {
-        gfx.setTextColor(color, bgColor);
-    } else {
-        gfx.setTextColor(color);
-    }
+    gfx.setTextColor(color, bgColor);
     gfx.setTextDatum(lgfx::middle_center);
+
+    // Font height estimate for per-cell background fill
+    int cellH = gfx.fontHeight(font) + 4;  // +4px margin for glyph overshoot
+    int cellY = cy - cellH / 2;
 
     for (int i = 0; i < len; i++) {
         char c[2] = { text[i], 0 };
         if (text[i] >= '0' && text[i] <= '9') {
+            gfx.fillRect(x, cellY, maxDigitW, cellH, bgColor);
             gfx.drawString(c, x + maxDigitW / 2, cy, font);
             x += maxDigitW;
         } else {
             int cw = gfx.textWidth(c, font);
+            // Pad 2px per side — $ tip and comma serifs can exceed textWidth
+            gfx.fillRect(x - 2, cellY, cw + 4, cellH, bgColor);
             gfx.drawString(c, x + cw / 2, cy, font);
             x += cw;
         }
