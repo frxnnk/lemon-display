@@ -19,6 +19,10 @@ void dashboardSetup();
 void dashboardSetLayout(uint8_t idx);
 uint8_t dashboardGetLayout();
 
+// Zone geometry accessors (for overlays)
+int dashboardGetZ2Y();
+int dashboardGetZ2H();
+
 // Touch handling (zones are internal to dashboard)
 typedef void (*DashboardTouchCB)(const TouchEvent& evt, uint8_t zoneId);
 void dashboardSetTouchCallback(DashboardTouchCB cb);
@@ -78,6 +82,9 @@ void dashboardFlashPrice(bool up);
 
 // Double-buffer sync: push dirty zone sprites to current draw buffer.
 void dashboardSyncDrawBuffer();
+
+// Clipped push: render only the pixels inside a spotlight rect (for tutorial overlay)
+void dashboardPushSpotlight(int16_t sx, int16_t sy, int16_t sw, int16_t sh);
 
 // Dirty zone management for selective sync
 void dashboardMarkDirty(uint8_t zoneId);

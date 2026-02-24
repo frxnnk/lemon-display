@@ -80,11 +80,12 @@ void nvsSet24hFormat(bool on) {
 // ── Dashboard Layout ──
 
 uint8_t nvsGetLayout() {
-    return prefs.getUChar("layout", 0);
+    uint8_t v = prefs.getUChar("layout", 1);  // Default: BTC + USD
+    return (v > 1) ? 1 : v;  // Clamp legacy layout values
 }
 
 void nvsSetLayout(uint8_t idx) {
-    if (idx > 2) idx = 0;
+    if (idx > 1) idx = 0;
     prefs.putUChar("layout", idx);
 }
 
@@ -94,6 +95,24 @@ bool nvsGetProMode() {
 
 void nvsSetProMode(bool on) {
     prefs.putUChar("pro_mode", on ? 1 : 0);
+}
+
+// ── Tutorial ──
+
+bool nvsGetTutorialDone() {
+    return prefs.getUChar("tut_done", 0) != 0;
+}
+
+void nvsSetTutorialDone(bool done) {
+    prefs.putUChar("tut_done", done ? 1 : 0);
+}
+
+bool nvsGetProTutDone() {
+    return prefs.getUChar("pro_tut", 0) != 0;
+}
+
+void nvsSetProTutDone(bool done) {
+    prefs.putUChar("pro_tut", done ? 1 : 0);
 }
 
 // ── Polymarket Predictions ──

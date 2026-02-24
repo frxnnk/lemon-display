@@ -230,7 +230,7 @@ void drawCandlestick(LGFX_Sprite& spr, int x, int y, int w, int h,
 // ══════════════════════════════════════════
 
 void drawChartMarkers(LGFX_Sprite& spr, int x, int y, int w, int h,
-                      const SparklineData& data, float athPrice) {
+                      const SparklineData& data, float athPrice, bool arsFormat) {
     if (!data.valid || data.count < 2) return;
 
     float range = data.maxVal - data.minVal;
@@ -243,13 +243,30 @@ void drawChartMarkers(LGFX_Sprite& spr, int x, int y, int w, int h,
         return y + h - 1 - (int)(((val - data.minVal) / range) * (h - 2));
     };
 
-    // Helper: format price with comma separator
-    auto fmtPrice = [](char* buf, size_t sz, float price) {
+    // Helper: format price with locale-appropriate separator
+    auto fmtPrice = [arsFormat](char* buf, size_t sz, float price) {
+        if (!isfinite(price) || price < 0 || price > 999999999.0f) {
+            snprintf(buf, sz, "---");
+            return;
+        }
         int v = (int)price;
-        if (v >= 1000)
-            snprintf(buf, sz, "$%d,%03d", v / 1000, v % 1000);
-        else
-            snprintf(buf, sz, "$%d", v);
+        if (arsFormat) {
+            // Argentine: $1.200
+            if (v >= 1000000)
+                snprintf(buf, sz, "$%d.%03d.%03d", v / 1000000, (v / 1000) % 1000, v % 1000);
+            else if (v >= 1000)
+                snprintf(buf, sz, "$%d.%03d", v / 1000, v % 1000);
+            else
+                snprintf(buf, sz, "$%d", v);
+        } else {
+            // US: $100,234
+            if (v >= 1000000)
+                snprintf(buf, sz, "$%d,%03d,%03d", v / 1000000, (v / 1000) % 1000, v % 1000);
+            else if (v >= 1000)
+                snprintf(buf, sz, "$%d,%03d", v / 1000, v % 1000);
+            else
+                snprintf(buf, sz, "$%d", v);
+        }
     };
 
     // Helper: draw price label with dark pill background
@@ -273,16 +290,23 @@ void drawChartMarkers(LGFX_Sprite& spr, int x, int y, int w, int h,
         spr.drawString(text, pillX + pillW / 2, pillY + pillH / 2, &Satoshi12);
     };
 
-    // Find period high and low indices
-    int highIdx = 0, lowIdx = 0;
-    for (int i = 1; i < data.count; i++) {
-        if (data.points[i] > data.points[highIdx]) highIdx = i;
-        if (data.points[i] < data.points[lowIdx])  lowIdx = i;
+    // Find period high and low indices (skip NaN/Inf to prevent INT_MAX overflow)
+    int highIdx = -1, lowIdx = -1;
+    for (int i = 0; i < data.count; i++) {
+        if (!isfinite(data.points[i])) continue;
+        if (highIdx < 0 || data.points[i] > data.points[highIdx]) highIdx = i;
+        if (lowIdx  < 0 || data.points[i] < data.points[lowIdx])  lowIdx  = i;
     }
+    if (highIdx < 0 || lowIdx < 0) return;  // No valid points
 
     // Period HIGH marker — green upward triangle + pill label
+    int highPillY, lowPillY;
     {
         int hx = mapX(highIdx);
+        // Edge clamp: keep triangle apex away from chart borders
+        if (highIdx == 0) hx = (hx < x + 8) ? x + 8 : hx;
+        if (highIdx == data.count - 1) hx = (hx > x + w - 8) ? x + w - 8 : hx;
+
         int hy = mapY(data.points[highIdx]);
         int tri = 7;
         spr.fillTriangle(hx, hy - tri - 2, hx - tri, hy + 3, hx + tri, hy + 3, Colors::MARKER_HIGH);
@@ -291,13 +315,18 @@ void drawChartMarkers(LGFX_Sprite& spr, int x, int y, int w, int h,
         fmtPrice(buf, sizeof(buf), data.points[highIdx]);
         int labelY = hy - tri - 4;
         bool above = (labelY - 16 >= y);
-        drawPricePill(hx, above ? labelY - 16 : hy + tri + 5, buf, Colors::MARKER_HIGH, false);
+        highPillY = above ? (labelY - 16) : (hy + tri + 5);
+        drawPricePill(hx, highPillY, buf, Colors::MARKER_HIGH, false);
     }
 
     // Period LOW marker — red downward triangle + pill label
     {
         int lx = mapX(lowIdx);
-        int ly = mapY(data.points[lowIdx]);
+        // Edge clamp: keep triangle apex away from chart borders
+        if (lowIdx == 0) lx = (lx < x + 8) ? x + 8 : lx;
+        if (lowIdx == data.count - 1) lx = (lx > x + w - 8) ? x + w - 8 : lx;
+
+        int ly = mapY(data.points[lowIdx]) + 1;  // +1px so apex doesn't sit exactly on min
         int tri = 7;
         spr.fillTriangle(lx, ly + tri + 2, lx - tri, ly - 3, lx + tri, ly - 3, Colors::MARKER_LOW);
 
@@ -305,7 +334,14 @@ void drawChartMarkers(LGFX_Sprite& spr, int x, int y, int w, int h,
         fmtPrice(buf, sizeof(buf), data.points[lowIdx]);
         int labelY = ly + tri + 5;
         bool below = (labelY + 16 <= y + h);
-        drawPricePill(lx, below ? labelY : ly - tri - 5 - 16, buf, Colors::MARKER_LOW, false);
+        lowPillY = below ? labelY : (ly - tri - 5 - 16);
+
+        // Anti-overlap: if HIGH and LOW pills are too close, push LOW below
+        if (abs(highPillY - lowPillY) < 20) {
+            lowPillY = highPillY + 20;
+            if (lowPillY + 16 > y + h) lowPillY = y + h - 16;
+        }
+        drawPricePill(lx, lowPillY, buf, Colors::MARKER_LOW, false);
     }
 
     // ATH dashed horizontal line (only if ATH is within visible Y range)
@@ -610,7 +646,8 @@ static int getMaxDigitW(LovyanGFX& gfx, const lgfx::IFont* font) {
 }
 
 void drawFixedWidthPrice(LovyanGFX& gfx, const char* text, int cx, int cy,
-                         const lgfx::IFont* font, uint16_t color) {
+                         const lgfx::IFont* font, uint16_t color,
+                         uint16_t bgColor) {
     int maxDigitW = getMaxDigitW(gfx, font);
 
     // Calculate total width: digits use fixed maxDigitW, others use natural width
@@ -627,7 +664,11 @@ void drawFixedWidthPrice(LovyanGFX& gfx, const char* text, int cx, int cy,
 
     // Draw each char, starting from left edge so total is centered on cx
     int x = cx - totalW / 2;
-    gfx.setTextColor(color);
+    if (bgColor != 0) {
+        gfx.setTextColor(color, bgColor);
+    } else {
+        gfx.setTextColor(color);
+    }
     gfx.setTextDatum(lgfx::middle_center);
 
     for (int i = 0; i < len; i++) {
@@ -661,7 +702,7 @@ void drawFixedWidthPriceDirect(LovyanGFX& gfx, const char* text, int cx, int cy,
 
     int x = cx - totalW / 2;
     int cellY = cy - cellH / 2;
-    gfx.setTextColor(color);
+    gfx.setTextColor(color, bgColor);
     gfx.setTextDatum(lgfx::middle_center);
 
     // Per-cell fill+draw: eliminates blank flash on direct framebuffer writes
@@ -819,7 +860,7 @@ void drawToggle(LGFX_Sprite& spr, int x, int y, bool on) {
 static bool     toastActive    = false;
 static char     toastMsg[64]   = "";
 static uint32_t toastStartMs   = 0;
-static const uint32_t TOAST_DURATION_MS = 3000;
+static const uint32_t TOAST_DURATION_MS = 2000;
 
 void showToast(const char* msg) {
     strncpy(toastMsg, msg, sizeof(toastMsg) - 1);

@@ -9,6 +9,7 @@
 #include "colors.h"
 #include "config.h"
 #include "touch_utils.h"
+#include "tutorial_overlay.h"
 #include "data/satoshi_fonts.h"
 #include <Arduino.h>
 
@@ -33,7 +34,9 @@
 #define UPDATE_BTN_H     34
 #define RESET_BTN_Y     322
 #define RESET_BTN_H      34
-#define ABOUT_Y         394
+#define TUTORIAL_BTN_Y  364
+#define TUTORIAL_BTN_H   34
+#define ABOUT_Y         406
 #define ABOUT_H          14
 #define CONTENT_TOTAL   (ABOUT_Y + ABOUT_H)
 #define MAX_SCROLL      ((CONTENT_TOTAL > SCREEN_H) ? (CONTENT_TOTAL - SCREEN_H) : 0)
@@ -43,6 +46,8 @@ static int scrollY = 0;
 static bool otaChecked = false;
 static OtaInfo otaResult = {};
 static bool otaFlashing = false;
+static int otaProgress = 0;
+static bool otaAvailableOnBoot = false;
 static bool resetWifiConfirmArmed = false;
 static uint32_t resetWifiConfirmUntilMs = 0;
 static const uint32_t RESET_WIFI_CONFIRM_TIMEOUT_MS = 5000;
@@ -51,8 +56,8 @@ static const uint32_t RESET_WIFI_CONFIRM_TIMEOUT_MS = 5000;
 static LGFX_Sprite settScr(&tft);
 static bool settScrReady = false;
 
-// ── Layout preset names ──
-static const char* layoutNames[] = { "General", "Enfoque BTC", "Compacta" };
+// ── Layout preset names (0=BTC only, 1=BTC+USD 50/50) ──
+static const char* layoutNames[] = { "BTC", "BTC + USD" };
 
 // ── Helper: check if Y range is visible ──
 static bool isVisible(int itemY, int itemH) {
@@ -197,26 +202,37 @@ void settingsDraw() {
         settScr.fillSmoothRoundRect(MARGIN, by, CARD_W, UPDATE_BTN_H, 12, Colors::BG_SURFACE);
         settScr.drawRoundRect(MARGIN, by, CARD_W, UPDATE_BTN_H, 12, Colors::LEMON_GREEN);
 
-        const char* label = "Buscar actualizaciones";
-        uint16_t textColor = Colors::LEMON_GREEN;
-        if (otaChecked && otaResult.available) {
+        if (otaFlashing) {
+            settScr.setTextColor(Colors::SOLAR, Colors::BG_SURFACE);
+            settScr.setTextDatum(lgfx::middle_center);
+            settScr.drawString("Actualizando...", MARGIN + CARD_W / 2, by + UPDATE_BTN_H / 2, &Satoshi12);
+        } else if (otaChecked && otaResult.available) {
             char buf[48];
             snprintf(buf, sizeof(buf), "Actualizar a v%s", otaResult.version);
             settScr.setTextColor(Colors::LEMON_GREEN, Colors::BG_SURFACE);
             settScr.setTextDatum(lgfx::middle_center);
             settScr.drawString(buf, MARGIN + CARD_W / 2, by + UPDATE_BTN_H / 2, &Satoshi12);
         } else if (otaChecked && !otaResult.available) {
-            settScr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_SURFACE);
+            char statusBuf[48];
+            if (otaResult.httpCode != 200) {
+                snprintf(statusBuf, sizeof(statusBuf), "Error HTTP %d", otaResult.httpCode);
+                settScr.setTextColor(Colors::NEGATIVE, Colors::BG_SURFACE);
+            } else {
+                snprintf(statusBuf, sizeof(statusBuf), "Estas al dia");
+                settScr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_SURFACE);
+            }
             settScr.setTextDatum(lgfx::middle_center);
-            settScr.drawString("Estas al dia", MARGIN + CARD_W / 2, by + UPDATE_BTN_H / 2, &Satoshi12);
-        } else if (otaFlashing) {
-            settScr.setTextColor(Colors::SOLAR, Colors::BG_SURFACE);
+            settScr.drawString(statusBuf, MARGIN + CARD_W / 2, by + UPDATE_BTN_H / 2, &Satoshi12);
+        } else if (otaAvailableOnBoot && !otaChecked) {
+            // Boot check found an update — show green dot + text
+            settScr.fillCircle(MARGIN + 20, by + UPDATE_BTN_H / 2, 4, Colors::LEMON_GREEN);
+            settScr.setTextColor(Colors::LEMON_GREEN, Colors::BG_SURFACE);
             settScr.setTextDatum(lgfx::middle_center);
-            settScr.drawString("Actualizando...", MARGIN + CARD_W / 2, by + UPDATE_BTN_H / 2, &Satoshi12);
+            settScr.drawString("Actualizacion disponible", MARGIN + CARD_W / 2, by + UPDATE_BTN_H / 2, &Satoshi12);
         } else {
             settScr.setTextColor(Colors::LEMON_GREEN, Colors::BG_SURFACE);
             settScr.setTextDatum(lgfx::middle_center);
-            settScr.drawString(label, MARGIN + CARD_W / 2, by + UPDATE_BTN_H / 2, &Satoshi12);
+            settScr.drawString("Buscar actualizaciones", MARGIN + CARD_W / 2, by + UPDATE_BTN_H / 2, &Satoshi12);
         }
     }
 
@@ -234,6 +250,18 @@ void settingsDraw() {
         settScr.setTextDatum(lgfx::middle_center);
         settScr.drawString(confirmActive ? "Confirmar reset WiFi" : "Resetear WiFi",
                            MARGIN + CARD_W / 2, by + RESET_BTN_H / 2, &Satoshi12);
+    }
+
+    // ══════════════════════════════════════
+    //  TUTORIAL BUTTON (neutral outline)
+    // ══════════════════════════════════════
+    if (isVisible(TUTORIAL_BTN_Y, TUTORIAL_BTN_H)) {
+        int by = TUTORIAL_BTN_Y - scrollY;
+        settScr.fillSmoothRoundRect(MARGIN, by, CARD_W, TUTORIAL_BTN_H, 12, Colors::BG_SURFACE);
+        settScr.drawRoundRect(MARGIN, by, CARD_W, TUTORIAL_BTN_H, 12, Colors::TEXT_SECONDARY);
+        settScr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_SURFACE);
+        settScr.setTextDatum(lgfx::middle_center);
+        settScr.drawString("Ver tutorial", MARGIN + CARD_W / 2, by + TUTORIAL_BTN_H / 2, &Satoshi12);
     }
 
     // ══════════════════════════════════════
@@ -333,13 +361,23 @@ void settingsHandleTouch(const TouchEvent& evt) {
     if (touchInRect(tx, cy, proToggleX - 10, proToggleY - 4, 64, 32)) {
         bool cur = nvsGetProMode();
         nvsSetProMode(!cur);
+        if (!cur && !nvsGetProTutDone()) {
+            // Turned ON for first time — auto-navigate to dashboard + start tutorial
+            tutorialStartPro();
+            scrollY = 0;
+            otaChecked = false;
+            clearResetWifiConfirm();
+            appSetScreen(SCREEN_DASHBOARD);
+            dashboardMarkAllDirty();
+            return;
+        }
         settingsDraw();
         return;
     }
 
     if (touchInRect(tx, cy, MARGIN, LAYOUT_CARD_Y, CARD_W, LAYOUT_CARD_H)) {
         uint8_t cur = nvsGetLayout();
-        uint8_t next = (cur + 1) % 3;
+        uint8_t next = (cur + 1) % 2;
         nvsSetLayout(next);
         dashboardSetLayout(next);
         settingsDraw();
@@ -349,16 +387,34 @@ void settingsHandleTouch(const TouchEvent& evt) {
     // ══════════ UPDATE BUTTON ══════════
     if (touchInRect(tx, cy, MARGIN, UPDATE_BTN_Y, CARD_W, UPDATE_BTN_H)) {
         if (otaChecked && otaResult.available && !otaFlashing) {
-            // Second tap: flash
+            // Show "Actualizando..." then dim backlight to hide
+            // PSRAM/DMA corruption caused by flash writes (shared MSPI bus)
             otaFlashing = true;
-            settingsDraw();
-            otaFlash(otaResult.url);
-            // If otaFlash fails (doesn't reboot), show error
+            settingsDraw();  // Render "Actualizando..." to framebuffer
+            delay(1200);     // Let user read the message
+            tft.fillScreen(0);        // Framebuffer → black (DMA reads black pixels)
+            displaySetBrightness(0);  // Backlight off
+            delay(100);               // Wait 2-3 LCD refresh frames
+
+            // Free PSRAM sprite — less memory pressure for TLS
+            if (settScrReady) {
+                settScr.deleteSprite();
+                settScrReady = false;
+            }
+
+            otaFlash(otaResult.url, nullptr);
+            // If we get here, OTA failed (success reboots)
+            displaySetBrightness(255);
+            ensureSprite();
             otaFlashing = false;
             settingsDraw();
         } else if (!otaChecked) {
-            // First tap: check
-            otaResult = otaCheck(OTA_GITHUB_REPO);
+            // First tap: check (use boot result if available)
+            if (otaAvailableOnBoot) {
+                otaResult = otaCheck(OTA_GITHUB_REPO);
+            } else {
+                otaResult = otaCheck(OTA_GITHUB_REPO);
+            }
             otaChecked = true;
             settingsDraw();
         }
@@ -377,6 +433,17 @@ void settingsHandleTouch(const TouchEvent& evt) {
         }
         return;
     }
+
+    // ══════════ TUTORIAL BUTTON ══════════
+    if (touchInRect(tx, cy, MARGIN, TUTORIAL_BTN_Y, CARD_W, TUTORIAL_BTN_H)) {
+        tutorialStart();
+        scrollY = 0;
+        otaChecked = false;
+        clearResetWifiConfirm();
+        appSetScreen(SCREEN_DASHBOARD);
+        dashboardMarkAllDirty();
+        return;
+    }
 }
 
 void settingsTick() {
@@ -384,4 +451,8 @@ void settingsTick() {
         clearResetWifiConfirm();
         settingsDraw();
     }
+}
+
+void settingsSetOtaAvailable(bool available) {
+    otaAvailableOnBoot = available;
 }

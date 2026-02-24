@@ -6,3 +6,6 @@
 void settingsDraw();
 void settingsHandleTouch(const TouchEvent& evt);
 void settingsTick();
+
+// Called from main.cpp after boot OTA check
+void settingsSetOtaAvailable(bool available);

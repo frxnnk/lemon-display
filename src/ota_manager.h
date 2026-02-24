@@ -4,6 +4,7 @@
 
 struct OtaInfo {
     bool available;
+    int  httpCode;
     char version[16];
     char url[256];
 };
@@ -12,4 +13,5 @@ struct OtaInfo {
 OtaInfo otaCheck(const char* repo);
 
 // Download .bin from url and flash via Update library; reboots on success
-bool otaFlash(const char* binUrl);
+// Optional progress callback receives percentage (0-100)
+bool otaFlash(const char* binUrl, void(*progressCB)(int pct) = nullptr);

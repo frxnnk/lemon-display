@@ -18,6 +18,9 @@
 #include "scheduler.h"
 #include "animation.h"
 #include "ws_binance.h"
+#include "tutorial_overlay.h"
+#include "ui_settings.h"
+#include "ota_manager.h"
 #include <cmath>
 #include <time.h>
 
@@ -173,6 +176,7 @@ static void resolveActivePredictionIfClosed() {
              userWon ? "Ganaste" : "Perdiste",
              yesWon ? "SUBE" : "BAJA");
     showToast(toastBuf);
+    // Header redraw deferred — toast rendering loop in main loop will pick it up
 
     nvsClearPolyPrediction();
     memset(&activePred, 0, sizeof(activePred));
@@ -248,6 +252,11 @@ static void refreshPredictionForCurrentPeriod(bool showLoading);
 
 // ── Morph helpers ──
 static void resampleNormalize(const SparklineData& src, float* dst, int count) {
+    if (src.count < 2 || count < 2) {
+        float val = (src.count >= 1) ? 0.5f : 0.0f;
+        for (int i = 0; i < count; i++) dst[i] = val;
+        return;
+    }
     float range = src.maxVal - src.minVal;
     if (range < 0.01f) range = 1.0f;
     for (int i = 0; i < count; i++) {
@@ -314,11 +323,22 @@ static bool isProModeEnabled() {
     return nvsGetProMode();
 }
 
+// Periods with Polymarket games available (5m=0, 15m=1, 4h=3)
+static const uint8_t POLY_PERIODS[] = { 0, 1, 3 };
+
 static void buildVisibleBtcPeriods() {
     uint8_t minIdx = BTC_PAIRS[selectedPair].minPeriodIdx;
     btcVisibleCount = 0;
 
-    if (isProModeEnabled()) {
+    if (dashboardIsPredictionMode()) {
+        // Prediction mode: only periods with Polymarket games
+        for (uint8_t i = 0; i < (uint8_t)(sizeof(POLY_PERIODS) / sizeof(POLY_PERIODS[0])); i++) {
+            uint8_t idx = POLY_PERIODS[i];
+            if (idx >= minIdx) {
+                btcVisiblePeriods[btcVisibleCount++] = idx;
+            }
+        }
+    } else if (isProModeEnabled()) {
         for (uint8_t i = 0; i < BTC_PERIOD_COUNT; i++) {
             if (i >= minIdx) {
                 btcVisiblePeriods[btcVisibleCount++] = i;
@@ -454,11 +474,14 @@ static void redrawHero() {
 // ── Scheduled callbacks ──
 static void updateClock() {
     if (timeReady()) {
-        // Direct-to-framebuffer updates (no pushSprite, no PSRAM/DMA bounce)
-        dashboardUpdateTimeDirect(getTimeStr(nvsGet24hFormat()).c_str());
-        if (priceChangedSinceLastDraw && !z1Dirty) {
-            priceChangedSinceLastDraw = false;
-            dashboardUpdatePriceDirect(state.btc, selectedPair);
+        // Skip direct framebuffer writes while tutorial overlay or toast is active
+        // (toast replaces the entire header — time writes would corrupt it)
+        if (!tutorialIsActive() && !isToastActive()) {
+            dashboardUpdateTimeDirect(getTimeStr(nvsGet24hFormat()).c_str());
+            if (priceChangedSinceLastDraw && !z1Dirty) {
+                priceChangedSinceLastDraw = false;
+                dashboardUpdatePriceDirect(state.btc, selectedPair);
+            }
         }
         frameDirty = true;
     }
@@ -631,7 +654,7 @@ static void updateLemon() {
         }
 
         // Skip redraw during morph — the morph driver handles Z2 at 30fps
-        if (!dollarMorphActive) {
+        if (!dollarMorphActive && dashboardGetZ2H() > 0) {
             z2Dirty = true;
         }
         frameDirty = true;
@@ -639,22 +662,22 @@ static void updateLemon() {
 }
 
 static void updateDollarSparkline() {
-    if (!state.online) return;
+    if (!state.online || dashboardGetZ2H() <= 0) return;
 
-    // Save old sparkline for morph
+    // Save old sparkline for morph (and as fallback if fetch fails)
     static SparklineData oldDollarSpark;
     oldDollarSpark = state.lemonSpark;
 
-    if (fetchLemonSparkline(state.lemonSpark, DOLLAR_PERIODS[dollarPeriod].days) == API_OK) {
+    ApiResult res = fetchLemonSparkline(state.lemonSpark, DOLLAR_PERIODS[dollarPeriod].days);
+
+    if (res == API_OK && state.lemonSpark.valid && state.lemonSpark.count >= 2) {
         // Pre-compute % change from real sparkline (morph won't corrupt it)
-        if (state.lemonSpark.count >= 2) {
-            float first = state.lemonSpark.points[0];
-            float last = state.lemonSpark.points[state.lemonSpark.count - 1];
-            if (first > 0 && last > 0 && first > last * 0.01f) {
-                dollarChangePercent = ((last - first) / first) * 100.0f;
-            } else {
-                dollarChangePercent = NAN;
-            }
+        float first = state.lemonSpark.points[0];
+        float last = state.lemonSpark.points[state.lemonSpark.count - 1];
+        if (first > 0 && last > 0 && first > last * 0.01f) {
+            dollarChangePercent = ((last - first) / first) * 100.0f;
+        } else {
+            dollarChangePercent = NAN;
         }
         // Start dollar morph animation
         if (oldDollarSpark.valid && oldDollarSpark.count >= 2) {
@@ -664,10 +687,15 @@ static void updateDollarSparkline() {
             dollarMorphNewMax = state.lemonSpark.maxVal;
             dollarMorphStartMs = millis();
             dollarMorphActive = true;
-            // Morph driver in loop() handles redraws at 30fps — skip immediate push
         } else {
             z2Dirty = true;
         }
+        frameDirty = true;
+    } else {
+        // Fetch failed or invalid — restore old sparkline so chart doesn't break
+        state.lemonSpark = oldDollarSpark;
+        Serial.printf("[API] Dollar sparkline fetch failed (res=%d) — keeping old data\n", (int)res);
+        z2Dirty = true;
         frameDirty = true;
     }
 }
@@ -717,12 +745,26 @@ static void updatePolymarket() {
         Serial.printf("[Poly] Active market: %s | yes=%.3f no=%.3f | end=%s\n",
                       dbg.question, dbg.yesPrice, dbg.noPrice, dbg.endDate);
 
-        // Redraw prediction UI
+        // Phase 1: draw immediately with current BTC price as approximate threshold
         dashboardDrawPrediction(polyMarkets, polyMarketCount, polySelectedIdx,
                                 &activePred, polyStats, false, currentPolyOutcomeMsg(), state.btc.usd);
         z2DrawnThisFrame = true;
         z2Dirty = false;
         frameDirty = true;
+
+        // Phase 2: enrich with Chainlink reference price (slow ~2-5s per market)
+        for (uint8_t i = 0; i < polyMarketCount; i++) {
+            enrichPolyReference(polyMarkets[i]);
+        }
+
+        // Redraw with real threshold if enrichment succeeded
+        if (polyMarkets[polySelectedIdx].refPriceValid) {
+            dashboardDrawPrediction(polyMarkets, polyMarketCount, polySelectedIdx,
+                                    &activePred, polyStats, false, currentPolyOutcomeMsg(), state.btc.usd);
+            z2DrawnThisFrame = true;
+            z2Dirty = false;
+            frameDirty = true;
+        }
     }
     else {
         polyMarketCount = 0;
@@ -740,14 +782,39 @@ static void updatePolymarket() {
 
 // ── Enter/exit prediction mode ──
 static void enterPredictionMode() {
+    if (dashboardGetZ2H() <= 0) {
+        showToast("Cambia a BTC + USD");
+        String t = timeReady() ? getTimeStr(nvsGet24hFormat()) : String("--:--:--");
+        dashboardDrawHeader(t.c_str(), !state.online, wsBinanceConnected());
+        frameDirty = true;
+        return;
+    }
     if (!isProModeEnabled()) {
         showToast("Modo Pro para Polymarket");
+        String t = timeReady() ? getTimeStr(nvsGet24hFormat()) : String("--:--:--");
+        dashboardDrawHeader(t.c_str(), !state.online, wsBinanceConnected());
+        frameDirty = true;
         return;
     }
 
     dashboardSetPredictionMode(true);
     polyDataLoaded = false;
     polySelectedIdx = 0;
+
+    // Lock to BTC/USD in prediction mode
+    if (selectedPair != 0) switchPair(0);
+
+    // Filter carousel to only periods with Polymarket games
+    syncDashboardFilters();
+
+    // Disable pair selector AFTER syncDashboardFilters (which resets it to isProModeEnabled)
+    dashboardSetPairSelectorEnabled(false);
+
+    // Clamp period to nearest available prediction period
+    {
+        uint8_t clamped = clampToNearestAllowed(selectedPeriod, btcVisiblePeriods, btcVisibleCount);
+        if (clamped != selectedPeriod) selectedPeriod = clamped;
+    }
 
     // Resize zones: Z1 shrinks, Z2 expands
     dashboardSetPredictionLayout(true);
@@ -773,6 +840,10 @@ static void enterPredictionMode() {
 static void exitPredictionMode() {
     dashboardSetPredictionMode(false);
     scheduler.enable(taskPolymarket, false);
+
+    // Restore pair selector and full period list
+    dashboardSetPairSelectorEnabled(isProModeEnabled());
+    syncDashboardFilters();
 
     // Restore layout
     dashboardSetPredictionLayout(false);
@@ -1003,15 +1074,6 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
             return;
         }
 
-        // Fling: start momentum scroll for period carousel
-        if (evt.gesture == TOUCH_FLING_UP || evt.gesture == TOUCH_FLING_DOWN) {
-            float velItems = evt.velocityY / (float)(CAROUSEL_ITEM_H_PX + 2);
-            btcCarousel.scrollOffset = (float)currentBtcSlot();
-            btcCarousel.velocity = velItems;
-            btcCarousel.animating = true;
-            return;
-        }
-
         // ── Check pair label tap (opens dropdown) ──
         if (evt.gesture == TOUCH_TAP) {
             if (dashboardHitTestPairLabel(evt.x, evt.y)) {
@@ -1152,15 +1214,6 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
         }
 
         // ── Normal dollar mode ──
-        // Fling: start momentum scroll
-        if (evt.gesture == TOUCH_FLING_UP || evt.gesture == TOUCH_FLING_DOWN) {
-            float velItems = evt.velocityY / (float)(28 + 2);  // Dollar carousel item height
-            dollarCarouselState.scrollOffset = (float)currentDollarSlot();
-            dollarCarouselState.velocity = velItems;
-            dollarCarouselState.animating = true;
-            return;
-        }
-
         int8_t dir = 0;
 
         if (evt.gesture == TOUCH_TAP) {
@@ -1184,11 +1237,18 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
                 dollarPeriod = dollarVisiblePeriods[newSlot];
                 Serial.printf("[Touch] Dollar period: %s\n", DOLLAR_PERIODS[dollarPeriod].label);
                 dollarChangePercent = NAN;
+                // Show old sparkline briefly — morph will animate to new data once fetched.
+                // Avoids black chart gap that occurred with nullptr.
                 dashboardDrawLemonDollar(state.lemon, &state.lemonSpark, dollarPeriod, dollarChartStyle, dollarChangePercent);
                 z2DrawnThisFrame = true;
                 z2Dirty = false;
                 frameDirty = true;
                 scheduler.forceRun(taskDollarSpark);
+                // If fetch failed (no morph started), force redraw with new data
+                if (!dollarMorphActive) {
+                    z2Dirty = true;
+                    z2DrawnThisFrame = false;
+                }
             }
             return;
         }
@@ -1389,6 +1449,7 @@ static void enterDashboard() {
     // dbuf::enable(tft, dashboardSyncDrawBuffer);
 
     appSetScreen(SCREEN_DASHBOARD);
+    tutorialInit();  // Show tutorial on first boot (checks NVS)
 }
 
 void setup() {
@@ -1549,14 +1610,18 @@ void loop() {
             wsBinanceStop();
             state.wasOffline = true;
             showToast("WiFi desconectado");
-            dashboardDrawHeader("--:--:--", true);  // Will render toast bar in sprZ0
+            if (!tutorialIsActive()) {
+                dashboardDrawHeader("--:--:--", true);
+            }
             frameDirty = true;
         } else if (state.online && state.wasOffline) {
             state.wasOffline = false;
             timeSetup();
             wsBinanceSetup();
             showToast("WiFi reconectado");
-            dashboardDrawHeader(getTimeStr(nvsGet24hFormat()).c_str(), false, wsBinanceConnected());  // Toast bar
+            if (!tutorialIsActive()) {
+                dashboardDrawHeader(getTimeStr(nvsGet24hFormat()).c_str(), false, wsBinanceConnected());
+            }
             frameDirty = true;
         }
 
@@ -1633,7 +1698,7 @@ void loop() {
         // price still updates via dashboardDrawPriceOnly.
         {
             unsigned long now = millis();
-            if (wsVisualDirty && (now - lastWsVisualDrawMs >= 2000)) {
+            if (wsVisualDirty && !tutorialIsActive() && (now - lastWsVisualDrawMs >= 2000)) {
                 lastWsVisualDrawMs = now;
                 wsVisualDirty = false;
                 if (!morphActive && chartStyle != CHART_MARKERS) {
@@ -1646,20 +1711,31 @@ void loop() {
         scheduler.tick();
 
         // Drive morph animation (~30fps during 800ms transition)
-        // Full redraw per frame — eliminates ghost pixels from partial push tearing
-        if (morphActive && chartStyle != CHART_CANDLE) {
-            static unsigned long lastMorphFrame = 0;
-            unsigned long now = millis();
-            if (now - lastMorphFrame >= 33) {  // 30fps
-                lastMorphFrame = now;
-                getMorphedSparkline();  // advance morph interpolation
-                redrawHero();           // full sprite redraw + push (no partial artifacts)
-                frameDirty = true;
+        // First frame: full redraw to set up static elements (price, carousel, labels)
+        // Subsequent frames: chart-only partial push (~85KB vs 288KB) — less flicker
+        {
+            static bool wasMorphing = false;
+            if (morphActive && chartStyle != CHART_CANDLE && !tutorialIsActive()) {
+                static unsigned long lastMorphFrame = 0;
+                unsigned long now = millis();
+                if (now - lastMorphFrame >= 33) {  // 30fps
+                    lastMorphFrame = now;
+                    SparklineData& morphed = getMorphedSparkline();
+                    if (!wasMorphing) {
+                        // First frame: full sprite rebuild (sets up labels, price, carousel)
+                        redrawHero();
+                    } else {
+                        // Subsequent frames: chart-only partial push (no full-sprite flicker)
+                        dashboardRedrawChartOnly(morphed, chartStyle, &state.ohlc, state.btc.ath);
+                    }
+                    frameDirty = true;
+                }
             }
+            wasMorphing = morphActive;
         }
 
-        // Drive dollar morph animation (~30fps) — skip in prediction mode
-        if (dollarMorphActive && !dashboardIsPredictionMode()) {
+        // Drive dollar morph animation (~30fps) — skip in prediction mode, tutorial, and BTC-only layout
+        if (dollarMorphActive && dashboardGetZ2H() > 0 && !dashboardIsPredictionMode() && !tutorialIsActive()) {
             static unsigned long lastDollarMorphFrame = 0;
             unsigned long now = millis();
             if (now - lastDollarMorphFrame >= 33) {
@@ -1676,104 +1752,86 @@ void loop() {
             }
         }
 
-        // Drive carousel momentum physics (~30fps)
-        {
-            static unsigned long lastCarouselFrame = 0;
-            unsigned long now = millis();
-            if (now - lastCarouselFrame >= 33) {
-                float dt = (float)(now - lastCarouselFrame) / 1000.0f;
-                lastCarouselFrame = now;
-
-                if (btcCarousel.animating) {
-                    int maxItems = (btcVisibleCount > 0) ? (int)btcVisibleCount : 1;
-                    updateCarouselPhysics(btcCarousel, maxItems, dt);
-                    if (!btcCarousel.animating) {
-                        int snappedSlot = (int)roundf(btcCarousel.scrollOffset);
-                        if (snappedSlot < 0) snappedSlot = 0;
-                        if (snappedSlot >= maxItems) snappedSlot = maxItems - 1;
-
-                        uint8_t snappedPeriod = btcVisiblePeriods[snappedSlot];
-                        if (snappedPeriod != selectedPeriod) {
-                            selectedPeriod = snappedPeriod;
-                            state.ohlc.valid = false;
-                            periodChanges[selectedPeriod] = NAN;
-                            if (chartStyle == CHART_CANDLE && !BTC_PERIODS[selectedPeriod].canOhlc) {
-                                chartStyle = CHART_LINE;
-                            }
-                            scheduler.forceRun(taskSparkline);
-                            refreshPredictionForCurrentPeriod(true);
-                        }
-                        btcCarousel.snappedIndex = snappedSlot;
-                    }
-                    z1Dirty = true;
-                    frameDirty = true;
-                }
-
-                if (dollarCarouselState.animating) {
-                    int maxItems = (dollarVisibleCount > 0) ? (int)dollarVisibleCount : 1;
-                    updateCarouselPhysics(dollarCarouselState, maxItems, dt);
-                    if (!dollarCarouselState.animating) {
-                        int snappedSlot = (int)roundf(dollarCarouselState.scrollOffset);
-                        if (snappedSlot < 0) snappedSlot = 0;
-                        if (snappedSlot >= maxItems) snappedSlot = maxItems - 1;
-
-                        uint8_t snappedPeriod = dollarVisiblePeriods[snappedSlot];
-                        if (snappedPeriod != dollarPeriod) {
-                            dollarPeriod = snappedPeriod;
-                            dollarChangePercent = NAN;
-                            scheduler.forceRun(taskDollarSpark);
-                        }
-                        dollarCarouselState.snappedIndex = snappedSlot;
-                    }
-                    z2Dirty = true;
-                    frameDirty = true;
-                }
-
-            }
-        }
-
         // ── Consolidated zone rendering (max 1 push per zone per frame) ──
-        if (z1Dirty && !z1DrawnThisFrame) {
-            redrawHero();       // sets z1DrawnThisFrame, clears z1Dirty
-            frameDirty = true;
-        }
-        if (z2Dirty && !z2DrawnThisFrame) {
-            if (dashboardIsPredictionMode()) {
-                dashboardDrawPrediction(polyMarkets, polyMarketCount, polySelectedIdx,
-                                        &activePred, polyStats, !polyDataLoaded, currentPolyOutcomeMsg(), state.btc.usd);
-            } else {
-                dashboardDrawLemonDollar(state.lemon,
-                    dollarMorphActive ? &getDollarMorphedSparkline() : &state.lemonSpark,
-                    dollarPeriod, dollarChartStyle, dollarChangePercent);
+        // Skip zone rendering while tutorial overlay is active (prevents flicker)
+        if (!tutorialIsActive()) {
+            if (z1Dirty && !z1DrawnThisFrame) {
+                redrawHero();       // sets z1DrawnThisFrame, clears z1Dirty
+                frameDirty = true;
             }
-            z2DrawnThisFrame = true;
-            z2Dirty = false;
-            frameDirty = true;
+            if (z2Dirty && !z2DrawnThisFrame && dashboardGetZ2H() > 0) {
+                if (dashboardIsPredictionMode()) {
+                    dashboardDrawPrediction(polyMarkets, polyMarketCount, polySelectedIdx,
+                                            &activePred, polyStats, !polyDataLoaded, currentPolyOutcomeMsg(), state.btc.usd);
+                } else {
+                    dashboardDrawLemonDollar(state.lemon,
+                        dollarMorphActive ? &getDollarMorphedSparkline() : &state.lemonSpark,
+                        dollarPeriod, dollarChartStyle, dollarChangePercent);
+                }
+                z2DrawnThisFrame = true;
+                z2Dirty = false;
+                frameDirty = true;
+            }
         }
     }
 
     // Per-frame updates
     appTick();           // calls dashboardUpdateFlash() internally for SCREEN_DASHBOARD
 
-    // Toast expiry: redraw header to restore normal content
+    // Toast lifecycle: redraw header on toast appear and expire
     {
         static bool wasToastActive = false;
         bool toastNow = isToastActive();
         updateToast();
         bool toastAfter = isToastActive();
-        // Toast just expired this frame
-        if (wasToastActive && !toastAfter && screen == SCREEN_DASHBOARD) {
-            String t = timeReady() ? getTimeStr(nvsGet24hFormat()) : String("--:--:--");
-            dashboardDrawHeader(t.c_str(), !state.online, wsBinanceConnected());
-            frameDirty = true;
+
+        if (screen == SCREEN_DASHBOARD && !tutorialIsActive()) {
+            // Toast just appeared OR just expired → redraw header
+            if (toastNow != wasToastActive || (wasToastActive && !toastAfter)) {
+                String t = timeReady() ? getTimeStr(nvsGet24hFormat()) : String("--:--:--");
+                dashboardDrawHeader(t.c_str(), !state.online, wsBinanceConnected());
+                frameDirty = true;
+            }
         }
-        wasToastActive = toastAfter;  // track for next frame
-        (void)toastNow;
+        wasToastActive = toastAfter;
+    }
+
+    // ── Tutorial overlay (draws only on step change, not every frame) ──
+    {
+        tutorialCheckPending();  // Start queued pro tutorial now that we're on dashboard
+        if (tutorialNeedsReset()) {
+            selectedPeriod = 4;  // Reset to 24h for clean tutorial visuals
+            redrawDashboard();
+        }
+        static bool wasTutActive = false;
+        if (tutorialIsActive()) {
+            if (tutorialNeedsDraw()) {
+                // tutorialDraw() handles everything: dim + clipped spotlight push + tooltip slide-in
+                tutorialDraw();
+                frameDirty = true;
+            }
+        } else if (wasTutActive) {
+            // Tutorial just ended — full screen recovery:
+            // Fill gaps between zones (tooltip/dimming artifacts live there)
+            dashboardFillGaps();
+            // Clear stale dirty flags accumulated while tutorial blocked zone rendering
+            z1Dirty = false;
+            z2Dirty = false;
+            z1DrawnThisFrame = true;  // Prevent zone rendering from re-drawing this frame
+            z2DrawnThisFrame = true;
+            // Full redraw of all zones
+            redrawDashboard();
+        }
+        wasTutActive = tutorialIsActive();
     }
 
     // Poll touch and dispatch
     TouchEvent evt = touchLoop();
-    appHandleTouch(evt);
+    if (tutorialIsActive()) {
+        tutorialHandleTouch(evt);
+    } else {
+        appHandleTouch(evt);
+    }
 
     // ── Frame pacing ──
     // Double buffering disabled (was causing bounce/repeat artifacts).

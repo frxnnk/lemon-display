@@ -38,6 +38,14 @@ void     nvsSetLayout(uint8_t idx);
 bool     nvsGetProMode();
 void     nvsSetProMode(bool on);
 
+// Tutorial (true = completed, false = not yet shown)
+bool     nvsGetTutorialDone();
+void     nvsSetTutorialDone(bool done);
+
+// Pro tutorial (true = already shown, false = not yet)
+bool     nvsGetProTutDone();
+void     nvsSetProTutDone(bool done);
+
 // Polymarket prediction stats
 struct PolyStats;
 struct PolyPrediction;

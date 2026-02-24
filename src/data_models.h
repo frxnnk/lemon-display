@@ -63,10 +63,10 @@ struct SparklineData {
     unsigned long lastUpdate;
 };
 
-// ── Lemon dollar price (USDT/ARS from CriptoYa) ──
+// ── Lemon dollar price (USDC/ARS from CriptoYa) ──
 struct LemonPrice {
-    float bid;        // Lemon buy price (ARS per USDT)
-    float ask;        // Lemon sell price (ARS per USDT)
+    float bid;        // Lemon buy price (ARS per USDC)
+    float ask;        // Lemon sell price (ARS per USDC)
     bool valid;
     unsigned long lastUpdate;
 };

@@ -32,6 +32,12 @@ ApiResult fetchSparklineVsCurrency(SparklineData& out, int days,
 ApiResult fetchGeckoBtcPrice(const char* vsCurrency, float& outPrice);
 
 // Polymarket: fetch BTC prediction markets mapped to selected BTC period
+// Note: markets are returned WITHOUT Chainlink reference price (refPriceValid=false).
+// Call enrichPolyReference() separately to fill in the threshold price.
 ApiResult fetchPolyMarkets(PolyMarket* out, uint8_t& count, uint8_t limit = 3,
                            uint8_t btcPeriod = 4);
 ApiResult fetchPolyMarketByConditionId(const char* conditionId, PolyMarket& out);
+
+// Enrich a market with Chainlink BTC/USD reference price at its start time.
+// Separate from fetchPolyMarkets so UI can render immediately while this loads.
+void enrichPolyReference(PolyMarket& pm);
