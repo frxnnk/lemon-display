@@ -297,60 +297,11 @@ void settingsDraw() {
 //  OTA PROGRESS SCREEN (direct tft draws, no sprite)
 // ══════════════════════════════════════════
 
-static void otaDrawProgress(int pct) {
-    // Called between flash writes — PSRAM/DMA is safe at this instant.
-    // Minimize framebuffer writes to reduce MSPI contention during next flash write.
-    // Strategy: fillScreen(0) ONCE at pct=0, then only update small regions.
-    static int lastPct = -1;
-
-    const int barW = 300, barH = 18, barR = 9;
-    const int cx = SCREEN_W / 2;
-    const int barX = cx - barW / 2;
-    const int barY = SCREEN_H / 2;
-
-    if (lastPct < 0) {
-        // First call: black screen + static elements (drawn once)
-        tft.fillScreen(0);
-        tft.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_BASE);
-        tft.setTextDatum(lgfx::middle_center);
-        tft.drawString("Actualizando...", cx, barY - 30, &SatoshiMedium18);
-        tft.drawRoundRect(barX, barY, barW, barH, barR, Colors::MOON);
-
-        char verBuf[32];
-        snprintf(verBuf, sizeof(verBuf), "v%s", otaResult.version);
-        tft.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-        tft.drawString(verBuf, cx, barY + barH + 36, &Satoshi9);
-    }
-
-    // Update only the bar fill (incremental — never shrinks)
-    int fillW = (int)((float)(barW - 4) * pct / 100.0f);
-    int lastFillW = (lastPct > 0) ? (int)((float)(barW - 4) * lastPct / 100.0f) : 0;
-    if (fillW > lastFillW && fillW > 0) {
-        // Only draw the NEW pixels (delta), not the entire bar
-        int deltaX = barX + 2 + lastFillW;
-        int deltaW = fillW - lastFillW;
-        tft.fillRect(deltaX, barY + 2, deltaW, barH - 4, Colors::LEMON_GREEN);
-    }
-
-    // Update percentage text (small clear + redraw, only every 5%)
-    if (pct / 5 != lastPct / 5 || lastPct < 0) {
-        tft.fillRect(cx - 30, barY + barH + 8, 60, 20, Colors::BG_BASE);
-        char buf[8];
-        snprintf(buf, sizeof(buf), "%d%%", pct);
-        tft.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_BASE);
-        tft.setTextDatum(lgfx::middle_center);
-        tft.drawString(buf, cx, barY + barH + 18, &Satoshi12);
-    }
-
-    // At 100%: overwrite title
-    if (pct >= 100 && lastPct < 100) {
-        tft.fillRect(cx - 120, barY - 44, 240, 28, Colors::BG_BASE);
-        tft.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_BASE);
-        tft.setTextDatum(lgfx::middle_center);
-        tft.drawString("Reiniciando...", cx, barY - 30, &SatoshiMedium18);
-    }
-
-    lastPct = pct;
+// OTA progress: backlight OFF during flash (MSPI/DMA contention makes
+// live UI impossible). Only log to Serial.
+static void otaProgressSerial(int pct) {
+    // No framebuffer writes — DMA reads black pixels, no corruption
+    Serial.printf("[OTA] %d%%\n", pct);
 }
 
 // ══════════════════════════════════════════
@@ -444,18 +395,22 @@ void settingsHandleTouch(const TouchEvent& evt) {
     if (touchInRect(tx, cy, MARGIN, UPDATE_BTN_Y, CARD_W, UPDATE_BTN_H)) {
         if (otaChecked && otaResult.available && !otaFlashing) {
             otaFlashing = true;
+            settingsDraw();  // Show "Actualizando..." on the button
+            delay(1500);     // Let user read the message
 
-            // Free PSRAM sprite — less memory pressure for TLS + progress draws
+            // Black out framebuffer + backlight OFF — MSPI/DMA contention
+            // makes any live UI impossible during flash writes
+            tft.fillScreen(0);
+            displaySetBrightness(0);
+            delay(100);  // Let LCD refresh 2-3 frames of black
+
+            // Free PSRAM sprite — less memory pressure for TLS
             if (settScrReady) {
                 settScr.deleteSprite();
                 settScrReady = false;
             }
 
-            // Draw OTA progress screen — low brightness to hide MSPI/DMA noise
-            displaySetBrightness(20);
-            otaDrawProgress(0);
-
-            otaFlash(otaResult.url, otaDrawProgress);
+            otaFlash(otaResult.url, otaProgressSerial);
             // If we get here, OTA failed (success reboots)
             displaySetBrightness(255);
             ensureSprite();
