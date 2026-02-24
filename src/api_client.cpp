@@ -860,11 +860,11 @@ static bool fetchBinanceRefPrice(const char* startTime, float& outPrice) {
     }
 
     // Binance kline API: get 1-minute candle at the exact interval start
-    uint64_t epochMs = (uint64_t)epochSec * 1000ULL;
+    // Use %lu + "000" suffix to avoid 64-bit printf issues on ESP32
     char urlBuf[160];
     snprintf(urlBuf, sizeof(urlBuf),
-             "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&startTime=%llu&limit=1",
-             (unsigned long long)epochMs);
+             "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&startTime=%lu000&limit=1",
+             (unsigned long)epochSec);
 
     ApiResult result;
     String json = httpGet(urlBuf, false, result);
