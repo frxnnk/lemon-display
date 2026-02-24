@@ -298,6 +298,49 @@ void settingsDraw() {
 }
 
 // ══════════════════════════════════════════
+//  OTA PROGRESS SCREEN (direct tft draws, no sprite)
+// ══════════════════════════════════════════
+
+static void otaDrawProgress(int pct) {
+    // Draw between flash writes — DMA safe at this moment
+    const int barW = 300, barH = 18, barR = 9;
+    const int cx = SCREEN_W / 2;
+    const int barX = cx - barW / 2;
+    const int barY = SCREEN_H / 2;
+    const int fillW = (int)((float)(barW - 4) * pct / 100.0f);
+
+    tft.fillScreen(0);
+
+    // Title
+    tft.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_BASE);
+    tft.setTextDatum(lgfx::middle_center);
+    if (pct >= 100)
+        tft.drawString("Reiniciando...", cx, barY - 30, &SatoshiMedium18);
+    else
+        tft.drawString("Actualizando...", cx, barY - 30, &SatoshiMedium18);
+
+    // Bar outline
+    tft.drawRoundRect(barX, barY, barW, barH, barR, Colors::MOON);
+
+    // Bar fill
+    if (fillW > 0) {
+        tft.fillRoundRect(barX + 2, barY + 2, fillW, barH - 4, barR - 2, Colors::LEMON_GREEN);
+    }
+
+    // Percentage
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%d%%", pct);
+    tft.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_BASE);
+    tft.drawString(buf, cx, barY + barH + 18, &Satoshi12);
+
+    // Version
+    char verBuf[32];
+    snprintf(verBuf, sizeof(verBuf), "v%s", otaResult.version);
+    tft.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
+    tft.drawString(verBuf, cx, barY + barH + 36, &Satoshi9);
+}
+
+// ══════════════════════════════════════════
 //  TOUCH HANDLING
 // ══════════════════════════════════════════
 
@@ -387,22 +430,19 @@ void settingsHandleTouch(const TouchEvent& evt) {
     // ══════════ UPDATE BUTTON ══════════
     if (touchInRect(tx, cy, MARGIN, UPDATE_BTN_Y, CARD_W, UPDATE_BTN_H)) {
         if (otaChecked && otaResult.available && !otaFlashing) {
-            // Show "Actualizando..." then dim backlight to hide
-            // PSRAM/DMA corruption caused by flash writes (shared MSPI bus)
             otaFlashing = true;
-            settingsDraw();  // Render "Actualizando..." to framebuffer
-            delay(1200);     // Let user read the message
-            tft.fillScreen(0);        // Framebuffer → black (DMA reads black pixels)
-            displaySetBrightness(0);  // Backlight off
-            delay(100);               // Wait 2-3 LCD refresh frames
 
-            // Free PSRAM sprite — less memory pressure for TLS
+            // Free PSRAM sprite — less memory pressure for TLS + progress draws
             if (settScrReady) {
                 settScr.deleteSprite();
                 settScrReady = false;
             }
 
-            otaFlash(otaResult.url, nullptr);
+            // Draw initial OTA progress screen (0%)
+            displaySetBrightness(80);
+            otaDrawProgress(0);
+
+            otaFlash(otaResult.url, otaDrawProgress);
             // If we get here, OTA failed (success reboots)
             displaySetBrightness(255);
             ensureSprite();
