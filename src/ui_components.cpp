@@ -92,11 +92,17 @@ void drawSparkline(LGFX_Sprite& spr, int x, int y, int w, int h,
     float range = data.maxVal - data.minVal;
     if (range < 0.01f) range = 1.0f;
 
+    // Add 5% padding to Y range so extremes don't touch chart edges
+    float padding = range * 0.05f;
+    float yMin = data.minVal - padding;
+    float yMax = data.maxVal + padding;
+    float yRange = yMax - yMin;
+
     auto mapX = [&](int i) -> int {
         return x + (i * w) / (data.count - 1);
     };
     auto mapY = [&](float val) -> int {
-        return y + h - 1 - (int)(((val - data.minVal) / range) * (h - 2));
+        return y + h - 1 - (int)(((val - yMin) / yRange) * (h - 2));
     };
 
     int bottom = y + h - 1;
@@ -155,8 +161,13 @@ void drawCandlestick(LGFX_Sprite& spr, int x, int y, int w, int h,
     float range = data.maxVal - data.minVal;
     if (range < 0.01f) range = 1.0f;
 
+    // Add 5% padding to Y range so wicks don't touch chart edges
+    float padding = range * 0.05f;
+    float yMin = data.minVal - padding;
+    float yRange = (data.maxVal + padding) - yMin;
+
     auto mapY = [&](float val) -> int {
-        return y + h - 1 - (int)(((val - data.minVal) / range) * (h - 2));
+        return y + h - 1 - (int)(((val - yMin) / yRange) * (h - 2));
     };
 
     float barSlot = (float)w / data.count;
@@ -241,11 +252,16 @@ void drawChartMarkers(LGFX_Sprite& spr, int x, int y, int w, int h,
     float range = data.maxVal - data.minVal;
     if (range < 0.01f) range = 1.0f;
 
+    // Same 5% Y padding as drawSparkline so markers align with the chart line
+    float padding = range * 0.05f;
+    float yMin = data.minVal - padding;
+    float yRange = (data.maxVal + padding) - yMin;
+
     auto mapX = [&](int i) -> int {
         return x + (i * w) / (data.count - 1);
     };
     auto mapY = [&](float val) -> int {
-        return y + h - 1 - (int)(((val - data.minVal) / range) * (h - 2));
+        return y + h - 1 - (int)(((val - yMin) / yRange) * (h - 2));
     };
 
     // Helper: format price with locale-appropriate separator
