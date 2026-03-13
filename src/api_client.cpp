@@ -8,16 +8,75 @@
 #include <cctype>
 #include <cmath>
 #include <cstring>
+#include <esp_task_wdt.h>
+
+// Root CAs: GTS Root R4 (Google), USERTrust ECC (GitHub), DigiCert Global Root G2 (Binance)
+const char* ROOT_CAS =
+    // GTS Root R4 — CoinGecko, CriptoYa, Polymarket
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIICCTCCAY6gAwIBAgINAgPlwGjvYxqccpBQUjAKBggqhkjOPQQDAzBHMQswCQYD\n"
+    "VQQGEwJVUzEiMCAGA1UEChMZR29vZ2xlIFRydXN0IFNlcnZpY2VzIExMQzEUMBIG\n"
+    "A1UEAxMLR1RTIFJvb3QgUjQwHhcNMTYwNjIyMDAwMDAwWhcNMzYwNjIyMDAwMDAw\n"
+    "WjBHMQswCQYDVQQGEwJVUzEiMCAGA1UEChMZR29vZ2xlIFRydXN0IFNlcnZpY2Vz\n"
+    "IExMQzEUMBIGA1UEAxMLR1RTIFJvb3QgUjQwdjAQBgcqhkjOPQIBBgUrgQQAIgNi\n"
+    "AATzdHOnaItgrkO4NcWBMHtLSZ37wWHO5t5GvWvVYRg1rkDdc/eJkTBa6zzuhXyi\n"
+    "QHY7qca4R9gq55KRanPpsXI5nymfopjTX15YhmUPoYRlBtHci8nHc8iMai/lxKvR\n"
+    "HYqjQjBAMA4GA1UdDwEB/wQEAwIBhjAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQW\n"
+    "BBSATNbrdP9JNqPV2Py1PsVq8JQdjDAKBggqhkjOPQQDAwNpADBmAjEA6ED/g94D\n"
+    "9J+uHXqnLrmvT/aDHQ4thQEd0dlq7A/Cr8deVl5c1RxYIigL9zC2L7F8AjEA8GE8\n"
+    "p/SgguMh1YQdc4acLa/KNJvxn7kjNuK8YAOdgLOaVsjh4rsUecrNIdSUtUlD\n"
+    "-----END CERTIFICATE-----\n"
+    // USERTrust ECC — GitHub (OTA)
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIICjzCCAhWgAwIBAgIQXIuZxVqUxdJxVt7NiYDMJjAKBggqhkjOPQQDAzCBiDEL\n"
+    "MAkGA1UEBhMCVVMxEzARBgNVBAgTCk5ldyBKZXJzZXkxFDASBgNVBAcTC0plcnNl\n"
+    "eSBDaXR5MR4wHAYDVQQKExVUaGUgVVNFUlRSVVNUIE5ldHdvcmsxLjAsBgNVBAMT\n"
+    "JVVTRVJUcnVzdCBFQ0MgQ2VydGlmaWNhdGlvbiBBdXRob3JpdHkwHhcNMTAwMjAx\n"
+    "MDAwMDAwWhcNMzgwMTE4MjM1OTU5WjCBiDELMAkGA1UEBhMCVVMxEzARBgNVBAgT\n"
+    "Ck5ldyBKZXJzZXkxFDASBgNVBAcTC0plcnNleSBDaXR5MR4wHAYDVQQKExVUaGUg\n"
+    "VVNFUlRSVVNUIE5ldHdvcmsxLjAsBgNVBAMTJVVTRVJUcnVzdCBFQ0MgQ2VydGlm\n"
+    "aWNhdGlvbiBBdXRob3JpdHkwdjAQBgcqhkjOPQIBBgUrgQQAIgNiAAQarFRaqflo\n"
+    "I+d61SRvU8Za2EurxtW20eZzca7dnNYMYf3boIkDuAUU7FfO7l0/4iGzzvfUinng\n"
+    "o4N+LZfQYcTxmdwlkWOrfzCjtHDix6EznPO/LlxTsV+zfTJ/ijTjeXmjQjBAMB0G\n"
+    "A1UdDgQWBBQ64QmG1M8ZwpZ2dEl23OA1xmNjmjAOBgNVHQ8BAf8EBAMCAQYwDwYD\n"
+    "VR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAwNoADBlAjA2Z6EWCNzklwBBHU6+4WMB\n"
+    "zzuqQhFkoJ2UOQIReVx7Hfpkue4WQrO/isIJxOzksU0CMQDpKmFHjFJKS04YcPbW\n"
+    "RNZu9YO6bVi9JNlWSOrvxKJGgYhqOkbRqZtNyWHa0V1Xahg=\n"
+    "-----END CERTIFICATE-----\n"
+    // DigiCert Global Root G2 — Binance
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIIDjjCCAnagAwIBAgIQAzrx5qcRqaC7KGSxHQn65TANBgkqhkiG9w0BAQsFADBh\n"
+    "MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3\n"
+    "d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBH\n"
+    "MjAeFw0xMzA4MDExMjAwMDBaFw0zODAxMTUxMjAwMDBaMGExCzAJBgNVBAYTAlVT\n"
+    "MRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5j\n"
+    "b20xIDAeBgNVBAMTF0RpZ2lDZXJ0IEdsb2JhbCBSb290IEcyMIIBIjANBgkqhkiG\n"
+    "9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuzfNNNx7a8myaJCtSnX/RrohCgiN9RlUyfuI\n"
+    "2/Ou8jqJkTx65qsGGmvPrC3oXgkkRLpimn7Wo6h+4FR1IAWsULecYxpsMNzaHxmx\n"
+    "1x7e/dfgy5SDN67sH0NO3Xss0r0upS/kqbitOtSZpLYl6ZtrAGCSYP9PIUkY92eQ\n"
+    "q2EGnI/yuum06ZIya7XzV+hdG82MHauVBJVJ8zUtluNJbd134/tJS7SsVQepj5Wz\n"
+    "tCO7TG1F8PapspUwtP1MVYwnSlcUfIKdzXOS0xZKBgyMUNGPHgm+F6HmIcr9g+UQ\n"
+    "vIOlCsRnKPZzFBQ9RnbDhxSJITRNrw9FDKZJobq7nMWxM4MphQIDAQABo0IwQDAP\n"
+    "BgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQEAwIBhjAdBgNVHQ4EFgQUTiJUIBiV\n"
+    "5uNu5g/6+rkS7QYXjzkwDQYJKoZIhvcNAQELBQADggEBAGBnKJRvDkhj6zHd6mcY\n"
+    "1Yl9PMWLSn/pvtsrF9+wX3N3KjITOYFnQoQj8kVnNeyIv/iPsGEMNKSuIEyExtv4\n"
+    "NeF22d+mQrvHRAiGfzZ0JFrabA0UWTW98kndth/Jsw1HKj2ZL7tcu7XUIOGZX1NG\n"
+    "Fdtom/DzMNU+MeKNhJ7jitralj41E6Vf8PlwUHBHQRFXGU7Aj64GxJUTFy8bJZ91\n"
+    "8rGOmaFvE7FBcf6IKshPECBV1/MUReXgRPTqh5Uykw7+U0b6LJ3/iyK5S9kJRaT\n"
+    "epLiaWN0bfVKfjllDiIGknibVb63dDcY3fe0Dkhvld1927jyNxF1WW6LZZm6zNTf\n"
+    "lMrY=\n"
+    "-----END CERTIFICATE-----\n";
 
 static WiFiClientSecure secureClient;
 
 void apiSetup() {
-    secureClient.setInsecure(); // Skip cert validation (ESP32 has limited CA store)
+    secureClient.setCACert(ROOT_CAS);
 }
 
 // ── Helper: perform HTTPS GET with 1 retry ──
 static String httpGet(const char* url, bool addCoinGeckoKey, ApiResult& result, int timeoutMs = 10000) {
     for (int attempt = 0; attempt < 2; attempt++) {
+        esp_task_wdt_reset();
         if (attempt > 0) {
             Serial.printf("[API] Retry %d for %s\n", attempt, url);
             delay(2000);
@@ -27,11 +86,13 @@ static String httpGet(const char* url, bool addCoinGeckoKey, ApiResult& result, 
         http.setConnectTimeout(5000);
         http.setTimeout(timeoutMs);
 
-        String fullUrl = String(url);
+        char fullUrl[512];
         if (addCoinGeckoKey) {
-            fullUrl += (fullUrl.indexOf('?') >= 0) ? "&" : "?";
-            fullUrl += "x_cg_demo_api_key=";
-            fullUrl += COINGECKO_API_KEY;
+            const char* sep = (strchr(url, '?') != nullptr) ? "&" : "?";
+            snprintf(fullUrl, sizeof(fullUrl), "%s%sx_cg_demo_api_key=%s", url, sep, COINGECKO_API_KEY);
+        } else {
+            strncpy(fullUrl, url, sizeof(fullUrl) - 1);
+            fullUrl[sizeof(fullUrl) - 1] = '\0';
         }
 
         if (!http.begin(secureClient, fullUrl)) {
@@ -762,6 +823,10 @@ static bool parsePolyMarket(JsonObjectConst m, PolyMarket& pm) {
     }
 
     pm.volume24hr = parseFloatVar(m["volume24hr"]);
+    // Event-slug markets lack volume24hr; fall back to total volume
+    if (pm.volume24hr <= 0.0f) {
+        pm.volume24hr = parseFloatVar(m["volume"]);
+    }
 
     const char* startTimeStr = m["eventStartTime"] | "";
     if (!startTimeStr || startTimeStr[0] == '\0') {
@@ -828,7 +893,7 @@ static void refCacheStore(const char* startTime, float price, bool valid) {
 
 // Parse ISO 8601 "YYYY-MM-DDTHH:MM:SSZ" → UTC epoch seconds
 // Manual calculation — avoids mktime timezone issues entirely.
-static uint32_t isoToEpoch(const char* iso) {
+uint32_t isoToEpoch(const char* iso) {
     if (!iso || strlen(iso) < 19) return 0;
     int yr, mo, dy, hr, mn, sc;
     if (sscanf(iso, "%d-%d-%dT%d:%d:%d", &yr, &mo, &dy, &hr, &mn, &sc) < 6) return 0;
@@ -991,6 +1056,7 @@ static ApiResult fetchPolyFromEventSlug(const char* slug, PolyMarket* out, uint8
     filter[0]["markets"][0]["bestBid"] = true;
     filter[0]["markets"][0]["bestAsk"] = true;
     filter[0]["markets"][0]["volume24hr"] = true;
+    filter[0]["markets"][0]["volume"] = true;
     filter[0]["markets"][0]["endDate"] = true;
     filter[0]["markets"][0]["eventStartTime"] = true;
     filter[0]["markets"][0]["startDate"] = true;
@@ -1098,6 +1164,7 @@ static ApiResult fetchPolyUpDownRecent(PolyMarket* out, uint8_t& count, uint8_t 
         filter[0]["bestBid"] = true;
         filter[0]["bestAsk"] = true;
         filter[0]["volume24hr"] = true;
+        filter[0]["volume"] = true;
         filter[0]["endDate"] = true;
         filter[0]["eventStartTime"] = true;
         filter[0]["startDate"] = true;
@@ -1163,6 +1230,7 @@ static ApiResult fetchPolyBtcFallback(PolyMarket* out, uint8_t& count, uint8_t l
     filter[0]["bestBid"] = true;
     filter[0]["bestAsk"] = true;
     filter[0]["volume24hr"] = true;
+    filter[0]["volume"] = true;
     filter[0]["endDate"] = true;
     filter[0]["eventStartTime"] = true;
     filter[0]["startDate"] = true;
@@ -1253,6 +1321,7 @@ ApiResult fetchPolyMarketByConditionId(const char* conditionId, PolyMarket& out)
     filter[0]["bestBid"] = true;
     filter[0]["bestAsk"] = true;
     filter[0]["volume24hr"] = true;
+    filter[0]["volume"] = true;
     filter[0]["endDate"] = true;
     filter[0]["eventStartTime"] = true;
     filter[0]["startDate"] = true;

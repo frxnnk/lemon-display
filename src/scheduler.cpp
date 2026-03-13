@@ -39,3 +39,8 @@ void Scheduler::enable(uint8_t id, bool on) {
     if (id >= count) return;
     tasks[id].enabled = on;
 }
+
+void Scheduler::setInterval(uint8_t id, unsigned long ms) {
+    if (id >= count) return;
+    tasks[id].intervalMs = ms;
+}

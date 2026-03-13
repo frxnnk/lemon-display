@@ -10,6 +10,7 @@
 #include "config.h"
 #include "touch_utils.h"
 #include "tutorial_overlay.h"
+#include "audio_manager.h"
 #include "data/satoshi_fonts.h"
 #include <Arduino.h>
 
@@ -20,26 +21,23 @@
 #define CONTENT_Y  HEADER_H  // Scrollable content starts here
 #define VISIBLE_H  (SCREEN_H - HEADER_H)
 
-// ── Content layout (Y positions relative to screen top, before scroll) ──
-// Compacted to fit 480px with minimal/no scroll
-#define DISPLAY_CARD_Y   46
-#define DISPLAY_CARD_H    64
-#define PRO_CARD_Y      116
-#define PRO_CARD_H       44
-#define LAYOUT_CARD_Y   166
-#define LAYOUT_CARD_H    50
-#define WIFI_CARD_Y     222
-#define WIFI_CARD_H      52
-#define UPDATE_BTN_Y    280
-#define UPDATE_BTN_H     34
-#define RESET_BTN_Y     322
-#define RESET_BTN_H      34
-#define TUTORIAL_BTN_Y  364
-#define TUTORIAL_BTN_H   34
-#define ABOUT_Y         406
-#define ABOUT_H          14
-#define CONTENT_TOTAL   (ABOUT_Y + ABOUT_H)
-#define MAX_SCROLL      ((CONTENT_TOTAL > SCREEN_H) ? (CONTENT_TOTAL - SCREEN_H) : 0)
+// ── Content layout: merged settings card + button group ──
+#define SCARD_Y         52
+#define ROW_H           48
+#define SCARD_H        (ROW_H * 5)   // 240px — 5 rows
+#define BTN_H           38
+#define BTN_GAP         10
+#define BTN_START_Y    (SCARD_Y + SCARD_H + 20)              // 264
+#define UPDATE_BTN_Y    BTN_START_Y                            // 264
+#define UPDATE_BTN_H    BTN_H
+#define RESET_BTN_Y    (BTN_START_Y + BTN_H + BTN_GAP)        // 312
+#define RESET_BTN_H     BTN_H
+#define TUTORIAL_BTN_Y (BTN_START_Y + 2 * (BTN_H + BTN_GAP))  // 360
+#define TUTORIAL_BTN_H  BTN_H
+#define ABOUT_Y        (TUTORIAL_BTN_Y + BTN_H + 16)           // 414
+#define ABOUT_H         14
+#define CONTENT_TOTAL  (ABOUT_Y + ABOUT_H)                     // 428
+#define MAX_SCROLL     ((CONTENT_TOTAL > SCREEN_H) ? (CONTENT_TOTAL - SCREEN_H) : 0)
 
 // ── State ──
 static int scrollY = 0;
@@ -99,115 +97,135 @@ void settingsDraw() {
 
     settScr.fillSprite(Colors::BG_BASE);
 
-    // Clip to scrollable content area
-    settScr.setClipRect(0, CONTENT_Y, SCREEN_W, VISIBLE_H);
-
     // ══════════════════════════════════════
-    //  DISPLAY CARD (Formato hora)
+    //  MERGED SETTINGS CARD (4 rows + dividers)
     // ══════════════════════════════════════
-    if (isVisible(DISPLAY_CARD_Y, DISPLAY_CARD_H)) {
-        int cy = DISPLAY_CARD_Y - scrollY;
+    int cy = SCARD_Y - scrollY;
+    drawGlassCard(settScr, MARGIN, cy, CARD_W, SCARD_H, CARD_R);
 
-        drawGlassCard(settScr, MARGIN, cy, CARD_W, DISPLAY_CARD_H, CARD_R);
+    const int PAD = 16;               // Internal card padding
+    const int toggleX = MARGIN + CARD_W - 44 - PAD;  // 404
 
-        // "Formato hora" + toggle
+    // ── Row 0: Formato hora ──
+    {
+        int rcy = cy + ROW_H / 2;
         settScr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
         settScr.setTextDatum(lgfx::middle_left);
-        settScr.drawString("Formato hora", MARGIN + 16, cy + DISPLAY_CARD_H / 2 + 8, &Satoshi12);
+        settScr.drawString("Formato hora", MARGIN + PAD, rcy, &Satoshi12);
+
         bool is24h = nvsGet24hFormat();
-        drawToggle(settScr, MARGIN + CARD_W - 44 - 16, cy + (DISPLAY_CARD_H - 24) / 2 + 8, is24h);
-        // Label: "24h" or "12h"
         settScr.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
         settScr.setTextDatum(lgfx::middle_right);
-        settScr.drawString(is24h ? "24h" : "12h", MARGIN + CARD_W - 44 - 24, cy + DISPLAY_CARD_H / 2 + 8, &Satoshi9);
+        settScr.drawString(is24h ? "24h" : "12h", toggleX - 8, rcy, &Satoshi9);
+        drawToggle(settScr, toggleX, rcy - 12, is24h);
     }
 
-    // ══════════════════════════════════════
-    //  PRO CARD
-    // ══════════════════════════════════════
-    if (isVisible(PRO_CARD_Y, PRO_CARD_H)) {
-        int cy = PRO_CARD_Y - scrollY;
+    // Divider
+    settScr.drawFastHLine(MARGIN + PAD, cy + ROW_H, CARD_W - PAD * 2, Colors::DIVIDER);
 
-        drawGlassCard(settScr, MARGIN, cy, CARD_W, PRO_CARD_H, CARD_R);
-
+    // ── Row 1: Modo Pro ──
+    {
+        int rcy = cy + ROW_H + ROW_H / 2;
         bool proOn = nvsGetProMode();
+
         settScr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
         settScr.setTextDatum(lgfx::middle_left);
-        settScr.drawString("Modo Pro", MARGIN + 16, cy + PRO_CARD_H / 2, &Satoshi12);
+        settScr.drawString("Modo Pro", MARGIN + PAD, rcy, &Satoshi12);
 
         settScr.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
         settScr.setTextDatum(lgfx::middle_left);
-        settScr.drawString("Pares y Predicciones", MARGIN + 130, cy + PRO_CARD_H / 2, &Satoshi9);
+        settScr.drawString("Pares y Predicciones", MARGIN + 130, rcy, &Satoshi9);
 
-        drawToggle(settScr, MARGIN + CARD_W - 44 - 16, cy + (PRO_CARD_H - 24) / 2, proOn);
+        drawToggle(settScr, toggleX, rcy - 12, proOn);
     }
 
-    // ══════════════════════════════════════
-    //  LAYOUT CARD
-    // ══════════════════════════════════════
-    if (isVisible(LAYOUT_CARD_Y, LAYOUT_CARD_H)) {
-        int cy = LAYOUT_CARD_Y - scrollY;
+    // Divider
+    settScr.drawFastHLine(MARGIN + PAD, cy + ROW_H * 2, CARD_W - PAD * 2, Colors::DIVIDER);
 
-        drawGlassCard(settScr, MARGIN, cy, CARD_W, LAYOUT_CARD_H, CARD_R);
+    // ── Row 2: Vista dashboard ──
+    {
+        int rcy = cy + ROW_H * 2 + ROW_H / 2;
 
         settScr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
         settScr.setTextDatum(lgfx::middle_left);
-        settScr.drawString("Vista del dashboard", MARGIN + 16, cy + LAYOUT_CARD_H / 2, &Satoshi12);
+        settScr.drawString("Vista del dashboard", MARGIN + PAD, rcy, &Satoshi12);
 
-        // Current layout name (tappable)
         uint8_t layout = nvsGetLayout();
         settScr.setTextColor(Colors::LEMON_GREEN, Colors::BG_CARD);
         settScr.setTextDatum(lgfx::middle_right);
-        settScr.drawString(layoutNames[layout], MARGIN + CARD_W - 16, cy + LAYOUT_CARD_H / 2, &SatoshiMedium18);
+        settScr.drawString(layoutNames[layout], MARGIN + CARD_W - PAD, rcy, &SatoshiMedium18);
     }
 
-    // ══════════════════════════════════════
-    //  WIFI CARD
-    // ══════════════════════════════════════
-    if (isVisible(WIFI_CARD_Y, WIFI_CARD_H)) {
-        int cy = WIFI_CARD_Y - scrollY;
+    // Divider
+    settScr.drawFastHLine(MARGIN + PAD, cy + ROW_H * 3, CARD_W - PAD * 2, Colors::DIVIDER);
 
-        drawGlassCard(settScr, MARGIN, cy, CARD_W, WIFI_CARD_H, CARD_R);
-
-        settScr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
-        settScr.setTextDatum(lgfx::top_left);
-        settScr.drawString("WiFi", MARGIN + 16, cy + 8, &Satoshi9);
+    // ── Row 3: WiFi ──
+    {
+        int rcy = cy + ROW_H * 3 + ROW_H / 2;
 
         if (wifiConnected()) {
+            settScr.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+            settScr.setTextDatum(lgfx::middle_left);
+            settScr.drawString("WiFi", MARGIN + PAD, rcy - 10, &Satoshi9);
+
             settScr.setTextColor(Colors::LEMON_GREEN, Colors::BG_CARD);
-            settScr.setTextDatum(lgfx::top_left);
-            settScr.drawString(wifiSSID(), MARGIN + 16, cy + 20, &Satoshi12);
+            settScr.setTextDatum(lgfx::middle_left);
+            settScr.drawString(wifiSSID(), MARGIN + PAD, rcy + 8, &Satoshi12);
 
             char rssiBuf[24];
             snprintf(rssiBuf, sizeof(rssiBuf), "%d dBm", (int)wifiRSSI());
             settScr.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
-            settScr.setTextDatum(lgfx::top_right);
-            settScr.drawString(rssiBuf, MARGIN + CARD_W - 16, cy + 8, &Satoshi9);
+            settScr.setTextDatum(lgfx::middle_right);
+            settScr.drawString(rssiBuf, MARGIN + CARD_W - PAD, rcy, &Satoshi9);
         } else {
+            settScr.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+            settScr.setTextDatum(lgfx::middle_left);
+            settScr.drawString("WiFi", MARGIN + PAD, rcy - 10, &Satoshi9);
+
             settScr.setTextColor(Colors::NEGATIVE, Colors::BG_CARD);
-            settScr.setTextDatum(lgfx::top_left);
-            settScr.drawString("Desconectado", MARGIN + 16, cy + 20, &Satoshi12);
+            settScr.setTextDatum(lgfx::middle_left);
+            settScr.drawString("Desconectado", MARGIN + PAD, rcy + 8, &Satoshi12);
         }
     }
 
+    // Divider
+    settScr.drawFastHLine(MARGIN + PAD, cy + ROW_H * 4, CARD_W - PAD * 2, Colors::DIVIDER);
+
+    // ── Row 4: Sonido ──
+    {
+        int rcy = cy + ROW_H * 4 + ROW_H / 2;
+        bool soundOn = audioIsEnabled();
+
+        settScr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
+        settScr.setTextDatum(lgfx::middle_left);
+        settScr.drawString("Sonido", MARGIN + PAD, rcy, &Satoshi12);
+
+        drawToggle(settScr, toggleX, rcy - 12, soundOn);
+    }
+
     // ══════════════════════════════════════
-    //  UPDATE BUTTON (green outline)
+    //  BUTTONS
     // ══════════════════════════════════════
-    if (isVisible(UPDATE_BTN_Y, UPDATE_BTN_H)) {
+
+    // ── Update button (green outline) ──
+    {
         int by = UPDATE_BTN_Y - scrollY;
-        settScr.fillSmoothRoundRect(MARGIN, by, CARD_W, UPDATE_BTN_H, 12, Colors::BG_SURFACE);
-        settScr.drawRoundRect(MARGIN, by, CARD_W, UPDATE_BTN_H, 12, Colors::LEMON_GREEN);
+        settScr.fillSmoothRoundRect(MARGIN, by, CARD_W, BTN_H, 12, Colors::BG_SURFACE);
+        settScr.drawRoundRect(MARGIN, by, CARD_W, BTN_H, 12, Colors::LEMON_GREEN);
 
         if (otaFlashing) {
             settScr.setTextColor(Colors::SOLAR, Colors::BG_SURFACE);
             settScr.setTextDatum(lgfx::middle_center);
-            settScr.drawString("Actualizando...", MARGIN + CARD_W / 2, by + UPDATE_BTN_H / 2, &Satoshi12);
+            settScr.drawString("Actualizando...", MARGIN + CARD_W / 2, by + BTN_H / 2, &Satoshi12);
         } else if (otaChecked && otaResult.available) {
+            // Filled green button when update is available
+            settScr.fillSmoothRoundRect(MARGIN, by, CARD_W, BTN_H, 12, Colors::DARK_GREEN);
+            settScr.drawRoundRect(MARGIN, by, CARD_W, BTN_H, 12, Colors::LEMON_GREEN);
             char buf[48];
             snprintf(buf, sizeof(buf), "Actualizar a v%s", otaResult.version);
-            settScr.setTextColor(Colors::LEMON_GREEN, Colors::BG_SURFACE);
+            settScr.setTextColor(Colors::TEXT_PRIMARY, Colors::DARK_GREEN);
             settScr.setTextDatum(lgfx::middle_center);
-            settScr.drawString(buf, MARGIN + CARD_W / 2, by + UPDATE_BTN_H / 2, &Satoshi12);
+            settScr.drawString(buf, MARGIN + CARD_W / 2, by + BTN_H / 2, &SatoshiMedium18);
         } else if (otaChecked && !otaResult.available) {
             char statusBuf[48];
             if (otaResult.httpCode != 200) {
@@ -218,52 +236,47 @@ void settingsDraw() {
                 settScr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_SURFACE);
             }
             settScr.setTextDatum(lgfx::middle_center);
-            settScr.drawString(statusBuf, MARGIN + CARD_W / 2, by + UPDATE_BTN_H / 2, &Satoshi12);
+            settScr.drawString(statusBuf, MARGIN + CARD_W / 2, by + BTN_H / 2, &Satoshi12);
         } else if (otaAvailableOnBoot && !otaChecked) {
-            // Boot check found an update — show green dot + text
-            settScr.fillCircle(MARGIN + 20, by + UPDATE_BTN_H / 2, 4, Colors::LEMON_GREEN);
+            settScr.fillCircle(MARGIN + 20, by + BTN_H / 2, 4, Colors::LEMON_GREEN);
             settScr.setTextColor(Colors::LEMON_GREEN, Colors::BG_SURFACE);
             settScr.setTextDatum(lgfx::middle_center);
-            settScr.drawString("Actualizacion disponible", MARGIN + CARD_W / 2, by + UPDATE_BTN_H / 2, &Satoshi12);
+            settScr.drawString("Actualizacion disponible", MARGIN + CARD_W / 2, by + BTN_H / 2, &Satoshi12);
         } else {
             settScr.setTextColor(Colors::LEMON_GREEN, Colors::BG_SURFACE);
             settScr.setTextDatum(lgfx::middle_center);
-            settScr.drawString("Buscar actualizaciones", MARGIN + CARD_W / 2, by + UPDATE_BTN_H / 2, &Satoshi12);
+            settScr.drawString("Buscar actualizaciones", MARGIN + CARD_W / 2, by + BTN_H / 2, &Satoshi12);
         }
     }
 
-    // ══════════════════════════════════════
-    //  RESET WIFI BUTTON (red outline)
-    // ══════════════════════════════════════
-    if (isVisible(RESET_BTN_Y, RESET_BTN_H)) {
+    // ── Reset WiFi button (red outline) ──
+    {
         int by = RESET_BTN_Y - scrollY;
-        settScr.fillSmoothRoundRect(MARGIN, by, CARD_W, RESET_BTN_H, 12, Colors::BG_SURFACE);
+        settScr.fillSmoothRoundRect(MARGIN, by, CARD_W, BTN_H, 12, Colors::BG_SURFACE);
         bool confirmActive = isResetWifiConfirmActive();
         uint16_t borderColor = confirmActive ? Colors::SOLAR : Colors::NEGATIVE;
         uint16_t textColor = confirmActive ? Colors::SOLAR : Colors::NEGATIVE;
-        settScr.drawRoundRect(MARGIN, by, CARD_W, RESET_BTN_H, 12, borderColor);
+        settScr.drawRoundRect(MARGIN, by, CARD_W, BTN_H, 12, borderColor);
         settScr.setTextColor(textColor, Colors::BG_SURFACE);
         settScr.setTextDatum(lgfx::middle_center);
         settScr.drawString(confirmActive ? "Confirmar reset WiFi" : "Resetear WiFi",
-                           MARGIN + CARD_W / 2, by + RESET_BTN_H / 2, &Satoshi12);
+                           MARGIN + CARD_W / 2, by + BTN_H / 2, &Satoshi12);
     }
 
-    // ══════════════════════════════════════
-    //  TUTORIAL BUTTON (neutral outline)
-    // ══════════════════════════════════════
-    if (isVisible(TUTORIAL_BTN_Y, TUTORIAL_BTN_H)) {
+    // ── Tutorial button (neutral outline) ──
+    {
         int by = TUTORIAL_BTN_Y - scrollY;
-        settScr.fillSmoothRoundRect(MARGIN, by, CARD_W, TUTORIAL_BTN_H, 12, Colors::BG_SURFACE);
-        settScr.drawRoundRect(MARGIN, by, CARD_W, TUTORIAL_BTN_H, 12, Colors::TEXT_SECONDARY);
+        settScr.fillSmoothRoundRect(MARGIN, by, CARD_W, BTN_H, 12, Colors::BG_SURFACE);
+        settScr.drawRoundRect(MARGIN, by, CARD_W, BTN_H, 12, Colors::TEXT_TERTIARY);
         settScr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_SURFACE);
         settScr.setTextDatum(lgfx::middle_center);
-        settScr.drawString("Ver tutorial", MARGIN + CARD_W / 2, by + TUTORIAL_BTN_H / 2, &Satoshi12);
+        settScr.drawString("Ver tutorial", MARGIN + CARD_W / 2, by + BTN_H / 2, &Satoshi12);
     }
 
     // ══════════════════════════════════════
     //  ABOUT
     // ══════════════════════════════════════
-    if (isVisible(ABOUT_Y, ABOUT_H)) {
+    {
         int ay = ABOUT_Y - scrollY;
         unsigned long sec = millis() / 1000;
         char verBuf[48];
@@ -273,11 +286,8 @@ void settingsDraw() {
         settScr.drawString(verBuf, SCREEN_W / 2, ay, &Satoshi9);
     }
 
-    // Clear clip rect
-    settScr.clearClipRect();
-
     // ══════════════════════════════════════
-    //  FIXED HEADER (drawn on top, outside clip)
+    //  FIXED HEADER (drawn on top)
     // ══════════════════════════════════════
     settScr.fillRect(0, 0, SCREEN_W, HEADER_H, Colors::BG_BASE);
     settScr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_BASE);
@@ -349,27 +359,18 @@ void settingsHandleTouch(const TouchEvent& evt) {
     // Convert touch Y to content Y (add scrollY)
     int cy = ty + scrollY;
 
-    // ══════════ DISPLAY CARD ══════════
-
-    // Time format toggle (right side of display card)
-    int toggleX = MARGIN + CARD_W - 44 - 16;
-    int toggleY = DISPLAY_CARD_Y + (DISPLAY_CARD_H - 24) / 2 + 8;
-    if (touchInRect(tx, cy, toggleX - 10, toggleY - 4, 64, 32)) {
-        bool cur = nvsGet24hFormat();
-        nvsSet24hFormat(!cur);
+    // ══════════ ROW 0: Formato hora (full row tap) ══════════
+    if (touchInRect(tx, cy, MARGIN, SCARD_Y, CARD_W, ROW_H)) {
+        nvsSet24hFormat(!nvsGet24hFormat());
         settingsDraw();
         return;
     }
 
-    // ══════════ PRO CARD ══════════
-    // ══════════ LAYOUT CARD ══════════
-    int proToggleX = MARGIN + CARD_W - 44 - 16;
-    int proToggleY = PRO_CARD_Y + (PRO_CARD_H - 24) / 2;
-    if (touchInRect(tx, cy, proToggleX - 10, proToggleY - 4, 64, 32)) {
+    // ══════════ ROW 1: Modo Pro (full row tap) ══════════
+    if (touchInRect(tx, cy, MARGIN, SCARD_Y + ROW_H, CARD_W, ROW_H)) {
         bool cur = nvsGetProMode();
         nvsSetProMode(!cur);
         if (!cur && !nvsGetProTutDone()) {
-            // Turned ON for first time — auto-navigate to dashboard + start tutorial
             tutorialStartPro();
             scrollY = 0;
             otaChecked = false;
@@ -382,7 +383,8 @@ void settingsHandleTouch(const TouchEvent& evt) {
         return;
     }
 
-    if (touchInRect(tx, cy, MARGIN, LAYOUT_CARD_Y, CARD_W, LAYOUT_CARD_H)) {
+    // ══════════ ROW 2: Layout (full row tap) ══════════
+    if (touchInRect(tx, cy, MARGIN, SCARD_Y + ROW_H * 2, CARD_W, ROW_H)) {
         uint8_t cur = nvsGetLayout();
         uint8_t next = (cur + 1) % 2;
         nvsSetLayout(next);
@@ -391,8 +393,17 @@ void settingsHandleTouch(const TouchEvent& evt) {
         return;
     }
 
+    // ══════════ ROW 4: Sonido (full row tap) ══════════
+    if (touchInRect(tx, cy, MARGIN, SCARD_Y + ROW_H * 4, CARD_W, ROW_H)) {
+        bool cur = audioIsEnabled();
+        audioSetEnabled(!cur);
+        nvsSetSoundEnabled(!cur);
+        settingsDraw();
+        return;
+    }
+
     // ══════════ UPDATE BUTTON ══════════
-    if (touchInRect(tx, cy, MARGIN, UPDATE_BTN_Y, CARD_W, UPDATE_BTN_H)) {
+    if (touchInRect(tx, cy, MARGIN, UPDATE_BTN_Y, CARD_W, BTN_H)) {
         if (otaChecked && otaResult.available && !otaFlashing) {
             otaFlashing = true;
             settingsDraw();  // Show "Actualizando..." on the button

@@ -21,6 +21,7 @@
 #include "tutorial_overlay.h"
 #include "ui_settings.h"
 #include "ota_manager.h"
+#include <esp_task_wdt.h>
 #include <cmath>
 #include <time.h>
 
@@ -63,8 +64,43 @@ static char polyOutcomeMsg[BTC_PERIOD_COUNT][64] = {};
 static const uint32_t POLY_EPOCH_TS_MIN = 1700000000UL;  // 2023-11-14 UTC
 static const uint32_t POLY_ACTIVE_MAX_AGE_SEC = 20UL * 3600UL;  // short-term bets should settle quickly
 
+// ── Prediction history ring buffer ──
+static PredHistoryEntry predHistory[PRED_HISTORY_MAX];
+static uint8_t predHistHead = 0, predHistCount = 0;
+
+static void predHistPush(const PredHistoryEntry& e) {
+    predHistory[predHistHead] = e;
+    predHistHead = (predHistHead + 1) % PRED_HISTORY_MAX;
+    if (predHistCount < PRED_HISTORY_MAX) predHistCount++;
+}
+
+// ── Swipe animation state ──
+static ValueAnimator predSwipeAnim;
+static int predSwipeDir = 0;    // -1=swipe right, +1=swipe left, 0=none
+
+// ── Countdown beep state (fire once per market) ──
+static bool countdownBeepFired = false;
+
 static const char* currentPolyOutcomeMsg() {
     return polyOutcomeMsg[selectedPeriod][0] ? polyOutcomeMsg[selectedPeriod] : nullptr;
+}
+
+static uint32_t currentPolyStepSec() {
+    switch (selectedPeriod) {
+        case 0: return 300;    // 5m
+        case 1: return 900;    // 15m
+        case 2: return 3600;   // 1h
+        case 3: return 14400;  // 4h
+        default: return 300;
+    }
+}
+
+// Helper: draw prediction UI with all current state (avoids repeating 11 args)
+static void drawPredictionUI(bool loading) {
+    dashboardDrawPrediction(polyMarkets, polyMarketCount, polySelectedIdx,
+                            &activePred, polyStats, loading, currentPolyOutcomeMsg(),
+                            state.btc.usd, currentPolyStepSec(),
+                            predHistory, predHistHead, predHistCount);
 }
 
 static void loadPolyStatsForSelectedPeriod() {
@@ -166,10 +202,25 @@ static void resolveActivePredictionIfClosed() {
     }
 
     snprintf(polyOutcomeMsg[statsPeriod], sizeof(polyOutcomeMsg[statsPeriod]),
-             "%s - gano %s - tu voto: %s",
-             userWon ? "Ganaste" : "Perdiste",
-             yesWon ? "SUBE" : "BAJA",
-             activePred.chosenYes ? "SUBE" : "BAJA");
+             "%s (%s gano)",
+             userWon ? "Ganaste!" : "Perdiste",
+             yesWon ? "SUBE" : "BAJA");
+
+    // Update prediction history: find the pending entry and set result
+    for (uint8_t i = 0; i < predHistCount; i++) {
+        int idx = ((int)predHistHead - 1 - i + PRED_HISTORY_MAX) % PRED_HISTORY_MAX;
+        if (predHistory[idx].result == 0 &&
+            predHistory[idx].timestamp == activePred.timestamp) {
+            predHistory[idx].result = userWon ? 1 : 2;
+            break;
+        }
+    }
+    nvsSavePredHistory(predHistory, predHistHead, predHistCount);
+
+    // Sound feedback on resolution
+    if (audioIsEnabled()) {
+        userWon ? playAlertUp() : playAlertDown();
+    }
 
     char toastBuf[48];
     snprintf(toastBuf, sizeof(toastBuf), "%s - gano %s",
@@ -219,6 +270,7 @@ static bool z2DrawnThisFrame = false;
 static float morphOldNorm[MORPH_POINTS];
 static float morphNewNorm[MORPH_POINTS];
 static float morphNewMin, morphNewMax;
+static float morphOldMin, morphOldMax;
 static uint32_t morphStartMs;
 static bool morphActive = false;
 static SparklineData morphedResult;
@@ -227,6 +279,7 @@ static SparklineData morphedResult;
 static float dollarMorphOldNorm[MORPH_POINTS];
 static float dollarMorphNewNorm[MORPH_POINTS];
 static float dollarMorphNewMin, dollarMorphNewMax;
+static float dollarMorphOldMin, dollarMorphOldMax;
 static uint32_t dollarMorphStartMs;
 static bool dollarMorphActive = false;
 static SparklineData dollarMorphedResult;
@@ -281,14 +334,16 @@ static SparklineData& getMorphedSparkline() {
     float ease = 1.0f - (inv * inv * inv * inv * inv);  // ease-out quint
 
     morphedResult.count = MORPH_POINTS;
-    morphedResult.minVal = morphNewMin;
-    morphedResult.maxVal = morphNewMax;
-    float range = morphNewMax - morphNewMin;
+    float min = morphOldMin + ease * (morphNewMin - morphOldMin);
+    float max = morphOldMax + ease * (morphNewMax - morphOldMax);
+    float range = max - min;
     if (range < 0.01f) range = 1.0f;
+    morphedResult.minVal = min;
+    morphedResult.maxVal = max;
 
     for (int i = 0; i < MORPH_POINTS; i++) {
         float norm = morphOldNorm[i] + ease * (morphNewNorm[i] - morphOldNorm[i]);
-        morphedResult.points[i] = morphNewMin + norm * range;
+        morphedResult.points[i] = min + norm * range;
     }
     morphedResult.valid = true;
     return morphedResult;
@@ -305,14 +360,16 @@ static SparklineData& getDollarMorphedSparkline() {
     float ease = 1.0f - (inv * inv * inv * inv * inv);  // ease-out quint
 
     dollarMorphedResult.count = MORPH_POINTS;
-    dollarMorphedResult.minVal = dollarMorphNewMin;
-    dollarMorphedResult.maxVal = dollarMorphNewMax;
-    float range = dollarMorphNewMax - dollarMorphNewMin;
+    float min = dollarMorphOldMin + ease * (dollarMorphNewMin - dollarMorphOldMin);
+    float max = dollarMorphOldMax + ease * (dollarMorphNewMax - dollarMorphOldMax);
+    float range = max - min;
     if (range < 0.01f) range = 1.0f;
+    dollarMorphedResult.minVal = min;
+    dollarMorphedResult.maxVal = max;
 
     for (int i = 0; i < MORPH_POINTS; i++) {
         float norm = dollarMorphOldNorm[i] + ease * (dollarMorphNewNorm[i] - dollarMorphOldNorm[i]);
-        dollarMorphedResult.points[i] = dollarMorphNewMin + norm * range;
+        dollarMorphedResult.points[i] = min + norm * range;
     }
     dollarMorphedResult.valid = true;
     return dollarMorphedResult;
@@ -521,6 +578,7 @@ static void updateBtc() {
 
 static void updateSparkline() {
     if (!state.online) return;
+    esp_task_wdt_reset();
 
     // Save current sparkline for morph animation (static to avoid stack overflow)
     static SparklineData oldSpark;
@@ -627,6 +685,8 @@ static void updateSparkline() {
         }
         // Start morph animation: interpolate from old to new sparkline over 800ms
         if (oldSpark.valid && oldSpark.count >= 2 && chartStyle != CHART_CANDLE) {
+            morphOldMin = oldSpark.minVal;
+            morphOldMax = oldSpark.maxVal;
             resampleNormalize(oldSpark, morphOldNorm, MORPH_POINTS);
             resampleNormalize(state.spark, morphNewNorm, MORPH_POINTS);
             morphNewMin = state.spark.minVal;
@@ -665,6 +725,7 @@ static void updateLemon() {
 
 static void updateDollarSparkline() {
     if (!state.online || dashboardGetZ2H() <= 0) return;
+    esp_task_wdt_reset();
 
     // Save old sparkline for morph (and as fallback if fetch fails)
     static SparklineData oldDollarSpark;
@@ -683,6 +744,8 @@ static void updateDollarSparkline() {
         }
         // Start dollar morph animation
         if (oldDollarSpark.valid && oldDollarSpark.count >= 2) {
+            dollarMorphOldMin = oldDollarSpark.minVal;
+            dollarMorphOldMax = oldDollarSpark.maxVal;
             resampleNormalize(oldDollarSpark, dollarMorphOldNorm, MORPH_POINTS);
             resampleNormalize(state.lemonSpark, dollarMorphNewNorm, MORPH_POINTS);
             dollarMorphNewMin = state.lemonSpark.minVal;
@@ -734,9 +797,11 @@ static void updatePolymarket() {
     uint8_t cnt = 0;
     Serial.printf("[Poly] Fetch for period idx=%d (%s)\n",
                   selectedPeriod, BTC_PERIODS[selectedPeriod].label);
+    esp_task_wdt_reset();
     ApiResult res = fetchPolyMarkets(polyMarkets, cnt, PM_MAX_MARKETS, selectedPeriod);
 
     // Resolve against Polymarket by conditionId, independent from currently shown market/timeframe.
+    esp_task_wdt_reset();
     resolveActivePredictionIfClosed();
 
     if (res == API_OK && cnt > 0) {
@@ -748,21 +813,21 @@ static void updatePolymarket() {
                       dbg.question, dbg.yesPrice, dbg.noPrice, dbg.endDate);
 
         // Phase 1: draw immediately with current BTC price as approximate threshold
-        dashboardDrawPrediction(polyMarkets, polyMarketCount, polySelectedIdx,
-                                &activePred, polyStats, false, currentPolyOutcomeMsg(), state.btc.usd);
+        drawPredictionUI(false);
         z2DrawnThisFrame = true;
         z2Dirty = false;
         frameDirty = true;
 
-        // Phase 2: enrich with Chainlink reference price (slow ~2-5s per market)
+        // Phase 2: enrich with Chainlink reference price (skip if already cached)
         for (uint8_t i = 0; i < polyMarketCount; i++) {
+            if (polyMarkets[i].refPriceValid) continue;  // Skip if cached
+            esp_task_wdt_reset();
             enrichPolyReference(polyMarkets[i]);
         }
 
         // Redraw with real threshold if enrichment succeeded
         if (polyMarkets[polySelectedIdx].refPriceValid) {
-            dashboardDrawPrediction(polyMarkets, polyMarketCount, polySelectedIdx,
-                                    &activePred, polyStats, false, currentPolyOutcomeMsg(), state.btc.usd);
+            drawPredictionUI(false);
             z2DrawnThisFrame = true;
             z2Dirty = false;
             frameDirty = true;
@@ -772,7 +837,7 @@ static void updatePolymarket() {
         polyMarketCount = 0;
         polySelectedIdx = 0;
         polyDataLoaded = false;
-        dashboardDrawPrediction(nullptr, 0, 0, &activePred, polyStats, false, currentPolyOutcomeMsg(), state.btc.usd);
+        drawPredictionUI(false);
         z2DrawnThisFrame = true;
         z2Dirty = false;
         frameDirty = true;
@@ -821,19 +886,22 @@ static void enterPredictionMode() {
     // Resize zones: Z1 shrinks, Z2 expands
     dashboardSetPredictionLayout(true);
 
-    // Load stats and active prediction from NVS
+    // Load stats, prediction history, and active prediction from NVS
     loadPolyStatsForSelectedPeriod();
+    nvsLoadPredHistory(predHistory, predHistHead, predHistCount);
     refreshActivePredictionFromNvs(true);
+    countdownBeepFired = false;
 
     // Redraw Z1 (shrunken BTC hero) + Z2 (prediction loading)
     redrawHero();
-    dashboardDrawPrediction(nullptr, 0, 0, &activePred, polyStats, true, currentPolyOutcomeMsg(), state.btc.usd);
+    drawPredictionUI(true);
     z2DrawnThisFrame = true;
     z2Dirty = false;
     frameDirty = true;
 
     // Enable scheduler task and force first fetch
     scheduler.enable(taskPolymarket, true);
+    esp_task_wdt_reset();
     scheduler.forceRun(taskPolymarket);
 
     Serial.println("[Poly] Prediction mode entered (Z2)");
@@ -842,6 +910,7 @@ static void enterPredictionMode() {
 static void exitPredictionMode() {
     dashboardSetPredictionMode(false);
     scheduler.enable(taskPolymarket, false);
+    scheduler.setInterval(taskPolymarket, POLYMARKET_REFRESH_MS);  // Restore default interval
 
     // Restore pair selector and full period list
     dashboardSetPairSelectorEnabled(isProModeEnabled());
@@ -889,12 +958,24 @@ static void placePrediction(bool chooseYes) {
     nvsSavePolyPrediction(activePred);
     polyStats.pending = 1;
 
+    // Push to prediction history
+    PredHistoryEntry histEntry = {};
+    histEntry.timestamp = activePred.timestamp;
+    histEntry.periodIdx = activePred.periodIdx;
+    histEntry.chosenYes = activePred.chosenYes;
+    histEntry.probAtBet = activePred.probAtBet;
+    histEntry.result = 0;  // pending
+    predHistPush(histEntry);
+    nvsSavePredHistory(predHistory, predHistHead, predHistCount);
+
+    // Sound feedback
+    if (audioIsEnabled()) playPredictionPlaced();
+
     showToast(chooseYes ? "Prediccion: SUBE" : "Prediccion: BAJA");
     String t = timeReady() ? getTimeStr(nvsGet24hFormat()) : String("--:--:--");
     dashboardDrawHeader(t.c_str(), !state.online, wsBinanceConnected());
 
-    dashboardDrawPrediction(polyMarkets, polyMarketCount, polySelectedIdx,
-                            &activePred, polyStats, false, currentPolyOutcomeMsg(), state.btc.usd);
+    drawPredictionUI(false);
     z2DrawnThisFrame = true;
     z2Dirty = false;
     frameDirty = true;
@@ -912,7 +993,7 @@ static void refreshPredictionForCurrentPeriod(bool showLoading = true) {
     polySelectedIdx = 0;
 
     if (showLoading) {
-        dashboardDrawPrediction(nullptr, 0, 0, &activePred, polyStats, true, currentPolyOutcomeMsg(), state.btc.usd);
+        drawPredictionUI(true);
         z2DrawnThisFrame = true;
         z2Dirty = false;
         frameDirty = true;
@@ -956,6 +1037,7 @@ static void switchPair(uint8_t newPair) {
     frameDirty = true;
 
     // ── Network: reconnect WS + backfill (blocking but hero is already drawn) ──
+    esp_task_wdt_reset();
     switch (pair.source) {
         case PAIR_BINANCE_DIRECT:
         case PAIR_BINANCE_INVERT:
@@ -1010,8 +1092,10 @@ static void switchPair(uint8_t newPair) {
     }
 
     // Force sparkline refresh + redraw with new data
+    esp_task_wdt_reset();
     syncDashboardFilters();
     scheduler.forceRun(taskSparkline);
+    esp_task_wdt_reset();
     refreshPredictionForCurrentPeriod(true);
     z1Dirty = true;
 }
@@ -1123,7 +1207,9 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
 
                 redrawHero();
                 frameDirty = true;
+                esp_task_wdt_reset();
                 scheduler.forceRun(taskSparkline);
+                esp_task_wdt_reset();
                 refreshPredictionForCurrentPeriod(true);
             }
             return;
@@ -1153,7 +1239,9 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
             dashboardStartFlash(1);
             redrawHero();           // Immediate redraw to show flash border
             frameDirty = true;
+            esp_task_wdt_reset();
             scheduler.forceRun(taskBtc);
+            esp_task_wdt_reset();
             scheduler.forceRun(taskSparkline);
         }
         return;
@@ -1170,8 +1258,7 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
                     showToast("Prediccion borrada");
                     String t = timeReady() ? getTimeStr(nvsGet24hFormat()) : String("--:--:--");
                     dashboardDrawHeader(t.c_str(), !state.online, wsBinanceConnected());
-                    dashboardDrawPrediction(polyMarkets, polyMarketCount, polySelectedIdx,
-                                            &activePred, polyStats, false, currentPolyOutcomeMsg(), state.btc.usd);
+                    drawPredictionUI(false);
                     z2DrawnThisFrame = true;
                     z2Dirty = false;
                     frameDirty = true;
@@ -1188,20 +1275,26 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
                     return;
                 }
             }
-            // Swipe left/right: browse markets
+            // Swipe left/right: browse markets with slide animation
             if (evt.gesture == TOUCH_SWIPE_LEFT && polyMarketCount > 1) {
+                predSwipeDir = 1;
+                predSwipeAnim.set(1.0f);
+                predSwipeAnim.setTarget(0.0f, 250);
                 polySelectedIdx = (polySelectedIdx + 1) % polyMarketCount;
-                dashboardDrawPrediction(polyMarkets, polyMarketCount, polySelectedIdx,
-                                        &activePred, polyStats, false, currentPolyOutcomeMsg(), state.btc.usd);
+                countdownBeepFired = false;
+                drawPredictionUI(false);
                 z2DrawnThisFrame = true;
                 z2Dirty = false;
                 frameDirty = true;
                 return;
             }
             if (evt.gesture == TOUCH_SWIPE_RIGHT && polyMarketCount > 1) {
+                predSwipeDir = -1;
+                predSwipeAnim.set(1.0f);
+                predSwipeAnim.setTarget(0.0f, 250);
                 polySelectedIdx = (polySelectedIdx == 0) ? polyMarketCount - 1 : polySelectedIdx - 1;
-                dashboardDrawPrediction(polyMarkets, polyMarketCount, polySelectedIdx,
-                                        &activePred, polyStats, false, currentPolyOutcomeMsg(), state.btc.usd);
+                countdownBeepFired = false;
+                drawPredictionUI(false);
                 z2DrawnThisFrame = true;
                 z2Dirty = false;
                 frameDirty = true;
@@ -1245,6 +1338,7 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
                 z2DrawnThisFrame = true;
                 z2Dirty = false;
                 frameDirty = true;
+                esp_task_wdt_reset();
                 scheduler.forceRun(taskDollarSpark);
                 // If fetch failed (no morph started), force redraw with new data
                 if (!dollarMorphActive) {
@@ -1513,8 +1607,11 @@ void setup() {
         startProvisioning();
     }
 
-    playStartup();
+    if (audioIsEnabled()) playStartup();
     Serial.println("[Main] Ready");
+
+    esp_task_wdt_init(120, true);  // 120s timeout — must tolerate sequential HTTPS chains
+    esp_task_wdt_add(NULL);        // Subscribe loopTask
 }
 
 void loop() {
@@ -1522,6 +1619,8 @@ void loop() {
     delay(20);
     return;
 #endif
+
+    esp_task_wdt_reset();
 
     z1DrawnThisFrame = false;
     z2DrawnThisFrame = false;
@@ -1692,9 +1791,9 @@ void loop() {
             }
         }
 
-        // Stability mode: limit WS-driven chart redraw rate.
-        // Use chart-only partial push (~80KB) instead of full Z1 (288KB) to avoid bounce.
-        // Markers mode: slower rate (10s) because min/max shifts cause pill jitter.
+        // WS-driven chart redraw: clipped partial push (chart area only).
+        // Uses dashboardRedrawChartOnly which redraws chart in sprite then
+        // pushes only the chart clip rect (~60% less data than full Z1).
         {
             unsigned long now = millis();
             unsigned long interval = (chartStyle == CHART_MARKERS) ? 5000 : 2000;
@@ -1703,6 +1802,8 @@ void loop() {
                 wsVisualDirty = false;
                 if (!morphActive) {
                     dashboardRedrawChartOnly(state.spark, chartStyle, &state.ohlc, state.btc.ath);
+                    z1DrawnThisFrame = true;
+                    z1Dirty = false;
                 }
                 frameDirty = true;
             }
@@ -1710,9 +1811,39 @@ void loop() {
 
         scheduler.tick();
 
+        // ── Prediction countdown tick (1Hz Z2 refresh + adaptive polling + beep) ──
+        if (dashboardIsPredictionMode() && polyDataLoaded && !tutorialIsActive()) {
+            static unsigned long lastCountdownTick = 0;
+            unsigned long now = millis();
+            if (now - lastCountdownTick >= 1000) {
+                lastCountdownTick = now;
+
+                uint32_t endEp = dashboardGetPredEndEpoch();
+                if (endEp > 0) {
+                    time_t nowEpoch = time(nullptr);
+                    int32_t remainSec = (int32_t)(endEp - (uint32_t)nowEpoch);
+
+                    // Adaptive polling: speed up near market close
+                    unsigned long newInterval = POLYMARKET_REFRESH_MS;
+                    if (remainSec <= 0)       newInterval = 3000;
+                    else if (remainSec <= 15) newInterval = 3000;
+                    else if (remainSec <= 60) newInterval = 5000;
+                    scheduler.setInterval(taskPolymarket, newInterval);
+
+                    // Countdown beep when market closes
+                    if (remainSec <= 0 && !countdownBeepFired) {
+                        countdownBeepFired = true;
+                        if (audioIsEnabled()) playCountdownEnd();
+                    }
+                }
+
+                // Direct partial update — only redraws countdown strip (no flicker)
+                dashboardUpdateCountdownDirect();
+            }
+        }
+
         // Drive morph animation (~30fps during 800ms transition)
-        // First frame: full redraw to set up static elements (price, carousel, labels)
-        // Subsequent frames: chart-only partial push (~85KB vs 288KB) — less flicker
+        // Full redraw every frame to avoid ghost artifacts from partial updates.
         {
             static bool wasMorphing = false;
             if (morphActive && chartStyle != CHART_CANDLE && !tutorialIsActive()) {
@@ -1720,17 +1851,8 @@ void loop() {
                 unsigned long now = millis();
                 if (now - lastMorphFrame >= 33) {  // 30fps
                     lastMorphFrame = now;
-                    SparklineData& morphed = getMorphedSparkline();
-                    if (!wasMorphing) {
-                        // First frame: full sprite rebuild (sets up labels, price, carousel)
-                        redrawHero();
-                    } else {
-                        // Subsequent frames: chart-only partial push (no full-sprite flicker)
-                        dashboardRedrawChartOnly(morphed, chartStyle, &state.ohlc, state.btc.ath);
-                    }
+                    redrawHero();  // full sprite rebuild (uses morphed data internally)
                     frameDirty = true;
-                    // Morph just ended — mark Z1 dirty for a clean full redraw
-                    // (last morph frame was chart-only; labels/price need refresh)
                     if (!morphActive) {
                         z1Dirty = true;
                         z1DrawnThisFrame = false;
@@ -1758,6 +1880,21 @@ void loop() {
             }
         }
 
+        // Drive prediction swipe animation (~30fps during 250ms slide)
+        if (predSwipeAnim.isAnimating() && dashboardIsPredictionMode() && !tutorialIsActive()) {
+            static unsigned long lastSwipeFrame = 0;
+            unsigned long now = millis();
+            if (now - lastSwipeFrame >= 33) {
+                lastSwipeFrame = now;
+                predSwipeAnim.update();
+                // Redraw prediction UI (animation complete redraws final state)
+                drawPredictionUI(false);
+                z2DrawnThisFrame = true;
+                z2Dirty = false;
+                frameDirty = true;
+            }
+        }
+
         // ── Consolidated zone rendering (max 1 push per zone per frame) ──
         // Skip zone rendering while tutorial overlay is active (prevents flicker)
         if (!tutorialIsActive()) {
@@ -1767,8 +1904,7 @@ void loop() {
             }
             if (z2Dirty && !z2DrawnThisFrame && dashboardGetZ2H() > 0) {
                 if (dashboardIsPredictionMode()) {
-                    dashboardDrawPrediction(polyMarkets, polyMarketCount, polySelectedIdx,
-                                            &activePred, polyStats, !polyDataLoaded, currentPolyOutcomeMsg(), state.btc.usd);
+                    drawPredictionUI(!polyDataLoaded);
                 } else {
                     dashboardDrawLemonDollar(state.lemon,
                         dollarMorphActive ? &getDollarMorphedSparkline() : &state.lemonSpark,

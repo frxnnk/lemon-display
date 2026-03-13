@@ -107,8 +107,17 @@ void drawSparkline(LGFX_Sprite& spr, int x, int y, int w, int h,
 
     int bottom = y + h - 1;
 
-    // Filled area with banded vertical gradient (drawFastVLine, ~8x faster than per-pixel)
-    static const int GRAD_BANDS = 8;
+    // Per-pixel gradient fill using 256-entry LUT (zero banding)
+    static uint16_t gradLUT[256];
+    static uint16_t lutFill = 0, lutBg = 0;
+    if (lutFill != fillColor || lutBg != Colors::BG_CARD) {
+        lutFill = fillColor;
+        lutBg   = Colors::BG_CARD;
+        for (int i = 0; i < 256; i++) {
+            gradLUT[i] = lerpColor565(fillColor, Colors::BG_CARD, i / 255.0f);
+        }
+    }
+
     for (int i = 0; i < data.count - 1; i++) {
         int x0 = mapX(i);
         int x1 = mapX(i + 1);
@@ -120,14 +129,21 @@ void drawSparkline(LGFX_Sprite& spr, int x, int y, int w, int h,
             int lineY = y0 + (int)(t * (y1 - y0));
             if (lineY < bottom) {
                 int fillH = bottom - lineY;
-                for (int b = 0; b < GRAD_BANDS; b++) {
-                    int bandTop = lineY + 1 + (fillH * b) / GRAD_BANDS;
-                    int bandBot = lineY + 1 + (fillH * (b + 1)) / GRAD_BANDS;
-                    int bandH = bandBot - bandTop;
-                    if (bandH > 0) {
-                        float grad = ((float)b + 0.5f) / GRAD_BANDS;
-                        uint16_t c = lerpColor565(fillColor, Colors::BG_CARD, grad);
-                        spr.drawFastVLine(px, bandTop, bandH, c);
+                // Run-length: group consecutive pixels with same RGB565 color
+                int runStart = lineY + 1;
+                uint16_t runColor = gradLUT[0];
+                for (int py = lineY + 2; py <= bottom + 1; py++) {
+                    uint16_t c;
+                    if (py <= bottom) {
+                        int idx = ((py - lineY - 1) * 255) / fillH;
+                        c = gradLUT[idx];
+                    } else {
+                        c = runColor + 1;  // sentinel: flush last run
+                    }
+                    if (c != runColor) {
+                        spr.drawFastVLine(px, runStart, py - runStart, runColor);
+                        runStart = py;
+                        runColor = c;
                     }
                 }
             }
@@ -442,8 +458,18 @@ void drawSparklineZoomed(LGFX_Sprite& spr, int x, int y, int w, int h,
 
     int bottom = y + h - 1;
 
-    // Gradient fill (banded drawFastVLine, ~8x faster than per-pixel)
-    static const int GRAD_BANDS = 8;
+    // Per-pixel gradient fill using shared LUT (zero banding)
+    // LUT is initialized by drawSparkline — same fill/bg colors
+    static uint16_t gradLUTz[256];
+    static uint16_t lutFillZ = 0, lutBgZ = 0;
+    if (lutFillZ != fillColor || lutBgZ != Colors::BG_CARD) {
+        lutFillZ = fillColor;
+        lutBgZ   = Colors::BG_CARD;
+        for (int j = 0; j < 256; j++) {
+            gradLUTz[j] = lerpColor565(fillColor, Colors::BG_CARD, j / 255.0f);
+        }
+    }
+
     for (int i = startIdx; i < endIdx; i++) {
         int x0 = mapX(i);
         int x1 = mapX(i + 1);
@@ -455,14 +481,20 @@ void drawSparklineZoomed(LGFX_Sprite& spr, int x, int y, int w, int h,
             int lineY = y0 + (int)(t * (y1 - y0));
             if (lineY < bottom) {
                 int fillH = bottom - lineY;
-                for (int b = 0; b < GRAD_BANDS; b++) {
-                    int bandTop = lineY + 1 + (fillH * b) / GRAD_BANDS;
-                    int bandBot = lineY + 1 + (fillH * (b + 1)) / GRAD_BANDS;
-                    int bandH = bandBot - bandTop;
-                    if (bandH > 0) {
-                        float grad = ((float)b + 0.5f) / GRAD_BANDS;
-                        uint16_t c = lerpColor565(fillColor, Colors::BG_CARD, grad);
-                        spr.drawFastVLine(px, bandTop, bandH, c);
+                int runStart = lineY + 1;
+                uint16_t runColor = gradLUTz[0];
+                for (int py = lineY + 2; py <= bottom + 1; py++) {
+                    uint16_t c;
+                    if (py <= bottom) {
+                        int idx = ((py - lineY - 1) * 255) / fillH;
+                        c = gradLUTz[idx];
+                    } else {
+                        c = runColor + 1;
+                    }
+                    if (c != runColor) {
+                        spr.drawFastVLine(px, runStart, py - runStart, runColor);
+                        runStart = py;
+                        runColor = c;
                     }
                 }
             }
@@ -941,23 +973,35 @@ void drawProbabilityBar(LGFX_Sprite& spr, int x, int y, int w, int h, float yesP
     }
     spr.drawRoundRect(x, y, w, h, r, Colors::CARD_BORDER);
 
-    // Labels
-    char yesBuf[12], noBuf[12];
-    snprintf(yesBuf, sizeof(yesBuf), "SUBE %.0f%%", yesProb * 100);
-    snprintf(noBuf, sizeof(noBuf), "BAJA %.0f%%", noProb * 100);
-
+    // Adaptive labels: full (>58px), short (36-58px), none (<36px)
     int cy = y + h / 2;
 
     if (yesW > 58) {
+        char yesBuf[16];
+        snprintf(yesBuf, sizeof(yesBuf), "SUBE %.0f%%", yesProb * 100);
         spr.setTextColor(Colors::POSITIVE, Colors::POLY_YES_BG);
         spr.setTextDatum(lgfx::middle_center);
         spr.drawString(yesBuf, x + yesW / 2, cy, &Satoshi12);
+    } else if (yesW >= 36) {
+        char yesBuf[8];
+        snprintf(yesBuf, sizeof(yesBuf), "%.0f%%", yesProb * 100);
+        spr.setTextColor(Colors::POSITIVE, Colors::POLY_YES_BG);
+        spr.setTextDatum(lgfx::middle_center);
+        spr.drawString(yesBuf, x + yesW / 2, cy, &Satoshi9);
     }
 
     if (noW > 58) {
+        char noBuf[16];
+        snprintf(noBuf, sizeof(noBuf), "BAJA %.0f%%", noProb * 100);
         spr.setTextColor(Colors::NEGATIVE, Colors::POLY_NO_BG);
         spr.setTextDatum(lgfx::middle_center);
         spr.drawString(noBuf, x + yesW + noW / 2, cy, &Satoshi12);
+    } else if (noW >= 36) {
+        char noBuf[8];
+        snprintf(noBuf, sizeof(noBuf), "%.0f%%", noProb * 100);
+        spr.setTextColor(Colors::NEGATIVE, Colors::POLY_NO_BG);
+        spr.setTextDatum(lgfx::middle_center);
+        spr.drawString(noBuf, x + yesW + noW / 2, cy, &Satoshi9);
     }
 }
 

@@ -38,6 +38,9 @@ ApiResult fetchPolyMarkets(PolyMarket* out, uint8_t& count, uint8_t limit = 3,
                            uint8_t btcPeriod = 4);
 ApiResult fetchPolyMarketByConditionId(const char* conditionId, PolyMarket& out);
 
+// Parse ISO 8601 "YYYY-MM-DDTHH:MM:SSZ" → UTC epoch seconds
+uint32_t isoToEpoch(const char* iso);
+
 // Enrich a market with Chainlink BTC/USD reference price at its start time.
 // Separate from fetchPolyMarkets so UI can render immediately while this loads.
 void enrichPolyReference(PolyMarket& pm);

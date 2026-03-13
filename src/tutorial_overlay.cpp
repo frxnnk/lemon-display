@@ -58,22 +58,22 @@ static const TutStep STEPS_TEMPLATE[TUT_STEP_COUNT] = {
       "Bitcoin en tiempo real.\nSe actualiza solo.",
       {16, 48, 448, 80}, TIP_BELOW, TUT_TAP, false },
 
-    // 2: Period carousel
+    // 2: Period carousel (CAROUSEL_X=360, CAROUSEL_W=90, screen coords)
     { "Temporalidad",
       "Desliza arriba o abajo\npara cambiar el periodo.",
-      {374, 72, 90, 130}, TIP_BELOW, TUT_SWIPE_V, false },
+      {358, 50, 94, 114}, TIP_BELOW, TUT_SWIPE_V, false },
 
-    // 3: Chart area (clip to Z1 bottom: Z1_Y+z1H=288 in compact)
+    // 3: Chart area (Y=148 fixed, H resolved at runtime from z1H)
     { "Grafico",
       "Toca el grafico para cambiar\nentre linea y velas.",
-      {16, 148, 448, 138}, TIP_ABOVE, TUT_TAP_ZONE, false },
+      {16, 148, 448, 0}, TIP_BELOW, TUT_TAP_ZONE, false },
 
     // ── Pro-only steps (4-6) ──
 
-    // 4: More timeframes (pro)
+    // 4: More timeframes (pro, same carousel rect as step 2)
     { "Mas periodos",
       "Ahora tenes 7 periodos.\nDesliza para explorarlos.",
-      {374, 72, 90, 130}, TIP_BELOW, TUT_SWIPE_V, true },
+      {358, 50, 94, 114}, TIP_BELOW, TUT_SWIPE_V, true },
 
     // 5: Pair selector (pro) — pair label at (30, 58) in screen coords
     { "Selector de par",
@@ -98,9 +98,13 @@ static const TutStep STEPS_TEMPLATE[TUT_STEP_COUNT] = {
       {16, 0, 448, 44}, TIP_BELOW, TUT_LONG_PRESS_Z0, false },
 };
 
-// Get step with runtime z2 values resolved (steps 6 and 7 use z2)
+// Get step with runtime zone values resolved
 static TutStep getStep(uint8_t idx) {
     TutStep s = STEPS_TEMPLATE[idx];
+    if (idx == 3) {
+        // Chart area: Y=148 (fixed), H = Z1 bottom - 148
+        s.spot.h = (int16_t)(48 + dashboardGetZ1H() - 148);  // Z1_Y=48
+    }
     if (idx == 6 || idx == 7) {
         s.spot.y = (int16_t)dashboardGetZ2Y();
         s.spot.h = (int16_t)dashboardGetZ2H();

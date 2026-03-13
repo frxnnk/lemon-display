@@ -5,6 +5,9 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include <esp_task_wdt.h>
+
+extern const char* ROOT_CAS;  // Defined in api_client.cpp
 
 // ── Circular buffer for 1-minute kline close prices ──
 static float    ringBuf[SPARKLINE_POINTS];
@@ -23,7 +26,7 @@ static bool invertMode = false;
 
 // ── WebSocket client ──
 static WebSocketsClient ws;
-static bool wsConnected = false;
+static volatile bool wsConnected = false;
 
 // ── Ring buffer helpers ──
 static void ringPush(float val) {
@@ -117,7 +120,7 @@ static void wsEvent(WStype_t type, uint8_t* payload, size_t length) {
 // ── Public API ──
 
 void wsBinanceSetup() {
-    ws.beginSSL(BINANCE_WS_HOST, BINANCE_WS_PORT, BINANCE_WS_PATH);
+    ws.beginSslWithCA(BINANCE_WS_HOST, BINANCE_WS_PORT, BINANCE_WS_PATH, ROOT_CAS);
     ws.onEvent(wsEvent);
     ws.setReconnectInterval(WS_RECONNECT_MS);
     ws.enableHeartbeat(WS_PING_MS, WS_PONG_TIMEOUT, WS_DISCONNECT_CNT);
@@ -182,10 +185,11 @@ void wsBinanceGetSparkline(SparklineData& out) {
 }
 
 bool wsBinanceBackfill() {
+    esp_task_wdt_reset();
     Serial.println("[WS] Backfill: fetching 96 x 1m klines...");
 
     WiFiClientSecure client;
-    client.setInsecure();
+    client.setCACert(ROOT_CAS);
 
     HTTPClient http;
     http.setConnectTimeout(5000);
@@ -274,7 +278,7 @@ void wsBinanceReconnect(const char* wsPath, bool invertPrices) {
     invertMode = invertPrices;
 
     // Reconnect to new stream
-    ws.beginSSL(BINANCE_WS_HOST, BINANCE_WS_PORT, wsPath);
+    ws.beginSslWithCA(BINANCE_WS_HOST, BINANCE_WS_PORT, wsPath, ROOT_CAS);
     ws.onEvent(wsEvent);
     ws.setReconnectInterval(WS_RECONNECT_MS);
     ws.enableHeartbeat(WS_PING_MS, WS_PONG_TIMEOUT, WS_DISCONNECT_CNT);
@@ -282,10 +286,11 @@ void wsBinanceReconnect(const char* wsPath, bool invertPrices) {
 }
 
 bool wsBinanceBackfillSymbol(const char* symbol, bool invert) {
+    esp_task_wdt_reset();
     Serial.printf("[WS] Backfill: fetching 96 x 1m klines for %s...\n", symbol);
 
     WiFiClientSecure client;
-    client.setInsecure();
+    client.setCACert(ROOT_CAS);
 
     HTTPClient http;
     http.setConnectTimeout(5000);

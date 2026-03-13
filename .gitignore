@@ -5,3 +5,6 @@ src/secrets.h
 __pycache__/
 .DS_Store
 tools/fonts/Satoshi_Complete/
+cacrt_all.pem
+data/cert/
+gen_crt_bundle.py

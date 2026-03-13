@@ -191,6 +191,31 @@ void nvsClearPolyPrediction() {
     Serial.println("[NVS] Poly prediction cleared");
 }
 
+// ── Prediction History ──
+
+void nvsSavePredHistory(const PredHistoryEntry* entries, uint8_t head, uint8_t count) {
+    prefs.putUChar("ph_head", head);
+    prefs.putUChar("ph_cnt", count);
+    // 10 bytes per entry: 4(timestamp) + 1(periodIdx) + 1(chosenYes) + 4(probAtBet) + 1(result) = 11
+    // Use putBytes with raw struct array (compact enough for NVS)
+    size_t sz = sizeof(PredHistoryEntry) * PRED_HISTORY_MAX;
+    prefs.putBytes("ph_data", entries, sz);
+}
+
+void nvsLoadPredHistory(PredHistoryEntry* entries, uint8_t& head, uint8_t& count) {
+    head = prefs.getUChar("ph_head", 0);
+    count = prefs.getUChar("ph_cnt", 0);
+    if (count > PRED_HISTORY_MAX) count = PRED_HISTORY_MAX;
+    if (head >= PRED_HISTORY_MAX) head = 0;
+    size_t sz = sizeof(PredHistoryEntry) * PRED_HISTORY_MAX;
+    size_t read = prefs.getBytes("ph_data", entries, sz);
+    if (read != sz) {
+        memset(entries, 0, sz);
+        head = 0;
+        count = 0;
+    }
+}
+
 // ── Factory Reset ──
 
 void nvsFactoryReset() {

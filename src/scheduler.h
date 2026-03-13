@@ -29,4 +29,7 @@ public:
 
     // Enable/disable a task
     void enable(uint8_t id, bool on);
+
+    // Change the interval of a task at runtime
+    void setInterval(uint8_t id, unsigned long ms);
 };
