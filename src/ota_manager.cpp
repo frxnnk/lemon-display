@@ -94,7 +94,7 @@ OtaInfo otaCheck(const char* repo) {
 
 bool otaFlash(const char* binUrl, void(*progressCB)(int pct)) {
     static WiFiClientSecure client;
-    client.setInsecure();  // GitHub CDN may use CAs not in ROOT_CAS
+    client.setInsecure();  // GitHub CDN uses different CAs — skip verification
 
     HTTPClient http;
     http.begin(client, binUrl);
@@ -102,51 +102,14 @@ bool otaFlash(const char* binUrl, void(*progressCB)(int pct)) {
     http.addHeader("Authorization", "Bearer " GITHUB_PAT);
 #endif
     http.addHeader("Accept", "application/octet-stream");
-    http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);  // Handle manually
+    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
     http.setTimeout(60000);
-
-    // Collect Location header for redirect handling
-    const char* hdrs[] = {"Location"};
-    http.collectHeaders(hdrs, 1);
 
     Serial.printf("[OTA] Requesting: %s\n", binUrl);
     Serial.printf("[OTA] Free heap: %d\n", ESP.getFreeHeap());
 
+    esp_task_wdt_reset();
     int code = http.GET();
-
-    // GitHub returns 302 redirect to CDN — follow manually
-    if (code == 301 || code == 302) {
-        String location = http.header("Location");
-        http.end();
-
-        if (location.length() == 0) {
-            Serial.println("[OTA] Redirect with no Location header");
-            return false;
-        }
-
-        Serial.printf("[OTA] Following redirect → %s\n", location.c_str());
-        esp_task_wdt_reset();
-
-        http.begin(client, location);
-        http.setTimeout(60000);
-        http.collectHeaders(hdrs, 1);
-        code = http.GET();
-
-        // Some CDNs do a second redirect
-        if (code == 301 || code == 302) {
-            location = http.header("Location");
-            http.end();
-            if (location.length() == 0) {
-                Serial.println("[OTA] Second redirect with no Location");
-                return false;
-            }
-            Serial.printf("[OTA] Following 2nd redirect → %s\n", location.c_str());
-            esp_task_wdt_reset();
-            http.begin(client, location);
-            http.setTimeout(60000);
-            code = http.GET();
-        }
-    }
 
     if (code != 200) {
         Serial.printf("[OTA] Download failed: HTTP %d\n", code);
