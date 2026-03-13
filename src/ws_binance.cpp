@@ -188,7 +188,7 @@ bool wsBinanceBackfill() {
     esp_task_wdt_reset();
     Serial.println("[WS] Backfill: fetching 96 x 1m klines...");
 
-    WiFiClientSecure client;
+    static WiFiClientSecure client;  // static: ~16KB TLS buffers must NOT be on 8KB stack
     client.setCACert(ROOT_CAS);
 
     HTTPClient http;
@@ -289,7 +289,7 @@ bool wsBinanceBackfillSymbol(const char* symbol, bool invert) {
     esp_task_wdt_reset();
     Serial.printf("[WS] Backfill: fetching 96 x 1m klines for %s...\n", symbol);
 
-    WiFiClientSecure client;
+    static WiFiClientSecure client;  // static: ~16KB TLS buffers must NOT be on 8KB stack
     client.setCACert(ROOT_CAS);
 
     HTTPClient http;
