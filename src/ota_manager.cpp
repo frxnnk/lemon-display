@@ -51,10 +51,10 @@ OtaInfo otaCheck(const char* repo) {
     String body = http.getString();
     http.end();
 
-    // Parse with ArduinoJson (filter: only tag_name + first asset URL)
+    // Parse with ArduinoJson (filter: only tag_name + first asset download URL)
     JsonDocument filter;
     filter["tag_name"] = true;
-    filter["assets"][0]["url"] = true;
+    filter["assets"][0]["browser_download_url"] = true;
 
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, body,
@@ -78,7 +78,7 @@ OtaInfo otaCheck(const char* repo) {
         return info;
     }
 
-    const char* assetUrl = doc["assets"][0]["url"] | (const char*)nullptr;
+    const char* assetUrl = doc["assets"][0]["browser_download_url"] | (const char*)nullptr;
     if (!assetUrl) {
         Serial.println("[OTA] No asset found in release");
         return info;
@@ -94,7 +94,7 @@ OtaInfo otaCheck(const char* repo) {
 
 bool otaFlash(const char* binUrl, void(*progressCB)(int pct)) {
     static WiFiClientSecure client;
-    client.setCACert(ROOT_CAS);
+    client.setInsecure();  // GitHub CDN may use CAs not in ROOT_CAS
 
     HTTPClient http;
     http.begin(client, binUrl);
@@ -102,15 +102,54 @@ bool otaFlash(const char* binUrl, void(*progressCB)(int pct)) {
     http.addHeader("Authorization", "Bearer " GITHUB_PAT);
 #endif
     http.addHeader("Accept", "application/octet-stream");
-    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);  // Handle manually
     http.setTimeout(60000);
+
+    // Collect Location header for redirect handling
+    const char* hdrs[] = {"Location"};
+    http.collectHeaders(hdrs, 1);
 
     Serial.printf("[OTA] Requesting: %s\n", binUrl);
     Serial.printf("[OTA] Free heap: %d\n", ESP.getFreeHeap());
 
     int code = http.GET();
+
+    // GitHub returns 302 redirect to CDN — follow manually
+    if (code == 301 || code == 302) {
+        String location = http.header("Location");
+        http.end();
+
+        if (location.length() == 0) {
+            Serial.println("[OTA] Redirect with no Location header");
+            return false;
+        }
+
+        Serial.printf("[OTA] Following redirect → %s\n", location.c_str());
+        esp_task_wdt_reset();
+
+        http.begin(client, location);
+        http.setTimeout(60000);
+        http.collectHeaders(hdrs, 1);
+        code = http.GET();
+
+        // Some CDNs do a second redirect
+        if (code == 301 || code == 302) {
+            location = http.header("Location");
+            http.end();
+            if (location.length() == 0) {
+                Serial.println("[OTA] Second redirect with no Location");
+                return false;
+            }
+            Serial.printf("[OTA] Following 2nd redirect → %s\n", location.c_str());
+            esp_task_wdt_reset();
+            http.begin(client, location);
+            http.setTimeout(60000);
+            code = http.GET();
+        }
+    }
+
     if (code != 200) {
-        Serial.printf("[OTA] Download failed: %d\n", code);
+        Serial.printf("[OTA] Download failed: HTTP %d\n", code);
         http.end();
         return false;
     }
