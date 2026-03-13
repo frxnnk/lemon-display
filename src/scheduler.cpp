@@ -35,6 +35,13 @@ void Scheduler::forceRun(uint8_t id) {
     }
 }
 
+void Scheduler::requestRun(uint8_t id) {
+    if (id >= count) return;
+    tasks[id].lastRun = 0;  // Will be due on next tick()
+    tasks[id].enabled = true;
+    Serial.printf("[Scheduler] Requested run: %s\n", tasks[id].name);
+}
+
 void Scheduler::enable(uint8_t id, bool on) {
     if (id >= count) return;
     tasks[id].enabled = on;

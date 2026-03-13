@@ -899,10 +899,9 @@ static void enterPredictionMode() {
     z2Dirty = false;
     frameDirty = true;
 
-    // Enable scheduler task and force first fetch
+    // Enable scheduler task — runs on next loop tick (non-blocking)
     scheduler.enable(taskPolymarket, true);
-    esp_task_wdt_reset();
-    scheduler.forceRun(taskPolymarket);
+    scheduler.requestRun(taskPolymarket);
 
     Serial.println("[Poly] Prediction mode entered (Z2)");
 }
@@ -1002,7 +1001,7 @@ static void refreshPredictionForCurrentPeriod(bool showLoading = true) {
         frameDirty = true;
     }
 
-    scheduler.forceRun(taskPolymarket);
+    scheduler.requestRun(taskPolymarket);  // Non-blocking — runs on next loop tick
     Serial.printf("[Poly] Refresh for period: %s (idx=%d)\n",
                   BTC_PERIODS[selectedPeriod].label, selectedPeriod);
 }

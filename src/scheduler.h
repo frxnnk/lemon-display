@@ -27,6 +27,9 @@ public:
     // Manual trigger by index (ignores interval, resets timer)
     void forceRun(uint8_t id);
 
+    // Schedule task to run on next tick() — non-blocking
+    void requestRun(uint8_t id);
+
     // Enable/disable a task
     void enable(uint8_t id, bool on);
 
