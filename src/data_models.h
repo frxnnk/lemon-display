@@ -126,3 +126,14 @@ struct PolyStats {
     uint16_t wins, losses, pending;
     uint16_t streak, bestStreak;
 };
+
+// ── Prediction history ring buffer ──
+#define PRED_HISTORY_MAX 20
+
+struct PredHistoryEntry {
+    uint32_t timestamp;
+    uint8_t  periodIdx;
+    bool     chosenYes;
+    float    probAtBet;
+    uint8_t  result;      // 0=pending, 1=won, 2=lost
+};

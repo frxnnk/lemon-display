@@ -16,3 +16,5 @@ void playAlertUp();     // Ascending two-tone: 800Hz -> 1200Hz
 void playAlertDown();   // Descending two-tone: 1200Hz -> 800Hz
 void playStartup();     // Three-note chime: C5-E5-G5
 void playTap();         // Short click feedback: 2000Hz, 30ms
+void playPredictionPlaced();  // Confirmation chirp on prediction
+void playCountdownEnd();      // Double beep at market close

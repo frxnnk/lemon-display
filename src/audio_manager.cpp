@@ -100,3 +100,13 @@ void playStartup() {
 void playTap() {
     playTone(2000, 30);
 }
+
+void playPredictionPlaced() {
+    playTone(1500, 40);
+    playTone(2000, 60);
+}
+
+void playCountdownEnd() {
+    playTone(1000, 50);
+    playTone(1000, 50);
+}

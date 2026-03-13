@@ -56,5 +56,10 @@ void     nvsLoadPolyPrediction(PolyPrediction& pred);
 void     nvsSavePolyPrediction(const PolyPrediction& pred);
 void     nvsClearPolyPrediction();
 
+// Prediction history ring buffer
+struct PredHistoryEntry;
+void     nvsSavePredHistory(const PredHistoryEntry* entries, uint8_t head, uint8_t count);
+void     nvsLoadPredHistory(PredHistoryEntry* entries, uint8_t& head, uint8_t& count);
+
 // Factory reset — erases all NVS keys
 void     nvsFactoryReset();

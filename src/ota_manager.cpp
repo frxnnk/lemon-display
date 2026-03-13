@@ -5,6 +5,10 @@
 #include <WiFiClientSecure.h>
 #include <Update.h>
 #include <WiFi.h>
+#include <ArduinoJson.h>
+#include <esp_task_wdt.h>
+
+extern const char* ROOT_CAS;  // Defined in api_client.cpp
 
 // Simple semver comparison: returns true if remote > local
 static bool isNewer(const char* remote, const char* local) {
@@ -22,7 +26,7 @@ OtaInfo otaCheck(const char* repo) {
     info.available = false;
 
     static WiFiClientSecure client;
-    client.setInsecure();
+    client.setCACert(ROOT_CAS);
 
     HTTPClient http;
     char url[256];
@@ -47,16 +51,25 @@ OtaInfo otaCheck(const char* repo) {
     String body = http.getString();
     http.end();
 
-    // Parse tag_name (e.g. "v4.1.0" or "4.1.0")
-    int tagIdx = body.indexOf("\"tag_name\"");
-    if (tagIdx < 0) return info;
-    int tagStart = body.indexOf('"', tagIdx + 10) + 1;
-    int tagEnd = body.indexOf('"', tagStart);
-    if (tagStart <= 0 || tagEnd <= tagStart) return info;
+    // Parse with ArduinoJson (filter: only tag_name + first asset URL)
+    JsonDocument filter;
+    filter["tag_name"] = true;
+    filter["assets"][0]["url"] = true;
 
-    String tag = body.substring(tagStart, tagEnd);
-    // Strip leading 'v' if present
-    const char* ver = tag.c_str();
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, body,
+        DeserializationOption::Filter(filter),
+        DeserializationOption::NestingLimit(10));
+
+    if (err) {
+        Serial.printf("[OTA] JSON parse error: %s\n", err.c_str());
+        return info;
+    }
+
+    const char* tag = doc["tag_name"] | (const char*)nullptr;
+    if (!tag) return info;
+
+    const char* ver = tag;
     if (ver[0] == 'v' || ver[0] == 'V') ver++;
     strncpy(info.version, ver, sizeof(info.version) - 1);
 
@@ -65,20 +78,13 @@ OtaInfo otaCheck(const char* repo) {
         return info;
     }
 
-    // Find API asset URL (works for private repos with token auth)
-    // Look for "url":"https://api.github.com/.../releases/assets/..."
-    int assetIdx = body.indexOf("/releases/assets/");
-    if (assetIdx < 0) {
+    const char* assetUrl = doc["assets"][0]["url"] | (const char*)nullptr;
+    if (!assetUrl) {
         Serial.println("[OTA] No asset found in release");
         return info;
     }
-    // Walk backwards to find the opening quote of this URL
-    int urlStart = body.lastIndexOf('"', assetIdx) + 1;
-    int urlEnd = body.indexOf('"', assetIdx);
-    if (urlStart <= 0 || urlEnd <= urlStart) return info;
 
-    String assetUrl = body.substring(urlStart, urlEnd);
-    strncpy(info.url, assetUrl.c_str(), sizeof(info.url) - 1);
+    strncpy(info.url, assetUrl, sizeof(info.url) - 1);
     info.available = true;
 
     Serial.printf("[OTA] Update available: %s -> %s\n", APP_VERSION, info.version);
@@ -88,7 +94,7 @@ OtaInfo otaCheck(const char* repo) {
 
 bool otaFlash(const char* binUrl, void(*progressCB)(int pct)) {
     static WiFiClientSecure client;
-    client.setInsecure();
+    client.setCACert(ROOT_CAS);
 
     HTTPClient http;
     http.begin(client, binUrl);
@@ -164,6 +170,7 @@ bool otaFlash(const char* binUrl, void(*progressCB)(int pct)) {
             lastPct = pct;
             Serial.printf("[OTA] Progress: %d%%\n", pct);
             if (progressCB) progressCB(pct);
+            esp_task_wdt_reset();
         }
     }
 
