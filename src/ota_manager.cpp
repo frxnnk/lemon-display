@@ -28,8 +28,8 @@ OtaInfo otaCheck(const char* repo) {
     static WiFiClientSecure client;
     client.setCACert(ROOT_CAS);
 
-    HTTPClient http;
-    char url[256];
+    static HTTPClient http;  // static: ~700 bytes off the 8KB stack
+    static char url[256];    // static: off the stack
     snprintf(url, sizeof(url), "https://api.github.com/repos/%s/releases/latest", repo);
 
     http.begin(client, url);
@@ -100,7 +100,7 @@ bool otaFlash(const char* binUrl, void(*progressCB)(int pct)) {
     static WiFiClientSecure client;
     client.setInsecure();
 
-    HTTPClient http;
+    static HTTPClient http;  // static: ~700 bytes off the 8KB stack
     http.begin(client, binUrl);
 #ifdef GITHUB_PAT
     http.addHeader("Authorization", "Bearer " GITHUB_PAT);

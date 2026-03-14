@@ -171,7 +171,8 @@ static bool inferYesWinner(const PolyMarket& mkt, bool& yesWon) {
 static void resolveActivePredictionIfClosed() {
     if (!refreshActivePredictionFromNvs(true)) return;
 
-    PolyMarket settled = {};
+    static PolyMarket settled;  // static: ~265 bytes off the 8KB stack
+    memset(&settled, 0, sizeof(settled));
     ApiResult res = fetchPolyMarketByConditionId(activePred.conditionId, settled);
     if (res != API_OK || !settled.closed) return;
 
@@ -483,7 +484,7 @@ static void applyModePolicyNow(bool forceSparkRefresh = false) {
             chartStyle = CHART_LINE;
         }
         if (forceSparkRefresh) {
-            scheduler.forceRun(taskSparkline);
+            scheduler.requestRun(taskSparkline);
             refreshPredictionForCurrentPeriod(true);
         }
     }
@@ -493,7 +494,7 @@ static void applyModePolicyNow(bool forceSparkRefresh = false) {
         dollarPeriod = clampedDollar;
         dollarChangePercent = NAN;
         if (forceSparkRefresh) {
-            scheduler.forceRun(taskDollarSpark);
+            scheduler.requestRun(taskDollarSpark);
         }
     }
 
@@ -1093,7 +1094,7 @@ static void switchPair(uint8_t newPair) {
     // Force sparkline refresh + redraw with new data
     esp_task_wdt_reset();
     syncDashboardFilters();
-    scheduler.forceRun(taskSparkline);
+    scheduler.requestRun(taskSparkline);
     esp_task_wdt_reset();
     refreshPredictionForCurrentPeriod(true);
     z1Dirty = true;
@@ -1207,7 +1208,7 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
                 redrawHero();
                 frameDirty = true;
                 esp_task_wdt_reset();
-                scheduler.forceRun(taskSparkline);
+                scheduler.requestRun(taskSparkline);
                 esp_task_wdt_reset();
                 refreshPredictionForCurrentPeriod(true);
             }
@@ -1227,7 +1228,7 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
             Serial.printf("[Touch] Chart style: %d\n", chartStyle);
 
             if (chartStyle == CHART_CANDLE && !state.ohlc.valid) {
-                scheduler.forceRun(taskSparkline);
+                scheduler.requestRun(taskSparkline);
             }
 
             redrawHero();
@@ -1239,9 +1240,9 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
             redrawHero();           // Immediate redraw to show flash border
             frameDirty = true;
             esp_task_wdt_reset();
-            scheduler.forceRun(taskBtc);
+            scheduler.requestRun(taskBtc);
             esp_task_wdt_reset();
-            scheduler.forceRun(taskSparkline);
+            scheduler.requestRun(taskSparkline);
         }
         return;
     }
@@ -1338,12 +1339,11 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
                 z2Dirty = false;
                 frameDirty = true;
                 esp_task_wdt_reset();
-                scheduler.forceRun(taskDollarSpark);
-                // If fetch failed (no morph started), force redraw with new data
-                if (!dollarMorphActive) {
-                    z2Dirty = true;
-                    z2DrawnThisFrame = false;
-                }
+                scheduler.requestRun(taskDollarSpark);
+                // requestRun is non-blocking — fetch happens on next tick.
+                // Mark zone dirty so it redraws when new data arrives.
+                z2Dirty = true;
+                z2DrawnThisFrame = false;
             }
             return;
         }

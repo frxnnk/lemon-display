@@ -191,7 +191,7 @@ bool wsBinanceBackfill() {
     static WiFiClientSecure client;  // static: ~16KB TLS buffers must NOT be on 8KB stack
     client.setCACert(ROOT_CAS);
 
-    HTTPClient http;
+    static HTTPClient http;  // static: ~700 bytes off the stack
     http.setConnectTimeout(5000);
     http.setTimeout(10000);
 
@@ -292,11 +292,11 @@ bool wsBinanceBackfillSymbol(const char* symbol, bool invert) {
     static WiFiClientSecure client;  // static: ~16KB TLS buffers must NOT be on 8KB stack
     client.setCACert(ROOT_CAS);
 
-    HTTPClient http;
+    static HTTPClient http;  // static: ~700 bytes off the stack
     http.setConnectTimeout(5000);
     http.setTimeout(10000);
 
-    char urlBuf[128];
+    static char urlBuf[128]; // static: off the stack
     snprintf(urlBuf, sizeof(urlBuf), "%s?symbol=%s&interval=1m&limit=96",
              BINANCE_KLINES_EP, symbol);
 
