@@ -54,7 +54,7 @@ OtaInfo otaCheck(const char* repo) {
     // Parse with ArduinoJson (filter: only tag_name + first asset download URL)
     JsonDocument filter;
     filter["tag_name"] = true;
-    filter["assets"][0]["browser_download_url"] = true;
+    filter["assets"][0]["url"] = true;  // API URL (not browser_download_url — 404 on private repos)
 
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, body,
@@ -78,11 +78,12 @@ OtaInfo otaCheck(const char* repo) {
         return info;
     }
 
-    const char* assetUrl = doc["assets"][0]["browser_download_url"] | (const char*)nullptr;
+    const char* assetUrl = doc["assets"][0]["url"] | (const char*)nullptr;
     if (!assetUrl) {
         Serial.println("[OTA] No asset found in release");
         return info;
     }
+    Serial.printf("[OTA] Asset API URL: %s\n", assetUrl);
 
     strncpy(info.url, assetUrl, sizeof(info.url) - 1);
     info.available = true;

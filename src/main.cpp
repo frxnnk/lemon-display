@@ -1036,66 +1036,31 @@ static void switchPair(uint8_t newPair) {
     redrawHero();
     frameDirty = true;
 
-    // ── Network: reconnect WS + backfill (blocking but hero is already drawn) ──
+    // ── Network: reconnect WS (lightweight, just sets up connection) ──
     esp_task_wdt_reset();
     switch (pair.source) {
         case PAIR_BINANCE_DIRECT:
         case PAIR_BINANCE_INVERT:
             wsBinanceReconnect(pair.wsPath, pair.inverted);
-            wsBinanceBackfillSymbol(pair.restSymbol, pair.inverted);
             break;
         case PAIR_DERIVED:
             if (BTC_PAIRS[0].source == PAIR_BINANCE_DIRECT) {
                 wsBinanceReconnect(BTC_PAIRS[0].wsPath, false);
-                wsBinanceBackfillSymbol(BTC_PAIRS[0].restSymbol, false);
             }
             break;
         case PAIR_GECKO_ONLY:
             wsBinanceReconnect(BTC_PAIRS[0].wsPath, false);
-            wsBinanceBackfillSymbol(BTC_PAIRS[0].restSymbol, false);
-            {
-                float price = 0;
-                if (fetchGeckoBtcPrice(pair.geckoVs, price) == API_OK) {
-                    crossRate = price;
-                    state.btc.usd = crossRate;
-                    state.btc.valid = true;
-                    btcPriceAnim.set(state.btc.usd);
-                    lastRenderedPrice = state.btc.usd;
-                    lastDisplayedInt = (int)state.btc.usd;
-                }
-            }
             break;
     }
 
-    // ── Set correct price after network reconnect ──
+    // ── Set price from existing data if available ──
     if (pair.source == PAIR_DERIVED && state.lemon.valid) {
         crossRate = (state.lemon.bid + state.lemon.ask) / 2.0f;
     }
-    if (wsBinanceHasPrice()) {
-        float wsPrice = wsBinanceGetPrice();
-        switch (pair.source) {
-            case PAIR_BINANCE_DIRECT:
-            case PAIR_BINANCE_INVERT:
-                state.btc.usd = wsPrice;
-                break;
-            case PAIR_DERIVED:
-                state.btc.usd = wsPrice * crossRate;
-                break;
-            case PAIR_GECKO_ONLY:
-                state.btc.usd = crossRate;
-                break;
-        }
-        state.btc.valid = true;
-        btcPriceAnim.set(state.btc.usd);
-        lastRenderedPrice = state.btc.usd;
-        lastDisplayedInt = (int)state.btc.usd;
-    }
 
-    // Force sparkline refresh + redraw with new data
-    esp_task_wdt_reset();
+    // ── Defer all heavy network calls to scheduler (non-blocking) ──
     syncDashboardFilters();
     scheduler.requestRun(taskSparkline);
-    esp_task_wdt_reset();
     refreshPredictionForCurrentPeriod(true);
     z1Dirty = true;
 }
@@ -1768,7 +1733,7 @@ void loop() {
                 unsigned long now = millis();
                 if (now - lastSparkSync >= 1000) {
                     lastSparkSync = now;
-                    SparklineData tmp;
+                    static SparklineData tmp;  // static: 1,476 bytes off the 8KB stack
                     wsBinanceGetSparkline(tmp);
                     if (tmp.valid) {
                         int trimTo = BTC_PERIODS[selectedPeriod].limit;

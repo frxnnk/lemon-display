@@ -1,5 +1,6 @@
 #include "wifi_manager.h"
 #include <WiFi.h>
+#include <esp_netif.h>
 
 static unsigned long lastReconnectAttempt = 0;
 static const unsigned long RECONNECT_INTERVAL = 10000; // 10s between retries
@@ -32,6 +33,11 @@ void wifiSetup(const char* ssid, const char* password) {
 
     if (WiFi.status() == WL_CONNECTED) {
         Serial.printf("[WiFi] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
+        // Force Google DNS to bypass ISP DNS blocking (Telefonica blocks Polymarket)
+        IPAddress dns1(8, 8, 8, 8);
+        IPAddress dns2(1, 1, 1, 1);
+        WiFi.config(WiFi.localIP(), WiFi.gatewayIP(), WiFi.subnetMask(), dns1, dns2);
+        Serial.println("[WiFi] DNS set to 8.8.8.8 / 1.1.1.1");
         WiFi.setAutoReconnect(true);  // Only enable after successful connection
         everConnected = true;
     } else {
@@ -135,6 +141,10 @@ void wifiConnectAsync(const char* ssid, const char* password) {
 bool wifiConnecting() {
     if (!asyncConnecting) return false;
     if (WiFi.status() == WL_CONNECTED) {
+        // Force Google DNS to bypass ISP DNS blocking
+        IPAddress dns1(8, 8, 8, 8);
+        IPAddress dns2(1, 1, 1, 1);
+        WiFi.config(WiFi.localIP(), WiFi.gatewayIP(), WiFi.subnetMask(), dns1, dns2);
         asyncConnecting = false;
         return false;
     }

@@ -319,7 +319,7 @@ ApiResult fetchMarketData(MarketData& out) {
 
 // ── Binance: Kline data for sparkline (24h, 7d views) ──
 ApiResult fetchBinanceKlines(SparklineData& out, const char* interval, int limit) {
-    char urlBuf[128];
+    static char urlBuf[128];
     snprintf(urlBuf, sizeof(urlBuf),
              "%s?symbol=BTCUSDT&interval=%s&limit=%d",
              BINANCE_KLINES_EP, interval, limit);
@@ -371,7 +371,7 @@ ApiResult fetchBinanceKlines(SparklineData& out, const char* interval, int limit
 
 // ── Binance: OHLC candlestick data ──
 ApiResult fetchBinanceOhlc(OhlcData& out, const char* interval, int limit) {
-    char urlBuf[128];
+    static char urlBuf[128];
     snprintf(urlBuf, sizeof(urlBuf),
              "%s?symbol=BTCUSDT&interval=%s&limit=%d",
              BINANCE_KLINES_EP, interval, limit);
@@ -429,7 +429,7 @@ ApiResult fetchBinanceOhlc(OhlcData& out, const char* interval, int limit) {
 // ── CoinGecko: USDC/ARS sparkline (for dollar chart) ──
 ApiResult fetchLemonSparkline(SparklineData& out, int days) {
     // precision=2 reduces response size ~40% (ARS prices don't need 15 decimals)
-    char urlBuf[160];
+    static char urlBuf[160];
     snprintf(urlBuf, sizeof(urlBuf), "%s%d&precision=2", COINGECKO_TETHER_CHART_EP, days);
 
     // Longer timeout for large periods (90d+ = hourly data, big response)
@@ -500,7 +500,7 @@ ApiResult fetchLemonSparkline(SparklineData& out, int days) {
 // ── Binance: Kline data with parameterized symbol (for pair switching) ──
 ApiResult fetchBinanceKlinesSymbol(SparklineData& out, const char* symbol,
                                     const char* interval, int limit, bool invert) {
-    char urlBuf[128];
+    static char urlBuf[128];
     snprintf(urlBuf, sizeof(urlBuf),
              "%s?symbol=%s&interval=%s&limit=%d",
              BINANCE_KLINES_EP, symbol, interval, limit);
@@ -554,7 +554,7 @@ ApiResult fetchBinanceKlinesSymbol(SparklineData& out, const char* symbol,
 // ── Binance: OHLC with parameterized symbol ──
 ApiResult fetchBinanceOhlcSymbol(OhlcData& out, const char* symbol,
                                   const char* interval, int limit, bool invert) {
-    char urlBuf[128];
+    static char urlBuf[128];
     snprintf(urlBuf, sizeof(urlBuf),
              "%s?symbol=%s&interval=%s&limit=%d",
              BINANCE_KLINES_EP, symbol, interval, limit);
@@ -678,7 +678,7 @@ ApiResult fetchSparklineVsCurrency(SparklineData& out, int days,
 
 // ── CoinGecko: Fetch BTC price in arbitrary currency (for XAU, etc.) ──
 ApiResult fetchGeckoBtcPrice(const char* vsCurrency, float& outPrice) {
-    char urlBuf[128];
+    static char urlBuf[128];
     snprintf(urlBuf, sizeof(urlBuf),
              "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=%s",
              vsCurrency);
@@ -926,7 +926,7 @@ static bool fetchBinanceRefPrice(const char* startTime, float& outPrice) {
 
     // Binance kline API: get 1-minute candle at the exact interval start
     // Use %lu + "000" suffix to avoid 64-bit printf issues on ESP32
-    char urlBuf[160];
+    static char urlBuf[160];
     snprintf(urlBuf, sizeof(urlBuf),
              "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&startTime=%lu000&limit=1",
              (unsigned long)epochSec);
