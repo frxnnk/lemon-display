@@ -56,7 +56,7 @@ void playTone(uint16_t freqHz, uint16_t durationMs) {
 
     uint32_t totalSamples = (uint32_t)SAMPLE_RATE * durationMs / 1000;
     const int bufSize = 256;
-    int16_t buf[bufSize];
+    static int16_t buf[bufSize];  // static: 512 bytes off the stack
     float phase = 0.0f;
     float phaseInc = 2.0f * M_PI * freqHz / SAMPLE_RATE;
     int16_t amplitude = 12000; // ~37% volume to avoid clipping

@@ -82,11 +82,11 @@ static String httpGet(const char* url, bool addCoinGeckoKey, ApiResult& result, 
             delay(2000);
         }
 
-        HTTPClient http;
+        static HTTPClient http;   // static: ~700 bytes off the 8KB stack
         http.setConnectTimeout(5000);
         http.setTimeout(timeoutMs);
 
-        char fullUrl[512];
+        static char fullUrl[512]; // static: 512 bytes off the stack
         if (addCoinGeckoKey) {
             const char* sep = (strchr(url, '?') != nullptr) ? "&" : "?";
             snprintf(fullUrl, sizeof(fullUrl), "%s%sx_cg_demo_api_key=%s", url, sep, COINGECKO_API_KEY);
@@ -209,7 +209,7 @@ ApiResult fetchSparkline(SparklineData& out, int days, CoinId coin) {
         default:       geckoId = "bitcoin";  break;
     }
 
-    char urlBuf[256];
+    static char urlBuf[256];  // static: off the 8KB stack
     snprintf(urlBuf, sizeof(urlBuf), COINGECKO_CHART_EP_FMT "%d", geckoId, days);
 
     // Use the shared httpGet helper (reads full response as String)
@@ -627,7 +627,7 @@ ApiResult fetchSparklineVsCurrency(SparklineData& out, int days,
         default:       geckoId = "bitcoin";  break;
     }
 
-    char urlBuf[256];
+    static char urlBuf[256];  // static: off the 8KB stack
     snprintf(urlBuf, sizeof(urlBuf),
              "https://api.coingecko.com/api/v3/coins/%s/market_chart?vs_currency=%s&days=%d",
              geckoId, vsCurrency, days);
@@ -1038,7 +1038,7 @@ static void overrideStartTimeFromSlug(const char* slug, PolyMarket& pm) {
 static ApiResult fetchPolyFromEventSlug(const char* slug, PolyMarket* out, uint8_t& count) {
     count = 0;
 
-    char urlBuf[220];
+    static char urlBuf[220];
     snprintf(urlBuf, sizeof(urlBuf),
              "https://gamma-api.polymarket.com/events?slug=%s",
              slug);
@@ -1146,7 +1146,7 @@ static ApiResult fetchPolyUpDownRecent(PolyMarket* out, uint8_t& count, uint8_t 
     static const uint16_t PAGE_LIMIT = 20;
     static const uint16_t MAX_OFFSET = 600;
     for (uint16_t offset = 0; offset <= MAX_OFFSET; offset += PAGE_LIMIT) {
-        char urlBuf[260];
+        static char urlBuf[260];  // static: off the 8KB stack
         snprintf(urlBuf, sizeof(urlBuf),
                  "%s?active=true&closed=false&order=createdAt&ascending=false&limit=%u&offset=%u",
                  POLYMARKET_GAMMA_URL, (unsigned)PAGE_LIMIT, (unsigned)offset);
@@ -1188,7 +1188,8 @@ static ApiResult fetchPolyUpDownRecent(PolyMarket* out, uint8_t& count, uint8_t 
             const char* slug = m["slug"] | "";
             if (strncmp(slug, prefix, strlen(prefix)) != 0) continue;
 
-            PolyMarket pm = {};
+            static PolyMarket pm;  // static: ~265 bytes off the 8KB stack
+            memset(&pm, 0, sizeof(pm));
             if (parsePolyMarket(m, pm)) {
                 out[0] = pm;
                 overrideStartTimeFromSlug(slug, out[0]);
@@ -1212,7 +1213,7 @@ static ApiResult fetchPolyUpDownRecent(PolyMarket* out, uint8_t& count, uint8_t 
 }
 
 static ApiResult fetchPolyBtcFallback(PolyMarket* out, uint8_t& count, uint8_t limit) {
-    char urlBuf[220];
+    static char urlBuf[220];
     snprintf(urlBuf, sizeof(urlBuf),
              "%s?active=true&closed=false&order=volume24hr&ascending=false&limit=120",
              POLYMARKET_GAMMA_URL);
@@ -1254,7 +1255,8 @@ static ApiResult fetchPolyBtcFallback(PolyMarket* out, uint8_t& count, uint8_t l
         const char* slug = m["slug"] | "";
         if (!isBtcMarket(q, slug) || !isPricePredictionQuestion(q, slug)) continue;
 
-        PolyMarket pm = {};
+        static PolyMarket pm;  // static: ~265 bytes off the 8KB stack
+        memset(&pm, 0, sizeof(pm));
         if (!parsePolyMarket(m, pm)) continue;
         out[count++] = pm;
     }
@@ -1266,7 +1268,8 @@ static ApiResult fetchPolyBtcFallback(PolyMarket* out, uint8_t& count, uint8_t l
             const char* slug = m["slug"] | "";
             if (!isBtcMarket(q, slug) || isPricePredictionQuestion(q, slug)) continue;
 
-            PolyMarket pm = {};
+            static PolyMarket pm;  // static: ~265 bytes off the 8KB stack
+            memset(&pm, 0, sizeof(pm));
             if (!parsePolyMarket(m, pm)) continue;
 
             bool dup = false;
@@ -1304,7 +1307,7 @@ ApiResult fetchPolyMarketByConditionId(const char* conditionId, PolyMarket& out)
     memset(&out, 0, sizeof(out));
     if (!conditionId || conditionId[0] == '\0') return API_PARSE_ERROR;
 
-    char urlBuf[280];
+    static char urlBuf[280];  // static: off the 8KB stack
     snprintf(urlBuf, sizeof(urlBuf), "%s?condition_ids=%s&limit=1",
              POLYMARKET_GAMMA_URL, conditionId);
 
