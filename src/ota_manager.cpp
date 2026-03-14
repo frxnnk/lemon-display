@@ -93,8 +93,12 @@ OtaInfo otaCheck(const char* repo) {
 }
 
 bool otaFlash(const char* binUrl, void(*progressCB)(int pct)) {
+    Serial.printf("[OTA] Starting flash from: %s\n", binUrl);
+    Serial.printf("[OTA] Free heap: %d\n", ESP.getFreeHeap());
+
+    // ── Step 1: Resolve redirect (GitHub always 302s to CDN) ──
     static WiFiClientSecure client;
-    client.setInsecure();  // GitHub CDN uses different CAs — skip verification
+    client.setInsecure();
 
     HTTPClient http;
     http.begin(client, binUrl);
@@ -102,14 +106,39 @@ bool otaFlash(const char* binUrl, void(*progressCB)(int pct)) {
     http.addHeader("Authorization", "Bearer " GITHUB_PAT);
 #endif
     http.addHeader("Accept", "application/octet-stream");
-    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-    http.setTimeout(60000);
-
-    Serial.printf("[OTA] Requesting: %s\n", binUrl);
-    Serial.printf("[OTA] Free heap: %d\n", ESP.getFreeHeap());
+    http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+    http.setTimeout(30000);
 
     esp_task_wdt_reset();
     int code = http.GET();
+    Serial.printf("[OTA] Initial response: %d\n", code);
+
+    String finalUrl;
+    if (code == 301 || code == 302) {
+        finalUrl = http.getLocation();
+        Serial.printf("[OTA] Redirect to: %s\n", finalUrl.c_str());
+    } else if (code == 200) {
+        // No redirect — unlikely but handle it
+        finalUrl = "";
+    } else {
+        Serial.printf("[OTA] Failed at step 1: HTTP %d\n", code);
+        http.end();
+        return false;
+    }
+    http.end();
+    client.stop();  // Fully close first TLS session
+    esp_task_wdt_reset();
+
+    // ── Step 2: Download firmware from CDN (fresh TLS connection) ──
+    if (finalUrl.length() > 0) {
+        client.setInsecure();  // Re-arm for new connection
+        http.begin(client, finalUrl);
+        http.setTimeout(60000);
+        http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);  // Handle any further redirects
+
+        code = http.GET();
+        Serial.printf("[OTA] CDN response: %d\n", code);
+    }
 
     if (code != 200) {
         Serial.printf("[OTA] Download failed: HTTP %d\n", code);
