@@ -71,7 +71,6 @@ static WiFiClientSecure secureClient;
 
 void apiSetup() {
     secureClient.setCACert(ROOT_CAS);
-    secureClient.setHandshakeTimeout(10);  // 10s max for TLS handshake
 }
 
 // ── Helper: perform HTTPS GET with 1 retry ──
@@ -82,8 +81,6 @@ static String httpGet(const char* url, bool addCoinGeckoKey, ApiResult& result, 
             Serial.printf("[API] Retry %d for %s\n", attempt, url);
             delay(2000);
         }
-
-        secureClient.stop();  // Force-close stale TLS session before reuse
 
         HTTPClient http;
         http.setConnectTimeout(5000);
