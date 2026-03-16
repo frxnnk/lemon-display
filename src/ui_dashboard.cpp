@@ -224,19 +224,23 @@ void dashboardSetup() {
     // Allocate persistent zone sprites in PSRAM (once, never freed)
     sprZ0.setPsram(true);
     sprZ0.setColorDepth(16);
-    sprZ0.createSprite(SCREEN_W, Z0_H);
+    void* s0 = sprZ0.createSprite(SCREEN_W, Z0_H);
 
     sprZ1.setPsram(true);
     sprZ1.setColorDepth(16);
-    sprZ1.createSprite(SCREEN_W, z1H);
+    void* s1 = sprZ1.createSprite(SCREEN_W, z1H);
 
+    void* s2 = (void*)1;  // sentinel: no Z2 needed
     if (z2H > 0) {
         sprZ2.setPsram(true);
         sprZ2.setColorDepth(16);
-        sprZ2.createSprite(SCREEN_W, z2H);
+        s2 = sprZ2.createSprite(SCREEN_W, z2H);
     }
 
-    spritesReady = true;
+    spritesReady = (s0 != nullptr && s1 != nullptr && s2 != nullptr);
+    if (!spritesReady) {
+        Serial.println("[Dashboard] ERROR: sprite allocation failed!");
+    }
 
     // Fill gaps between zones once (static, never need redrawing)
     tft.fillRect(0, Z0_Y + Z0_H, SCREEN_W, Z1_Y - (Z0_Y + Z0_H), Colors::BG_BASE);
@@ -281,15 +285,21 @@ void dashboardSetLayout(uint8_t idx) {
 
         sprZ1.setPsram(true);
         sprZ1.setColorDepth(16);
-        sprZ1.createSprite(SCREEN_W, z1H);
+        void* s1 = sprZ1.createSprite(SCREEN_W, z1H);
 
+        void* s2 = (void*)1;  // sentinel
         if (z2H > 0) {
             sprZ2.deleteSprite();
             sprZ2.setPsram(true);
             sprZ2.setColorDepth(16);
-            sprZ2.createSprite(SCREEN_W, z2H);
+            s2 = sprZ2.createSprite(SCREEN_W, z2H);
         } else {
             sprZ2.deleteSprite();
+        }
+
+        spritesReady = (s1 != nullptr && s2 != nullptr);
+        if (!spritesReady) {
+            Serial.println("[Dashboard] ERROR: sprite re-allocation failed!");
         }
 
         // Refill gaps (VSync-protected to avoid visible tear)
@@ -551,8 +561,9 @@ void dashboardUpdatePriceDirect(const BtcPrice& btc, uint8_t selectedPair) {
     // Update sprZ1 to stay in sync — pad 2px per side for $ glyph overshoot
     // Main fill from Y=30 (preserves BTC logo at x=30..49, y=10..29)
     sprZ1.fillRect(STRIP_X - 2, 30, STRIP_W + 4, 50, Colors::BG_CARD);
-    // Extended fill for Y=24..29 past the logo area (x=55+)
-    sprZ1.fillRect(55, STRIP_Y, STRIP_W + 4 - (55 - (STRIP_X - 2)), 6, Colors::BG_CARD);
+    // Extended fill for Y=24..29 past the logo+label area (x=110+)
+    // "Bitcoin" label occupies ~x=54..105 at y=14-26, so start past it
+    sprZ1.fillRect(110, STRIP_Y, STRIP_W + 4 - (110 - (STRIP_X - 2)), 6, Colors::BG_CARD);
     drawFixedWidthPrice(sprZ1, priceBuf, PRICE_CX, PRICE_CY, priceFont, priceColor, Colors::BG_CARD);
 
     // Atomic clipped push from sprZ1 (no intermediate blank frame)
@@ -569,6 +580,7 @@ void dashboardUpdatePriceDirect(const BtcPrice& btc, uint8_t selectedPair) {
 void dashboardDrawBtcHero(const BtcPrice& btc, const SparklineData& spark, uint8_t selectedPeriod,
                           const float* periodChanges, ChartStyle chartStyle, const OhlcData* ohlc,
                           uint8_t selectedPair) {
+    sprZ1.clearClipRect();
     sprZ1.fillSprite(Colors::BG_BASE);
 
     // Hero card (accent border, radius 20)
@@ -953,6 +965,7 @@ void dashboardDrawLemonDollar(const LemonPrice& lemon, const SparklineData* lemo
                               uint8_t dollarPeriod, ChartStyle dollarChartStyle,
                               float dollarChange) {
     if (z2H <= 0) return;  // BTC-only layout — no Z2
+    sprZ2.clearClipRect();
     sprZ2.fillSprite(Colors::BG_BASE);
     bool simpleMode = !pairSelectorEnabled;
 
@@ -1389,6 +1402,7 @@ void dashboardDrawLoading(LoadPhase phase) {
         // Version at bottom
         {
             LGFX_Sprite verSpr(&tft);
+            verSpr.setPsram(true);
             verSpr.setColorDepth(16);
             verSpr.createSprite(SCREEN_W, 20);
             verSpr.fillSprite(Colors::BG_BASE);
@@ -1403,6 +1417,7 @@ void dashboardDrawLoading(LoadPhase phase) {
     // Status text (sprite to cleanly replace previous text)
     {
         LGFX_Sprite stSpr(&tft);
+        stSpr.setPsram(true);
         stSpr.setColorDepth(16);
         stSpr.createSprite(SCREEN_W, 24);
         stSpr.fillSprite(Colors::BG_BASE);
@@ -1466,6 +1481,7 @@ int8_t dashboardHitTestCarousel(int16_t x, int16_t y) {
 
     // Convert Y to sprite coordinates
     int sprY = y - Z1_Y;
+    if (sprY < 0 || sprY >= z1H) return 0;
     int step = CAROUSEL_ITEM_H + CAROUSEL_ITEM_GAP;
 
     // Selected item bounds in sprite space
@@ -1574,6 +1590,11 @@ static void drawPredCountdown(uint32_t periodStepSec) {
         sprZ2.setTextColor(timeColor, Colors::BG_CARD);
         sprZ2.setTextDatum(lgfx::middle_center);
         sprZ2.drawString(timeBuf, SCREEN_W / 2, 198, &Satoshi9);
+    } else if (predEndEpoch > 0) {
+        // Countdown expired — waiting for result
+        sprZ2.setTextColor(Colors::SOLAR, Colors::BG_CARD);
+        sprZ2.setTextDatum(lgfx::middle_center);
+        sprZ2.drawString("Esperando resultado...", SCREEN_W / 2, 198, &Satoshi9);
     }
 }
 
@@ -1693,15 +1714,21 @@ void dashboardSetPredictionLayout(bool active) {
 
         sprZ1.setPsram(true);
         sprZ1.setColorDepth(16);
-        sprZ1.createSprite(SCREEN_W, z1H);
+        void* s1 = sprZ1.createSprite(SCREEN_W, z1H);
 
+        void* s2 = (void*)1;  // sentinel
         if (z2H > 0) {
             sprZ2.deleteSprite();
             sprZ2.setPsram(true);
             sprZ2.setColorDepth(16);
-            sprZ2.createSprite(SCREEN_W, z2H);
+            s2 = sprZ2.createSprite(SCREEN_W, z2H);
         } else {
             sprZ2.deleteSprite();
+        }
+
+        spritesReady = (s1 != nullptr && s2 != nullptr);
+        if (!spritesReady) {
+            Serial.println("[Dashboard] ERROR: sprite re-allocation failed!");
         }
 
         // Refill gaps
@@ -1718,6 +1745,7 @@ void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t s
                              const PredHistoryEntry* history,
                              uint8_t histHead, uint8_t histCount) {
     if (z2H <= 0) return;  // BTC-only layout — no Z2
+    sprZ2.clearClipRect();
     sprZ2.fillSprite(Colors::BG_BASE);
     drawGlassCard(sprZ2, MARGIN, 0, CARD_W, z2H, CARD_R);
 

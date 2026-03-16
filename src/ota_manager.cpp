@@ -1,5 +1,7 @@
 #include "ota_manager.h"
 #include "config.h"
+#include "display_manager.h"
+#include "colors.h"
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
@@ -9,6 +11,20 @@
 #include <esp_task_wdt.h>
 
 extern const char* ROOT_CAS;  // Defined in api_client.cpp
+
+// On-screen debug for OTA (no serial needed)
+static int otaDbgY = 40;
+static int otaProgressY = -1;  // Fixed Y for progress line (in-place update)
+static void otaScreen(const char* msg, uint16_t color = 0xFFFF, bool inPlace = false) {
+    int y = inPlace && otaProgressY >= 0 ? otaProgressY : otaDbgY;
+    if (inPlace && otaProgressY < 0) otaProgressY = otaDbgY;  // Lock Y on first call
+    if (inPlace) tft.fillRect(10, y, SCREEN_W - 20, 18, 0x0000);  // Clear previous text
+    tft.setTextColor(color, 0x0000);
+    tft.setTextDatum(lgfx::top_left);
+    tft.drawString(msg, 10, y, &lgfx::fonts::Font2);
+    if (!inPlace) otaDbgY += 18;
+    Serial.println(msg);
+}
 
 // Simple semver comparison: returns true if remote > local
 static bool isNewer(const char* remote, const char* local) {
@@ -51,10 +67,11 @@ OtaInfo otaCheck(const char* repo) {
     String body = http.getString();
     http.end();
 
-    // Parse with ArduinoJson (filter: only tag_name + first asset download URL)
+    // Parse with ArduinoJson (filter: only tag_name + first asset download URL + body for MD5)
     JsonDocument filter;
     filter["tag_name"] = true;
     filter["assets"][0]["url"] = true;  // API URL (not browser_download_url — 404 on private repos)
+    filter["body"] = true;
 
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, body,
@@ -88,23 +105,61 @@ OtaInfo otaCheck(const char* repo) {
     strncpy(info.url, assetUrl, sizeof(info.url) - 1);
     info.available = true;
 
+    // Extract MD5 hash from release body (look for 32-char hex string after "MD5:" or standalone)
+    info.md5[0] = '\0';
+    const char* bodyStr = doc["body"] | (const char*)nullptr;
+    if (bodyStr) {
+        // Scan for 32 consecutive hex chars
+        for (const char* p = bodyStr; *p; p++) {
+            bool isHex = true;
+            for (int i = 0; i < 32 && p[i]; i++) {
+                char c = p[i];
+                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                    isHex = false;
+                    break;
+                }
+            }
+            if (isHex && p[32] != '\0' && !((p[32] >= '0' && p[32] <= '9') ||
+                (p[32] >= 'a' && p[32] <= 'f') || (p[32] >= 'A' && p[32] <= 'F'))) {
+                memcpy(info.md5, p, 32);
+                info.md5[32] = '\0';
+                Serial.printf("[OTA] MD5 from release: %s\n", info.md5);
+                break;
+            }
+        }
+    }
+
     Serial.printf("[OTA] Update available: %s -> %s\n", APP_VERSION, info.version);
     Serial.printf("[OTA] URL: %s\n", info.url);
     return info;
 }
 
-bool otaFlash(const char* binUrl, void(*progressCB)(int pct)) {
+bool otaFlash(const char* binUrl, void(*progressCB)(int pct), const char* md5) {
+    // Show debug on screen
+    tft.fillScreen(0x0000);
+    displaySetBrightness(128);
+    otaDbgY = 10;
+    otaProgressY = -1;
+    otaScreen("OTA Flash starting...");
+
+    static char dbg[128];
+    snprintf(dbg, sizeof(dbg), "Heap: %d", (int)ESP.getFreeHeap());
+    otaScreen(dbg);
+
     Serial.printf("[OTA] Starting flash from: %s\n", binUrl);
-    Serial.printf("[OTA] Free heap: %d\n", ESP.getFreeHeap());
 
     // ── Step 1: Resolve redirect (GitHub always 302s to CDN) ──
+    otaScreen("Step 1: GitHub API redirect...");
     static WiFiClientSecure client;
-    client.setInsecure();
+    client.setInsecure();  // Step 1 only resolves redirect — no cert needed
 
-    static HTTPClient http;  // static: ~700 bytes off the 8KB stack
+    static HTTPClient http;
     http.begin(client, binUrl);
 #ifdef GITHUB_PAT
     http.addHeader("Authorization", "Bearer " GITHUB_PAT);
+    otaScreen("  Auth: PAT set");
+#else
+    otaScreen("  Auth: none", 0xFBE0);
 #endif
     http.addHeader("Accept", "application/octet-stream");
     http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
@@ -112,54 +167,74 @@ bool otaFlash(const char* binUrl, void(*progressCB)(int pct)) {
 
     esp_task_wdt_reset();
     int code = http.GET();
-    Serial.printf("[OTA] Initial response: %d\n", code);
+    snprintf(dbg, sizeof(dbg), "  Response: %d", code);
+    otaScreen(dbg, (code == 302 || code == 301) ? 0x07E0 : 0xF800);
 
     String finalUrl;
     if (code == 301 || code == 302) {
         finalUrl = http.getLocation();
-        Serial.printf("[OTA] Redirect to: %s\n", finalUrl.c_str());
+        otaScreen("  Got redirect OK", 0x07E0);
     } else if (code == 200) {
-        // No redirect — unlikely but handle it
         finalUrl = "";
+        otaScreen("  Direct download (no redirect)");
     } else {
-        Serial.printf("[OTA] Failed at step 1: HTTP %d\n", code);
+        snprintf(dbg, sizeof(dbg), "  FAIL step1: HTTP %d", code);
+        otaScreen(dbg, 0xF800);
         http.end();
+        delay(5000);
         return false;
     }
     http.end();
-    client.stop();  // Fully close first TLS session
+    client.stop();
     esp_task_wdt_reset();
 
     // ── Step 2: Download firmware from CDN (fresh TLS connection) ──
+    otaScreen("Step 2: Download from CDN...");
     if (finalUrl.length() > 0) {
-        client.setInsecure();  // Re-arm for new connection
+        client.setCACert(ROOT_CAS);
         http.begin(client, finalUrl);
         http.setTimeout(60000);
-        http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);  // Handle any further redirects
+        http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
 
         code = http.GET();
-        Serial.printf("[OTA] CDN response: %d\n", code);
+        snprintf(dbg, sizeof(dbg), "  CDN response: %d", code);
+        otaScreen(dbg, (code == 200) ? 0x07E0 : 0xF800);
     }
 
     if (code != 200) {
-        Serial.printf("[OTA] Download failed: HTTP %d\n", code);
+        snprintf(dbg, sizeof(dbg), "  FAIL download: HTTP %d", code);
+        otaScreen(dbg, 0xF800);
         http.end();
+        delay(5000);
         return false;
     }
 
     int contentLen = http.getSize();
+    snprintf(dbg, sizeof(dbg), "  Size: %d bytes", contentLen);
+    otaScreen(dbg);
+
     if (contentLen <= 0) {
-        Serial.println("[OTA] Invalid content length");
+        otaScreen("  FAIL: invalid content length", 0xF800);
         http.end();
+        delay(5000);
         return false;
     }
 
-    Serial.printf("[OTA] Downloading %d bytes...\n", contentLen);
+    // ── Step 3: Flash ──
+    otaScreen("Step 3: Flashing...");
 
     if (!Update.begin(contentLen)) {
-        Serial.printf("[OTA] Update.begin failed: %s\n", Update.errorString());
+        snprintf(dbg, sizeof(dbg), "  FAIL begin: %s", Update.errorString());
+        otaScreen(dbg, 0xF800);
         http.end();
+        delay(5000);
         return false;
+    }
+
+    if (md5 && md5[0] != '\0') {
+        Update.setMD5(md5);
+        snprintf(dbg, sizeof(dbg), "  MD5: %s", md5);
+        otaScreen(dbg);
     }
 
     WiFiClient* stream = http.getStreamPtr();
@@ -170,15 +245,15 @@ bool otaFlash(const char* binUrl, void(*progressCB)(int pct)) {
     while (written < (size_t)contentLen) {
         size_t available = stream->available();
         if (available == 0) {
-            // Wait for data with timeout
             unsigned long waitStart = millis();
             while (stream->available() == 0 && millis() - waitStart < 10000) {
                 delay(10);
             }
             if (stream->available() == 0) {
-                Serial.println("[OTA] Stream timeout");
+                otaScreen("  FAIL: stream timeout", 0xF800);
                 Update.abort();
                 http.end();
+                delay(5000);
                 return false;
             }
             continue;
@@ -190,9 +265,11 @@ bool otaFlash(const char* binUrl, void(*progressCB)(int pct)) {
 
         size_t w = Update.write(buf, bytesRead);
         if (w != (size_t)bytesRead) {
-            Serial.printf("[OTA] Write mismatch: %d vs %d\n", (int)w, bytesRead);
+            snprintf(dbg, sizeof(dbg), "  FAIL write: %d vs %d", (int)w, bytesRead);
+            otaScreen(dbg, 0xF800);
             Update.abort();
             http.end();
+            delay(5000);
             return false;
         }
 
@@ -200,29 +277,36 @@ bool otaFlash(const char* binUrl, void(*progressCB)(int pct)) {
         int pct = (int)((written * 100) / contentLen);
         if (pct != lastPct) {
             lastPct = pct;
-            Serial.printf("[OTA] Progress: %d%%\n", pct);
+            if (pct % 5 == 0) {
+                snprintf(dbg, sizeof(dbg), "  Progress: %d%%", pct);
+                otaScreen(dbg, 0x07E0, true);  // in-place update
+                esp_task_wdt_reset();
+            }
             if (progressCB) progressCB(pct);
-            esp_task_wdt_reset();
         }
     }
 
-    Serial.printf("[OTA] Written: %d / %d\n", (int)written, contentLen);
+    snprintf(dbg, sizeof(dbg), "Written: %d / %d", (int)written, contentLen);
+    otaScreen(dbg);
 
     if (!Update.end()) {
-        Serial.printf("[OTA] Update.end failed: %s\n", Update.errorString());
+        snprintf(dbg, sizeof(dbg), "FAIL end: %s", Update.errorString());
+        otaScreen(dbg, 0xF800);
         http.end();
+        delay(5000);
         return false;
     }
 
     http.end();
 
     if (Update.isFinished()) {
-        Serial.println("[OTA] Success! Rebooting...");
-        delay(500);
+        otaScreen("SUCCESS! Rebooting...", 0x07E0);
+        delay(2000);
         ESP.restart();
-        return true;  // Won't reach here
+        return true;
     }
 
-    Serial.println("[OTA] Update not finished");
+    otaScreen("FAIL: not finished", 0xF800);
+    delay(5000);
     return false;
 }

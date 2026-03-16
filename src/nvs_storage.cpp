@@ -1,9 +1,20 @@
 #include "nvs_storage.h"
 #include <Preferences.h>
 #include <Arduino.h>
+#include <esp_system.h>
 
 static Preferences prefs;
 static const char* NVS_NAMESPACE = "lemon";
+
+// XOR-obfuscate a buffer with the device's unique eFuse MAC (per-device key)
+static void xorWithMac(uint8_t* buf, size_t len) {
+    uint64_t mac = ESP.getEfuseMac();
+    uint8_t key[8];
+    memcpy(key, &mac, 8);
+    for (size_t i = 0; i < len; i++) {
+        buf[i] ^= key[i % 8];
+    }
+}
 
 void nvsInit() {
     prefs.begin(NVS_NAMESPACE, false);
@@ -18,22 +29,55 @@ bool nvsHasWifi() {
 
 void nvsLoadWifi(char* ssid, size_t ssidLen, char* pass, size_t passLen) {
     String s = prefs.getString("wifi_ssid", "");
-    String p = prefs.getString("wifi_pass", "");
     strncpy(ssid, s.c_str(), ssidLen - 1);
     ssid[ssidLen - 1] = '\0';
+
+    // Try new XOR-obfuscated format first
+    uint8_t wpLen = prefs.getUChar("wp_len", 0);
+    if (wpLen > 0 && wpLen < passLen) {
+        uint8_t enc[65];
+        size_t rd = prefs.getBytes("wifi_pe", enc, wpLen);
+        if (rd == wpLen) {
+            xorWithMac(enc, wpLen);
+            memcpy(pass, enc, wpLen);
+            pass[wpLen] = '\0';
+            return;
+        }
+    }
+
+    // Fallback: read legacy plaintext and auto-migrate
+    String p = prefs.getString("wifi_pass", "");
     strncpy(pass, p.c_str(), passLen - 1);
     pass[passLen - 1] = '\0';
+
+    // Auto-migrate to obfuscated format
+    if (p.length() > 0) {
+        nvsSaveWifi(ssid, pass);
+    }
 }
 
 void nvsSaveWifi(const char* ssid, const char* pass) {
     prefs.putString("wifi_ssid", ssid);
-    prefs.putString("wifi_pass", pass);
+
+    // Store password XOR-obfuscated (not plaintext)
+    uint8_t len = (uint8_t)strlen(pass);
+    uint8_t enc[65];
+    memcpy(enc, pass, len);
+    xorWithMac(enc, len);
+    prefs.putBytes("wifi_pe", enc, len);
+    prefs.putUChar("wp_len", len);
+
+    // Remove legacy plaintext key
+    prefs.remove("wifi_pass");
+
     Serial.printf("[NVS] WiFi saved: %s\n", ssid);
 }
 
 void nvsForgetWifi() {
     prefs.remove("wifi_ssid");
     prefs.remove("wifi_pass");
+    prefs.remove("wifi_pe");
+    prefs.remove("wp_len");
     Serial.println("[NVS] WiFi credentials erased");
 }
 

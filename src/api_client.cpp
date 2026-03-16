@@ -65,21 +65,71 @@ const char* ROOT_CAS =
     "8rGOmaFvE7FBcf6IKshPECBV1/MUReXgRPTqh5Uykw7+U0b6LJ3/iyK5S9kJRaT\n"
     "epLiaWN0bfVKfjllDiIGknibVb63dDcY3fe0Dkhvld1927jyNxF1WW6LZZm6zNTf\n"
     "lMrY=\n"
+    "-----END CERTIFICATE-----\n"
+    // ISRG Root X1 — Let's Encrypt (GitHub release-assets CDN)
+    "-----BEGIN CERTIFICATE-----\n"
+    "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\n"
     "-----END CERTIFICATE-----\n";
 
 static WiFiClientSecure secureClient;
+static unsigned long lastCoinGeckoCall = 0;
+static const unsigned long COINGECKO_MIN_INTERVAL = 6000;  // 6s between CoinGecko calls
 
 void apiSetup() {
     secureClient.setCACert(ROOT_CAS);
 }
 
+void apiStop() {
+    secureClient.stop();
+}
+
 // ── Helper: perform HTTPS GET with 1 retry ──
-static String httpGet(const char* url, bool addCoinGeckoKey, ApiResult& result, int timeoutMs = 10000) {
+static String httpGet(const char* url, bool addCoinGeckoKey, ApiResult& result, int timeoutMs = 7000) {
+    // Rate limit CoinGecko calls to avoid 429s — wait if too soon
+    if (addCoinGeckoKey && lastCoinGeckoCall > 0) {
+        unsigned long now = millis();
+        unsigned long elapsed = now - lastCoinGeckoCall;
+        if (elapsed < COINGECKO_MIN_INTERVAL) {
+            unsigned long wait = COINGECKO_MIN_INTERVAL - elapsed;
+            Serial.printf("[API] CoinGecko rate limit: waiting %lums\n", wait);
+            delay(wait);
+        }
+    }
+    if (addCoinGeckoKey) lastCoinGeckoCall = millis();
+
     for (int attempt = 0; attempt < 2; attempt++) {
         esp_task_wdt_reset();
         if (attempt > 0) {
             Serial.printf("[API] Retry %d for %s\n", attempt, url);
-            delay(2000);
+            delay(1000);
         }
 
         static HTTPClient http;   // static: ~700 bytes off the 8KB stack
@@ -1003,12 +1053,7 @@ static bool getUpDownSpecForPeriod(uint8_t btcPeriod, PolyUpDownSpec& spec) {
     switch (btcPeriod) {
         case 0: spec = { "5m",   300,   0 }; break;
         case 1: spec = { "15m",  900,   0 }; break;
-        case 2: return false;                             // 1h: no short market yet
-        case 3: spec = { "4h", 14400, 3600 }; break;     // 4h markets use +1h offset
-        case 4: return false;                             // 24h: no short market yet
-        case 5: return false;
-        case 6: return false;
-        case 7: return false;
+        // Only 5m and 15m markets exist on Polymarket as of 2026-03
         default: return false;
     }
     return true;
@@ -1144,8 +1189,9 @@ static ApiResult fetchPolyUpDownRecent(PolyMarket* out, uint8_t& count, uint8_t 
     snprintf(prefix, sizeof(prefix), "btc-updown-%s-", spec.tf);
 
     static const uint16_t PAGE_LIMIT = 20;
-    static const uint16_t MAX_OFFSET = 600;
+    static const uint16_t MAX_OFFSET = 60;  // 3 pages max (was 600 = 30 pages, too slow)
     for (uint16_t offset = 0; offset <= MAX_OFFSET; offset += PAGE_LIMIT) {
+        esp_task_wdt_reset();
         static char urlBuf[260];  // static: off the 8KB stack
         snprintf(urlBuf, sizeof(urlBuf),
                  "%s?active=true&closed=false&order=createdAt&ascending=false&limit=%u&offset=%u",
@@ -1215,7 +1261,7 @@ static ApiResult fetchPolyUpDownRecent(PolyMarket* out, uint8_t& count, uint8_t 
 static ApiResult fetchPolyBtcFallback(PolyMarket* out, uint8_t& count, uint8_t limit) {
     static char urlBuf[220];
     snprintf(urlBuf, sizeof(urlBuf),
-             "%s?active=true&closed=false&order=volume24hr&ascending=false&limit=120",
+             "%s?active=true&closed=false&order=volume24hr&ascending=false&limit=20&tag=bitcoin",
              POLYMARKET_GAMMA_URL);
 
     ApiResult result;
@@ -1292,15 +1338,29 @@ ApiResult fetchPolyMarkets(PolyMarket* out, uint8_t& count, uint8_t limit, uint8
     if (!out || limit == 0) return API_PARSE_ERROR;
     if (limit > PM_MAX_MARKETS) limit = PM_MAX_MARKETS;
 
-    ApiResult tsRes = fetchPolyUpDownForPeriod(out, count, btcPeriod);
-    if (tsRes == API_OK && count > 0) {
-        // Markets returned without Chainlink enrichment — caller handles that
-        return API_OK;
+    // Only periods 0 (5m) and 1 (15m) have up/down markets; others go straight to fallback
+    PolyUpDownSpec spec = {};
+    if (getUpDownSpecForPeriod(btcPeriod, spec)) {
+        ApiResult tsRes = fetchPolyUpDownForPeriod(out, count, btcPeriod);
+        if (tsRes == API_OK && count > 0) {
+            return API_OK;
+        }
+
+        // Timestamp-based lookup failed — try paginated brute-force search by slug prefix
+        Serial.printf("[API] Polymarket timestamp miss for period idx=%d, trying recent scan...\n",
+                      btcPeriod);
+        ApiResult recentRes = fetchPolyUpDownRecent(out, count, btcPeriod);
+        if (recentRes == API_OK && count > 0) {
+            return API_OK;
+        }
+        Serial.printf("[API] Polymarket recent miss too, trying BTC fallback...\n");
+    } else {
+        Serial.printf("[API] Polymarket period idx=%d has no up/down markets, using BTC fallback\n",
+                      btcPeriod);
     }
 
-    Serial.printf("[API] Polymarket miss for period idx=%d (tsRes=%d)\n",
-                  btcPeriod, (int)tsRes);
-    return tsRes;
+    // Generic BTC market fallback (always works if Polymarket is reachable)
+    return fetchPolyBtcFallback(out, count, limit);
 }
 
 ApiResult fetchPolyMarketByConditionId(const char* conditionId, PolyMarket& out) {
