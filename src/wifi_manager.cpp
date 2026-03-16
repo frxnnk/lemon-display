@@ -3,7 +3,8 @@
 #include <esp_netif.h>
 
 static unsigned long lastReconnectAttempt = 0;
-static const unsigned long RECONNECT_INTERVAL = 10000; // 10s between retries
+static unsigned long reconnectInterval = 10000; // Starts at 10s, doubles up to 5min
+static const unsigned long RECONNECT_MAX = 300000; // 5 min cap
 
 // Stored credentials for auto-reconnect
 static char storedSSID[33] = {0};
@@ -47,16 +48,24 @@ void wifiSetup(const char* ssid, const char* password) {
 }
 
 void wifiLoop() {
-    if (WiFi.status() == WL_CONNECTED) return;
+    if (WiFi.status() == WL_CONNECTED) {
+        // Reset backoff on successful connection
+        reconnectInterval = 10000;
+        return;
+    }
     if (storedSSID[0] == '\0') return;  // No credentials stored
     if (!everConnected) return;  // Never connected — don't retry with possibly bad creds
 
     unsigned long now = millis();
-    if (now - lastReconnectAttempt >= RECONNECT_INTERVAL) {
+    if (now - lastReconnectAttempt >= reconnectInterval) {
         lastReconnectAttempt = now;
-        Serial.println("[WiFi] Reconnecting...");
+        Serial.printf("[WiFi] Reconnecting (backoff %lums)...\n", reconnectInterval);
         WiFi.disconnect();
         WiFi.begin(storedSSID, storedPass);
+
+        // Exponential backoff: 10s → 20s → 40s → ... → 5min max
+        reconnectInterval = reconnectInterval * 2;
+        if (reconnectInterval > RECONNECT_MAX) reconnectInterval = RECONNECT_MAX;
     }
 }
 

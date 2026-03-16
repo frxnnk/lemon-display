@@ -28,6 +28,9 @@ static bool invertMode = false;
 static WebSocketsClient ws;
 static volatile bool wsConnected = false;
 
+// Spinlock for ring buffer + price access (WS callback runs on different context)
+static portMUX_TYPE wsMux = portMUX_INITIALIZER_UNLOCKED;
+
 // ── Ring buffer helpers ──
 static void ringPush(float val) {
     ringBuf[ringHead] = val;
@@ -78,6 +81,7 @@ static void parseKline(uint8_t* payload, size_t length) {
     }
 
     // Always update latest price
+    portENTER_CRITICAL(&wsMux);
     latestPrice = closePrice;
     hasPrice = true;
 
@@ -89,6 +93,7 @@ static void parseKline(uint8_t* payload, size_t length) {
         // Same kline — update current candle's close
         ringUpdateLast(closePrice);
     }
+    portEXIT_CRITICAL(&wsMux);
 }
 
 // ── WebSocket event handler ──
@@ -142,15 +147,23 @@ bool wsBinanceConnected() {
 }
 
 float wsBinanceGetPrice() {
-    return latestPrice;
+    portENTER_CRITICAL(&wsMux);
+    float p = latestPrice;
+    portEXIT_CRITICAL(&wsMux);
+    return p;
 }
 
 bool wsBinanceHasPrice() {
-    return hasPrice;
+    portENTER_CRITICAL(&wsMux);
+    bool h = hasPrice;
+    portEXIT_CRITICAL(&wsMux);
+    return h;
 }
 
 void wsBinanceGetSparkline(SparklineData& out) {
+    portENTER_CRITICAL(&wsMux);
     if (ringCount == 0) {
+        portEXIT_CRITICAL(&wsMux);
         out.valid = false;
         return;
     }
@@ -179,6 +192,7 @@ void wsBinanceGetSparkline(SparklineData& out) {
         if (val < out.minVal) out.minVal = val;
         if (val > out.maxVal) out.maxVal = val;
     }
+    portEXIT_CRITICAL(&wsMux);
 
     out.valid = true;
     out.lastUpdate = millis();
@@ -227,15 +241,13 @@ bool wsBinanceBackfill() {
         return false;
     }
 
-    // Reset ring buffer
-    ringHead = 0;
-    ringCount = 0;
-
+    // Parse klines into temp array (outside lock)
+    static float tmpPrices[SPARKLINE_POINTS];
     int loaded = 0;
     unsigned long long lastOpenTime = 0;
 
     for (JsonArray kline : arr) {
-        // Index 0 = open time, index 4 = close price (string)
+        if (loaded >= SPARKLINE_POINTS) break;
         unsigned long long openTime = kline[0].as<unsigned long long>();
         const char* closeStr = kline[4].as<const char*>();
         if (!closeStr) continue;
@@ -243,16 +255,22 @@ bool wsBinanceBackfill() {
         float closePrice = atof(closeStr);
         if (closePrice <= 0) continue;
 
-        ringPush(closePrice);
+        tmpPrices[loaded] = closePrice;
         lastOpenTime = openTime;
         loaded++;
     }
 
+    // Quick lock to update shared ring buffer
+    portENTER_CRITICAL(&wsMux);
+    ringHead = 0;
+    ringCount = 0;
+    for (int i = 0; i < loaded; i++) ringPush(tmpPrices[i]);
     if (loaded > 0 && lastOpenTime > 0) {
         currentKlineOpenTime = lastOpenTime;
         latestPrice = ringBuf[(ringHead == 0) ? (SPARKLINE_POINTS - 1) : (ringHead - 1)];
         hasPrice = true;
     }
+    portEXIT_CRITICAL(&wsMux);
 
     Serial.printf("[WS] Backfill: %d klines loaded, latest=$%.0f\n", loaded, latestPrice);
     return loaded > 0;
@@ -268,11 +286,13 @@ void wsBinanceReconnect(const char* wsPath, bool invertPrices) {
     wsConnected = false;
 
     // Reset ring buffer
+    portENTER_CRITICAL(&wsMux);
     ringHead = 0;
     ringCount = 0;
     currentKlineOpenTime = 0;
     latestPrice = 0.0f;
     hasPrice = false;
+    portEXIT_CRITICAL(&wsMux);
 
     // Set invert mode
     invertMode = invertPrices;
@@ -329,14 +349,13 @@ bool wsBinanceBackfillSymbol(const char* symbol, bool invert) {
         return false;
     }
 
-    // Reset ring buffer
-    ringHead = 0;
-    ringCount = 0;
-
+    // Parse klines into temp array (outside lock)
+    static float tmpPrices[SPARKLINE_POINTS];
     int loaded = 0;
     unsigned long long lastOpenTime = 0;
 
     for (JsonArray kline : arr) {
+        if (loaded >= SPARKLINE_POINTS) break;
         unsigned long long openTime = kline[0].as<unsigned long long>();
         const char* closeStr = kline[4].as<const char*>();
         if (!closeStr) continue;
@@ -344,21 +363,26 @@ bool wsBinanceBackfillSymbol(const char* symbol, bool invert) {
         float closePrice = atof(closeStr);
         if (closePrice <= 0) continue;
 
-        // Invert if needed
         if (invert && closePrice > 0) {
             closePrice = 1.0f / closePrice;
         }
 
-        ringPush(closePrice);
+        tmpPrices[loaded] = closePrice;
         lastOpenTime = openTime;
         loaded++;
     }
 
+    // Quick lock to update shared ring buffer
+    portENTER_CRITICAL(&wsMux);
+    ringHead = 0;
+    ringCount = 0;
+    for (int i = 0; i < loaded; i++) ringPush(tmpPrices[i]);
     if (loaded > 0 && lastOpenTime > 0) {
         currentKlineOpenTime = lastOpenTime;
         latestPrice = ringBuf[(ringHead == 0) ? (SPARKLINE_POINTS - 1) : (ringHead - 1)];
         hasPrice = true;
     }
+    portEXIT_CRITICAL(&wsMux);
 
     Serial.printf("[WS] Backfill %s: %d klines loaded, latest=%.4f\n", symbol, loaded, latestPrice);
     return loaded > 0;

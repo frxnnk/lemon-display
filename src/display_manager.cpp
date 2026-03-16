@@ -53,6 +53,7 @@ void displayWaitVSync() {
     unsigned long t0 = millis();
     while (_vsync_count == v0) {
         if (millis() - t0 > 25) break;  // Timeout: ~1.2 frames at 49Hz
+        vTaskDelay(1);  // Yield 1ms to RTOS instead of busy-spinning
     }
 }
 

@@ -1,5 +1,6 @@
 #include "touch_manager.h"
 #include "display_manager.h"
+#include "config.h"
 #include <Arduino.h>
 #include <cmath>
 
@@ -111,8 +112,14 @@ TouchEvent touchLoop() {
         lastValidX = tp[0].x;
         lastValidY = tp[0].y;
 
+        // Clamp to screen bounds (GT911 can report out-of-range values)
+        if (lastValidX < 0) lastValidX = 0;
+        if (lastValidX >= SCREEN_W) lastValidX = SCREEN_W - 1;
+        if (lastValidY < 0) lastValidY = 0;
+        if (lastValidY >= SCREEN_H) lastValidY = SCREEN_H - 1;
+
         // Record position for velocity calculation
-        velY[velIdx]    = tp[0].y;
+        velY[velIdx]    = lastValidY;
         velTime[velIdx] = now;
         velIdx = (velIdx + 1) % VEL_SAMPLES;
         if (velCount < VEL_SAMPLES) velCount++;
@@ -120,8 +127,8 @@ TouchEvent touchLoop() {
 
     if (isTouching && !wasTouching) {
         // Touch down
-        touchStartX = tp[0].x;
-        touchStartY = tp[0].y;
+        touchStartX = lastValidX;
+        touchStartY = lastValidY;
         touchStartTime = now;
         wasTouching = true;
         velCount = 0;

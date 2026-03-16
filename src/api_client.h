@@ -6,10 +6,12 @@ enum ApiResult : uint8_t {
     API_OK,
     API_NETWORK_ERROR,
     API_PARSE_ERROR,
-    API_TIMEOUT
+    API_TIMEOUT,
+    API_RATE_LIMITED
 };
 
 void apiSetup();
+void apiStop();  // Release TLS session to free heap before OTA
 
 // Each returns ApiResult. On failure, struct is left unchanged.
 ApiResult fetchBtcPrice(BtcPrice& out);

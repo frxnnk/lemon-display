@@ -11,6 +11,8 @@
 #include "touch_utils.h"
 #include "tutorial_overlay.h"
 #include "audio_manager.h"
+#include "ws_binance.h"
+#include "api_client.h"
 #include "data/satoshi_fonts.h"
 #include <Arduino.h>
 
@@ -409,19 +411,18 @@ void settingsHandleTouch(const TouchEvent& evt) {
             settingsDraw();  // Show "Actualizando..." on the button
             delay(1500);     // Let user read the message
 
-            // Black out framebuffer + backlight OFF — MSPI/DMA contention
-            // makes any live UI impossible during flash writes
-            tft.fillScreen(0);
-            displaySetBrightness(0);
-            delay(100);  // Let LCD refresh 2-3 frames of black
-
-            // Free PSRAM sprite — less memory pressure for TLS
+            // Free everything possible before OTA — TLS needs ~50KB heap
+            wsBinanceStop();          // Close WebSocket + its TLS session
+            apiStop();                // Release API TLS session
             if (settScrReady) {
                 settScr.deleteSprite();
                 settScrReady = false;
             }
 
-            otaFlash(otaResult.url, otaProgressSerial);
+            tft.fillScreen(0);
+            delay(100);
+
+            otaFlash(otaResult.url, otaProgressSerial, otaResult.md5);
             // If we get here, OTA failed (success reboots)
             displaySetBrightness(255);
             ensureSprite();
