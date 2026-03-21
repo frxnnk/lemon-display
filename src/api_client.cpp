@@ -176,26 +176,19 @@ static const char* httpGet(const char* url, bool addCoinGeckoKey, ApiResult& res
 
         int code = http.GET();
         if (code == 200) {
-            // Read response into PSRAM buffer — zero internal heap allocation
-            WiFiClient* stream = http.getStreamPtr();
             int contentLen = http.getSize();
             int bytesRead = 0;
-            if (contentLen > 0) {
-                int cap = (contentLen < (int)(RSP_BUF_SIZE - 1)) ? contentLen : (int)(RSP_BUF_SIZE - 1);
-                bytesRead = stream->readBytes(_rspBuf, cap);
+            if (contentLen > 0 && contentLen < (int)(RSP_BUF_SIZE - 1)) {
+                // Known length — direct read into PSRAM (no heap allocation)
+                WiFiClient* stream = http.getStreamPtr();
+                bytesRead = stream->readBytes(_rspBuf, contentLen);
             } else {
-                // Chunked transfer: read until done or buffer full
-                while (bytesRead < (int)(RSP_BUF_SIZE - 1)) {
-                    int avail = stream->available();
-                    if (avail > 0) {
-                        int n = stream->readBytes(_rspBuf + bytesRead,
-                            min(avail, (int)(RSP_BUF_SIZE - 1) - bytesRead));
-                        if (n > 0) bytesRead += n; else break;
-                    } else if (!stream->connected()) {
-                        break;
-                    } else {
-                        delay(1);
-                    }
+                // Chunked/unknown — getString() handles chunked decoding, copy to PSRAM
+                String tmp = http.getString();
+                int len = tmp.length();
+                if (len > 0 && len < (int)(RSP_BUF_SIZE - 1)) {
+                    memcpy(_rspBuf, tmp.c_str(), len + 1);
+                    bytesRead = len;
                 }
             }
             _rspBuf[bytesRead] = '\0';
