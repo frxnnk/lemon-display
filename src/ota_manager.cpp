@@ -37,35 +37,42 @@ static bool isNewer(const char* remote, const char* local) {
     return rPat > lPat;
 }
 
+// File-scope so otaFreeCheck() can release TLS buffers
+static WiFiClientSecure checkClient;
+static HTTPClient checkHttp;
+
+void otaFreeCheck() {
+    checkHttp.end();
+    checkClient.stop();
+    Serial.printf("[OTA] Freed check TLS, heap: %d\n", (int)ESP.getFreeHeap());
+}
+
 OtaInfo otaCheck(const char* repo) {
     OtaInfo info = {};
     info.available = false;
 
-    static WiFiClientSecure client;
-    client.setCACert(ROOT_CAS);
-
-    static HTTPClient http;  // static: ~700 bytes off the 8KB stack
+    checkClient.setCACert(ROOT_CAS);
     static char url[256];    // static: off the stack
     snprintf(url, sizeof(url), "https://api.github.com/repos/%s/releases/latest", repo);
 
-    http.begin(client, url);
-    http.addHeader("Accept", "application/vnd.github.v3+json");
+    checkHttp.begin(checkClient, url);
+    checkHttp.addHeader("Accept", "application/vnd.github.v3+json");
 #ifdef GITHUB_PAT
-    http.addHeader("Authorization", "Bearer " GITHUB_PAT);
+    checkHttp.addHeader("Authorization", "Bearer " GITHUB_PAT);
 #endif
-    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    http.setTimeout(10000);
+    checkHttp.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    checkHttp.setTimeout(10000);
 
-    int code = http.GET();
+    int code = checkHttp.GET();
     info.httpCode = code;
     if (code != 200) {
         Serial.printf("[OTA] GitHub API error: %d\n", code);
-        http.end();
+        checkHttp.end();
         return info;
     }
 
-    String body = http.getString();
-    http.end();
+    String body = checkHttp.getString();
+    checkHttp.end();
 
     // Parse with ArduinoJson (filter: only tag_name + first asset download URL + body for MD5)
     JsonDocument filter;
@@ -181,7 +188,8 @@ bool otaFlash(const char* binUrl, void(*progressCB)(int pct), const char* md5) {
         snprintf(dbg, sizeof(dbg), "  FAIL step1: HTTP %d", code);
         otaScreen(dbg, 0xF800);
         http.end();
-        delay(5000);
+        esp_task_wdt_reset();
+        delay(2000);
         return false;
     }
     http.end();
@@ -205,7 +213,8 @@ bool otaFlash(const char* binUrl, void(*progressCB)(int pct), const char* md5) {
         snprintf(dbg, sizeof(dbg), "  FAIL download: HTTP %d", code);
         otaScreen(dbg, 0xF800);
         http.end();
-        delay(5000);
+        esp_task_wdt_reset();
+        delay(2000);
         return false;
     }
 
@@ -216,7 +225,8 @@ bool otaFlash(const char* binUrl, void(*progressCB)(int pct), const char* md5) {
     if (contentLen <= 0) {
         otaScreen("  FAIL: invalid content length", 0xF800);
         http.end();
-        delay(5000);
+        esp_task_wdt_reset();
+        delay(2000);
         return false;
     }
 
@@ -227,7 +237,8 @@ bool otaFlash(const char* binUrl, void(*progressCB)(int pct), const char* md5) {
         snprintf(dbg, sizeof(dbg), "  FAIL begin: %s", Update.errorString());
         otaScreen(dbg, 0xF800);
         http.end();
-        delay(5000);
+        esp_task_wdt_reset();
+        delay(2000);
         return false;
     }
 
@@ -248,6 +259,7 @@ bool otaFlash(const char* binUrl, void(*progressCB)(int pct), const char* md5) {
             unsigned long waitStart = millis();
             while (stream->available() == 0 && millis() - waitStart < 10000) {
                 delay(10);
+                esp_task_wdt_reset();
             }
             if (stream->available() == 0) {
                 otaScreen("  FAIL: stream timeout", 0xF800);
@@ -277,10 +289,10 @@ bool otaFlash(const char* binUrl, void(*progressCB)(int pct), const char* md5) {
         int pct = (int)((written * 100) / contentLen);
         if (pct != lastPct) {
             lastPct = pct;
+            esp_task_wdt_reset();  // Reset WDT every percent to prevent timeout on slow networks
             if (pct % 5 == 0) {
                 snprintf(dbg, sizeof(dbg), "  Progress: %d%%", pct);
                 otaScreen(dbg, 0x07E0, true);  // in-place update
-                esp_task_wdt_reset();
             }
             if (progressCB) progressCB(pct);
         }
@@ -293,7 +305,8 @@ bool otaFlash(const char* binUrl, void(*progressCB)(int pct), const char* md5) {
         snprintf(dbg, sizeof(dbg), "FAIL end: %s", Update.errorString());
         otaScreen(dbg, 0xF800);
         http.end();
-        delay(5000);
+        esp_task_wdt_reset();
+        delay(2000);
         return false;
     }
 

@@ -1,4 +1,5 @@
 #include "scheduler.h"
+#include <esp_task_wdt.h>
 
 uint8_t Scheduler::add(const char* name, unsigned long intervalMs, std::function<void()> cb) {
     if (count >= MAX_SCHEDULED_TASKS) {
@@ -19,6 +20,7 @@ void Scheduler::tick() {
         if (!tasks[i].enabled) continue;
         if (now - tasks[i].lastRun >= tasks[i].intervalMs) {
             tasks[i].lastRun = now;
+            esp_task_wdt_reset();  // Reset WDT before each task — prevents cascading HTTP timeouts from triggering reboot
             if (tasks[i].callback) {
                 tasks[i].callback();
             }

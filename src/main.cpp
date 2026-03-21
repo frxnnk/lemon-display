@@ -381,8 +381,8 @@ static bool isProModeEnabled() {
     return nvsGetProMode();
 }
 
-// Periods with Polymarket games available (5m=0, 15m=1, 4h=3)
-static const uint8_t POLY_PERIODS[] = { 0, 1, 3 };
+// Periods with Polymarket up/down markets (only 5m and 15m exist)
+static const uint8_t POLY_PERIODS[] = { 0, 1 };
 
 static void buildVisibleBtcPeriods() {
     uint8_t minIdx = BTC_PAIRS[selectedPair].minPeriodIdx;
@@ -484,7 +484,7 @@ static void applyModePolicyNow(bool forceSparkRefresh = false) {
             chartStyle = CHART_LINE;
         }
         if (forceSparkRefresh) {
-            scheduler.requestRun(taskSparkline);
+            scheduler.forceRun(taskSparkline);
             refreshPredictionForCurrentPeriod(true);
         }
     }
@@ -537,7 +537,7 @@ static void updateClock() {
         // Also skip during BTC morph — morph driver handles Z1 at 30fps,
         // direct writes would push stale sprite clips between morph frames.
         if (!tutorialIsActive() && !isToastActive() && !morphActive) {
-            dashboardUpdateTimeDirect(getTimeStr(nvsGet24hFormat()).c_str());
+            dashboardUpdateTimeDirect(getTimeStr(nvsGet24hFormat()));
             if (priceChangedSinceLastDraw && !z1Dirty) {
                 priceChangedSinceLastDraw = false;
                 dashboardUpdatePriceDirect(state.btc, selectedPair);
@@ -852,15 +852,15 @@ static void updatePolymarket() {
 static void enterPredictionMode() {
     if (dashboardGetZ2H() <= 0) {
         showToast("Cambia a BTC + USD");
-        String t = timeReady() ? getTimeStr(nvsGet24hFormat()) : String("--:--:--");
-        dashboardDrawHeader(t.c_str(), !state.online, wsBinanceConnected());
+        const char* t = timeReady() ? getTimeStr(nvsGet24hFormat()) : "--:--:--";
+        dashboardDrawHeader(t, !state.online, wsBinanceConnected());
         frameDirty = true;
         return;
     }
     if (!isProModeEnabled()) {
         showToast("Modo Pro para Polymarket");
-        String t = timeReady() ? getTimeStr(nvsGet24hFormat()) : String("--:--:--");
-        dashboardDrawHeader(t.c_str(), !state.online, wsBinanceConnected());
+        const char* t = timeReady() ? getTimeStr(nvsGet24hFormat()) : "--:--:--";
+        dashboardDrawHeader(t, !state.online, wsBinanceConnected());
         frameDirty = true;
         return;
     }
@@ -972,8 +972,8 @@ static void placePrediction(bool chooseYes) {
     if (audioIsEnabled()) playPredictionPlaced();
 
     showToast(chooseYes ? "Prediccion: SUBE" : "Prediccion: BAJA");
-    String t = timeReady() ? getTimeStr(nvsGet24hFormat()) : String("--:--:--");
-    dashboardDrawHeader(t.c_str(), !state.online, wsBinanceConnected());
+    const char* t = timeReady() ? getTimeStr(nvsGet24hFormat()) : "--:--:--";
+    dashboardDrawHeader(t, !state.online, wsBinanceConnected());
 
     drawPredictionUI(false);
     z2DrawnThisFrame = true;
@@ -1027,6 +1027,11 @@ static void switchPair(uint8_t newPair) {
     morphActive = false;
     chartZoom = { 1.0f, 1.0f, false };
 
+    // GECKO_ONLY pairs don't support candlestick — force line chart
+    if (pair.source == PAIR_GECKO_ONLY && chartStyle == CHART_CANDLE) {
+        chartStyle = CHART_LINE;
+    }
+
     // Reset period changes
     for (int i = 0; i < BTC_PERIOD_COUNT; i++) periodChanges[i] = NAN;
 
@@ -1036,31 +1041,66 @@ static void switchPair(uint8_t newPair) {
     redrawHero();
     frameDirty = true;
 
-    // ── Network: reconnect WS (lightweight, just sets up connection) ──
+    // ── Network: reconnect WS + backfill (safe with 16KB stack) ──
     esp_task_wdt_reset();
     switch (pair.source) {
         case PAIR_BINANCE_DIRECT:
         case PAIR_BINANCE_INVERT:
             wsBinanceReconnect(pair.wsPath, pair.inverted);
+            wsBinanceBackfillSymbol(pair.restSymbol, pair.inverted);
             break;
         case PAIR_DERIVED:
             if (BTC_PAIRS[0].source == PAIR_BINANCE_DIRECT) {
                 wsBinanceReconnect(BTC_PAIRS[0].wsPath, false);
+                wsBinanceBackfillSymbol(BTC_PAIRS[0].restSymbol, false);
             }
             break;
         case PAIR_GECKO_ONLY:
             wsBinanceReconnect(BTC_PAIRS[0].wsPath, false);
+            wsBinanceBackfillSymbol(BTC_PAIRS[0].restSymbol, false);
+            {
+                float price = 0;
+                if (fetchGeckoBtcPrice(pair.geckoVs, price) == API_OK) {
+                    crossRate = price;
+                    state.btc.usd = crossRate;
+                    state.btc.valid = true;
+                    btcPriceAnim.set(state.btc.usd);
+                    lastRenderedPrice = state.btc.usd;
+                    lastDisplayedInt = (int)state.btc.usd;
+                }
+            }
             break;
     }
 
-    // ── Set price from existing data if available ──
+    // ── Set correct price after network reconnect ──
     if (pair.source == PAIR_DERIVED && state.lemon.valid) {
         crossRate = (state.lemon.bid + state.lemon.ask) / 2.0f;
     }
+    if (wsBinanceHasPrice()) {
+        float wsPrice = wsBinanceGetPrice();
+        switch (pair.source) {
+            case PAIR_BINANCE_DIRECT:
+            case PAIR_BINANCE_INVERT:
+                state.btc.usd = wsPrice;
+                break;
+            case PAIR_DERIVED:
+                state.btc.usd = wsPrice * crossRate;
+                break;
+            case PAIR_GECKO_ONLY:
+                state.btc.usd = crossRate;
+                break;
+        }
+        state.btc.valid = true;
+        btcPriceAnim.set(state.btc.usd);
+        lastRenderedPrice = state.btc.usd;
+        lastDisplayedInt = (int)state.btc.usd;
+    }
 
-    // ── Defer all heavy network calls to scheduler (non-blocking) ──
+    // Force sparkline refresh + redraw with new data
+    esp_task_wdt_reset();
     syncDashboardFilters();
-    scheduler.requestRun(taskSparkline);
+    scheduler.forceRun(taskSparkline);
+    esp_task_wdt_reset();
     refreshPredictionForCurrentPeriod(true);
     z1Dirty = true;
 }
@@ -1166,14 +1206,14 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
                 if (chartStyle == CHART_CANDLE && !BTC_PERIODS[selectedPeriod].canOhlc) {
                     chartStyle = CHART_LINE;
                     showToast("OHLC no disponible");
-                    String t = timeReady() ? getTimeStr(nvsGet24hFormat()) : String("--:--:--");
-                    dashboardDrawHeader(t.c_str(), !state.online, wsBinanceConnected());
+                    const char* t = timeReady() ? getTimeStr(nvsGet24hFormat()) : "--:--:--";
+                    dashboardDrawHeader(t, !state.online, wsBinanceConnected());
                 }
 
                 redrawHero();
                 frameDirty = true;
                 esp_task_wdt_reset();
-                scheduler.requestRun(taskSparkline);
+                scheduler.forceRun(taskSparkline);
                 esp_task_wdt_reset();
                 refreshPredictionForCurrentPeriod(true);
             }
@@ -1193,7 +1233,7 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
             Serial.printf("[Touch] Chart style: %d\n", chartStyle);
 
             if (chartStyle == CHART_CANDLE && !state.ohlc.valid) {
-                scheduler.requestRun(taskSparkline);
+                scheduler.forceRun(taskSparkline);
             }
 
             redrawHero();
@@ -1205,9 +1245,9 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
             redrawHero();           // Immediate redraw to show flash border
             frameDirty = true;
             esp_task_wdt_reset();
-            scheduler.requestRun(taskBtc);
+            scheduler.forceRun(taskBtc);
             esp_task_wdt_reset();
-            scheduler.requestRun(taskSparkline);
+            scheduler.forceRun(taskSparkline);
         }
         return;
     }
@@ -1221,8 +1261,8 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
                     nvsClearPolyPrediction();
                     memset(&activePred, 0, sizeof(activePred));
                     showToast("Prediccion borrada");
-                    String t = timeReady() ? getTimeStr(nvsGet24hFormat()) : String("--:--:--");
-                    dashboardDrawHeader(t.c_str(), !state.online, wsBinanceConnected());
+                    const char* t = timeReady() ? getTimeStr(nvsGet24hFormat()) : "--:--:--";
+                    dashboardDrawHeader(t, !state.online, wsBinanceConnected());
                     drawPredictionUI(false);
                     z2DrawnThisFrame = true;
                     z2Dirty = false;
@@ -1304,9 +1344,7 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
                 z2Dirty = false;
                 frameDirty = true;
                 esp_task_wdt_reset();
-                scheduler.requestRun(taskDollarSpark);
-                // requestRun is non-blocking — fetch happens on next tick.
-                // Mark zone dirty so it redraws when new data arrives.
+                scheduler.forceRun(taskDollarSpark);
                 z2Dirty = true;
                 z2DrawnThisFrame = false;
             }
@@ -1326,8 +1364,8 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
         else if (evt.gesture == TOUCH_LONG_PRESS) {
             if (!isProModeEnabled()) {
                 showToast("Modo Pro para Polymarket");
-                String t = timeReady() ? getTimeStr(nvsGet24hFormat()) : String("--:--:--");
-                dashboardDrawHeader(t.c_str(), !state.online, wsBinanceConnected());
+                const char* t = timeReady() ? getTimeStr(nvsGet24hFormat()) : "--:--:--";
+                dashboardDrawHeader(t, !state.online, wsBinanceConnected());
                 frameDirty = true;
                 return;
             }
@@ -1349,8 +1387,8 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
 // ── Redraw dashboard ──
 static void redrawDashboard() {
     applyModePolicyNow(true);
-    String timeStr = timeReady() ? getTimeStr(nvsGet24hFormat()) : String("--:--:--");
-    dashboardDrawAll(timeStr.c_str(),
+    const char* timeStr = timeReady() ? getTimeStr(nvsGet24hFormat()) : "--:--:--";
+    dashboardDrawAll(timeStr,
                      state.btc, state.spark, selectedPeriod,
                      selectedPair,
                      state.lemon, !state.online, wsBinanceConnected(),
@@ -1496,8 +1534,8 @@ static void enterDashboard() {
     delay(300);
 
     applyModePolicyNow(false);
-    String timeStr = getTimeStr(nvsGet24hFormat());
-    dashboardDrawAll(timeStr.c_str(),
+    const char* timeStr = getTimeStr(nvsGet24hFormat());
+    dashboardDrawAll(timeStr,
                      state.btc, state.spark, selectedPeriod,
                      selectedPair,
                      state.lemon, !state.online, wsBinanceConnected(),
@@ -1574,7 +1612,7 @@ void setup() {
     if (audioIsEnabled()) playStartup();
     Serial.println("[Main] Ready");
 
-    esp_task_wdt_init(120, true);  // 120s timeout — must tolerate sequential HTTPS chains
+    esp_task_wdt_init(45, true);  // 45s timeout — scheduler resets WDT between tasks now
     esp_task_wdt_add(NULL);        // Subscribe loopTask
 }
 
@@ -1685,7 +1723,7 @@ void loop() {
             wsBinanceSetup();
             showToast("WiFi reconectado");
             if (!tutorialIsActive()) {
-                dashboardDrawHeader(getTimeStr(nvsGet24hFormat()).c_str(), false, wsBinanceConnected());
+                dashboardDrawHeader(getTimeStr(nvsGet24hFormat()), false, wsBinanceConnected());
             }
             frameDirty = true;
         }
@@ -1894,8 +1932,8 @@ void loop() {
         if (screen == SCREEN_DASHBOARD && !tutorialIsActive()) {
             // Toast just appeared OR just expired → redraw header
             if (toastNow != wasToastActive || (wasToastActive && !toastAfter)) {
-                String t = timeReady() ? getTimeStr(nvsGet24hFormat()) : String("--:--:--");
-                dashboardDrawHeader(t.c_str(), !state.online, wsBinanceConnected());
+                const char* t = timeReady() ? getTimeStr(nvsGet24hFormat()) : "--:--:--";
+                dashboardDrawHeader(t, !state.online, wsBinanceConnected());
                 frameDirty = true;
             }
         }
