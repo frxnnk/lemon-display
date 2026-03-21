@@ -8,7 +8,7 @@
 #endif
 
 // ── App version ──
-#define APP_VERSION "4.8.2"
+#define APP_VERSION "4.9.0"
 
 // 0 = normal app
 // 1 = minimal static display diagnostic mode
@@ -93,7 +93,7 @@ struct DollarPeriodDef {
 };
 
 static const DollarPeriodDef DOLLAR_PERIODS[] = {
-    {  "1d",    1 },
+    { "24h",    1 },
     {  "3d",    3 },
     {  "1w",    7 },
     {  "2w",   14 },

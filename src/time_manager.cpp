@@ -22,11 +22,10 @@ bool timeReady() {
 // Cache last valid time string to prevent flicker on brief getLocalTime() failures
 static char lastTimeStr[12] = "--:--:--";
 
-String getTimeStr(bool use24h) {
+const char* getTimeStr(bool use24h) {
     struct tm t;
     if (!getLocalTime(&t, 0)) {
-        // Return cached value if available (prevents "--:--:--" flash after initial sync)
-        if (synced) return String(lastTimeStr);
+        if (synced) return lastTimeStr;
         return use24h ? "--:--:--" : "--:-- --";
     }
     if (use24h) {
@@ -37,13 +36,14 @@ String getTimeStr(bool use24h) {
         const char* ampm = (t.tm_hour >= 12) ? "PM" : "AM";
         snprintf(lastTimeStr, sizeof(lastTimeStr), "%02d:%02d %s", h, t.tm_min, ampm);
     }
-    return String(lastTimeStr);
+    return lastTimeStr;
 }
 
-String getDateStr() {
+static char lastDateStr[11] = "--/--/----";
+
+const char* getDateStr() {
     struct tm t;
-    if (!getLocalTime(&t, 0)) return "--/--/----";
-    char buf[11];
-    snprintf(buf, sizeof(buf), "%02d/%02d/%04d", t.tm_mday, t.tm_mon + 1, t.tm_year + 1900);
-    return String(buf);
+    if (!getLocalTime(&t, 0)) return lastDateStr;
+    snprintf(lastDateStr, sizeof(lastDateStr), "%02d/%02d/%04d", t.tm_mday, t.tm_mon + 1, t.tm_year + 1900);
+    return lastDateStr;
 }
