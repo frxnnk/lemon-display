@@ -113,7 +113,7 @@ void apiStop() {
 
 // ── PSRAM response buffer: allocated once, reused — eliminates heap fragmentation ──
 static char* _rspBuf = nullptr;
-static const size_t RSP_BUF_SIZE = 65536;  // 64KB max API response (in PSRAM)
+static const size_t RSP_BUF_SIZE = 98304;  // 96KB max API response (in PSRAM) — fits BTC 1Y klines (~67KB)
 
 // ── Helper: perform HTTPS GET with 1 retry, response in PSRAM buffer ──
 static const char* httpGet(const char* url, bool addCoinGeckoKey, ApiResult& result, int timeoutMs = 7000) {
@@ -1220,8 +1220,12 @@ static ApiResult fetchPolyUpDownRecent(PolyMarket* out, uint8_t& count, uint8_t 
     char prefix[24];
     snprintf(prefix, sizeof(prefix), "btc-updown-%s-", spec.tf);
 
-    static const uint16_t PAGE_LIMIT = 20;
-    static const uint16_t MAX_OFFSET = 60;  // 3 pages max (was 600 = 30 pages, too slow)
+    // PAGE_LIMIT halved from 20 → 10: a 20-market response was ~104KB,
+    // exceeding the 96KB API buffer and silently failing parse. With 10 it
+    // lands at ~46KB. MAX_OFFSET bumped to 70 so we still scan 80 markets
+    // total (8 pages × 10 = same coverage as old 4 × 20).
+    static const uint16_t PAGE_LIMIT = 10;
+    static const uint16_t MAX_OFFSET = 70;
     for (uint16_t offset = 0; offset <= MAX_OFFSET; offset += PAGE_LIMIT) {
         esp_task_wdt_reset();
         static char urlBuf[260];  // static: off the 8KB stack
@@ -1291,8 +1295,11 @@ static ApiResult fetchPolyUpDownRecent(PolyMarket* out, uint8_t& count, uint8_t 
 
 static ApiResult fetchPolyBtcFallback(PolyMarket* out, uint8_t& count, uint8_t limit) {
     static char urlBuf[220];
+    // Limit halved from 20 → 10: a 20-market BTC response was ~145KB,
+    // exceeding the 96KB API buffer. With 10 it's ~72KB. The top BTC markets
+    // by volume24hr still end up in the smaller window.
     snprintf(urlBuf, sizeof(urlBuf),
-             "%s?active=true&closed=false&order=volume24hr&ascending=false&limit=20&tag=bitcoin",
+             "%s?active=true&closed=false&order=volume24hr&ascending=false&limit=10&tag=bitcoin",
              POLYMARKET_GAMMA_URL);
 
     ApiResult result;

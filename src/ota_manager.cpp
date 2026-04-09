@@ -51,7 +51,7 @@ OtaInfo otaCheck(const char* repo) {
     OtaInfo info = {};
     info.available = false;
 
-    checkClient.setCACert(ROOT_CAS);
+    checkClient.setInsecure();
     static char url[256];    // static: off the stack
     snprintf(url, sizeof(url), "https://api.github.com/repos/%s/releases/latest", repo);
 

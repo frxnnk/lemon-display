@@ -420,8 +420,13 @@ static void buildVisibleBtcPeriods() {
 
 static void buildVisibleDollarPeriods() {
     if (isProModeEnabled()) {
-        dollarVisibleCount = DOLLAR_PERIOD_COUNT;
-        for (uint8_t i = 0; i < DOLLAR_PERIOD_COUNT; i++) dollarVisiblePeriods[i] = i;
+        // Skip index 5 (3M / 90 days) — CoinGecko returns ~196KB hourly data
+        // which exceeds the 96KB API response buffer, leaving the chart stuck.
+        dollarVisibleCount = 0;
+        for (uint8_t i = 0; i < DOLLAR_PERIOD_COUNT; i++) {
+            if (i == 5) continue;
+            dollarVisiblePeriods[dollarVisibleCount++] = i;
+        }
     } else {
         dollarVisibleCount = (uint8_t)(sizeof(DOLLAR_PERIODS_NORMAL) / sizeof(DOLLAR_PERIODS_NORMAL[0]));
         for (uint8_t i = 0; i < dollarVisibleCount; i++) dollarVisiblePeriods[i] = DOLLAR_PERIODS_NORMAL[i];
