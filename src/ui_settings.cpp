@@ -344,19 +344,25 @@ void settingsHandleTouch(const TouchEvent& evt) {
         return;
     }
 
+    // Back arrow (fixed header) — accepts TAP/LONG_PRESS plus FLING/DOUBLE_TAP
+    // because quick edge taps with finger drift get misclassified as flings
+    // by the gesture detector. Larger rect (80x52) for spatial tolerance.
+    if (evt.gesture == TOUCH_TAP || evt.gesture == TOUCH_LONG_PRESS ||
+        evt.gesture == TOUCH_DOUBLE_TAP ||
+        evt.gesture == TOUCH_FLING_UP || evt.gesture == TOUCH_FLING_DOWN) {
+        if (touchInRect(evt.x, evt.y, 0, 0, 80, HEADER_H + 8)) {
+            scrollY = 0;
+            otaChecked = false;
+            clearResetWifiConfirm();
+            appSetScreen(SCREEN_DASHBOARD);
+            return;
+        }
+    }
+
     if (evt.gesture != TOUCH_TAP && evt.gesture != TOUCH_LONG_PRESS) return;
 
     int tx = evt.x;
     int ty = evt.y;
-
-    // Back arrow (fixed header)
-    if (touchInRect(tx, ty, 0, 0, 60, HEADER_H)) {
-        scrollY = 0;
-        otaChecked = false;
-        clearResetWifiConfirm();
-        appSetScreen(SCREEN_DASHBOARD);
-        return;
-    }
 
     // Convert touch Y to content Y (add scrollY)
     int cy = ty + scrollY;
