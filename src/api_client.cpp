@@ -105,6 +105,8 @@ static const unsigned long COINGECKO_MIN_INTERVAL = 6000;  // 6s between CoinGec
 
 void apiSetup() {
     secureClient.setCACert(ROOT_CAS);
+    secureClient.setHandshakeTimeout(5);   // 5s max for TLS handshake
+    secureClient.setTimeout(7);            // 7s general socket timeout
 }
 
 void apiStop() {
@@ -174,27 +176,54 @@ static const char* httpGet(const char* url, bool addCoinGeckoKey, ApiResult& res
         }
         http.addHeader("Accept", "application/json");
 
+        esp_task_wdt_reset();
         int code = http.GET();
+        esp_task_wdt_reset();
         if (code == 200) {
-            int contentLen = http.getSize();
+            int contentLen = http.getSize();  // -1 if chunked
+            int maxRead = (contentLen > 0 && contentLen < (int)(RSP_BUF_SIZE - 1))
+                          ? contentLen : (int)(RSP_BUF_SIZE - 1);
+            WiFiClient* stream = http.getStreamPtr();
             int bytesRead = 0;
-            if (contentLen > 0 && contentLen < (int)(RSP_BUF_SIZE - 1)) {
-                // Known length — direct read into PSRAM (no heap allocation)
-                WiFiClient* stream = http.getStreamPtr();
-                bytesRead = stream->readBytes(_rspBuf, contentLen);
-            } else {
-                // Chunked/unknown — getString() handles chunked decoding, copy to PSRAM
-                String tmp = http.getString();
-                int len = tmp.length();
-                if (len > 0 && len < (int)(RSP_BUF_SIZE - 1)) {
-                    memcpy(_rspBuf, tmp.c_str(), len + 1);
-                    bytesRead = len;
+            unsigned long readStart = millis();
+            unsigned long readDeadline = (unsigned long)timeoutMs;
+            int idleCycles = 0;
+            while (bytesRead < maxRead) {
+                if (millis() - readStart > readDeadline) {
+                    Serial.printf("[API] Body read timeout after %dms (%d bytes)\n",
+                                  timeoutMs, bytesRead);
+                    break;
+                }
+                int avail = stream->available();
+                if (avail > 0) {
+                    int toRead = avail;
+                    if (toRead > maxRead - bytesRead) toRead = maxRead - bytesRead;
+                    int n = stream->readBytes(_rspBuf + bytesRead, toRead);
+                    if (n <= 0) break;
+                    bytesRead += n;
+                    idleCycles = 0;
+                    esp_task_wdt_reset();
+                } else if (!stream->connected()) {
+                    break;  // connection closed — done
+                } else {
+                    // No data yet: for chunked, exit after sustained idle
+                    idleCycles++;
+                    if (contentLen <= 0 && bytesRead > 0 && idleCycles > 50) {
+                        break;  // chunked: 500ms idle after receiving data → done
+                    }
+                    delay(10);
+                    if (idleCycles % 100 == 0) esp_task_wdt_reset();
                 }
             }
             _rspBuf[bytesRead] = '\0';
             http.end();
-            result = API_OK;
-            return _rspBuf;
+            if (bytesRead > 0) {
+                result = API_OK;
+                return _rspBuf;
+            }
+            Serial.printf("[API] Empty body from %s\n", url);
+            result = API_NETWORK_ERROR;
+            continue;  // retry
         } else if (code == -1 || code == -11) {
             Serial.printf("[API] Timeout (code %d) from %s\n", code, url);
             result = API_TIMEOUT;
