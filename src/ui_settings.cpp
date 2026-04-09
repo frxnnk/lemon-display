@@ -294,7 +294,9 @@ void settingsDraw() {
     settScr.fillRect(0, 0, SCREEN_W, HEADER_H, Colors::BG_BASE);
     settScr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_BASE);
     settScr.setTextDatum(lgfx::middle_left);
-    settScr.drawString("<", MARGIN, HEADER_H / 2, &SatoshiMedium18);
+    // Arrow pulled away from left edge — GT911 has a ~20px edge filter that
+    // suppresses touches near the visual left border (rotated panel).
+    settScr.drawString("<", MARGIN + 28, HEADER_H / 2, &SatoshiMedium18);
     settScr.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_BASE);
     settScr.setTextDatum(lgfx::middle_center);
     settScr.drawString("Ajustes", SCREEN_W / 2, HEADER_H / 2, &SatoshiMedium18);
@@ -344,13 +346,13 @@ void settingsHandleTouch(const TouchEvent& evt) {
         return;
     }
 
-    // Back arrow (fixed header) — accepts TAP/LONG_PRESS plus FLING/DOUBLE_TAP
-    // because quick edge taps with finger drift get misclassified as flings
-    // by the gesture detector. Larger rect (80x52) for spatial tolerance.
+    // Back arrow (fixed header) — rect starts at x=24 to skip the GT911 edge
+    // filter dead zone (~0..20px on the left), extends to x=180 for tolerance.
+    // Accepts TAP/LONG_PRESS plus FLING/DOUBLE_TAP for gesture-detector edge cases.
     if (evt.gesture == TOUCH_TAP || evt.gesture == TOUCH_LONG_PRESS ||
         evt.gesture == TOUCH_DOUBLE_TAP ||
         evt.gesture == TOUCH_FLING_UP || evt.gesture == TOUCH_FLING_DOWN) {
-        if (touchInRect(evt.x, evt.y, 0, 0, 80, HEADER_H + 8)) {
+        if (touchInRect(evt.x, evt.y, 24, 0, 156, HEADER_H + 12)) {
             scrollY = 0;
             otaChecked = false;
             clearResetWifiConfirm();
