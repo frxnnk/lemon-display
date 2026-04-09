@@ -113,7 +113,7 @@ void apiStop() {
 
 // ── PSRAM response buffer: allocated once, reused — eliminates heap fragmentation ──
 static char* _rspBuf = nullptr;
-static const size_t RSP_BUF_SIZE = 65536;  // 64KB max API response (in PSRAM)
+static const size_t RSP_BUF_SIZE = 98304;  // 96KB max API response (in PSRAM) — fits BTC 1Y klines (~67KB)
 
 // ── Helper: perform HTTPS GET with 1 retry, response in PSRAM buffer ──
 static const char* httpGet(const char* url, bool addCoinGeckoKey, ApiResult& result, int timeoutMs = 7000) {
