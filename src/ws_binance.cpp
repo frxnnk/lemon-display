@@ -209,9 +209,10 @@ bool wsBinanceBackfill() {
     http.setConnectTimeout(5000);
     http.setTimeout(10000);
 
-    String url = String(BINANCE_KLINES_EP) + "?symbol=BTCUSDT&interval=1m&limit=96";
+    static char urlBuf[128];
+    snprintf(urlBuf, sizeof(urlBuf), "%s?symbol=BTCUSDT&interval=1m&limit=96", BINANCE_KLINES_EP);
 
-    if (!http.begin(client, url)) {
+    if (!http.begin(client, urlBuf)) {
         Serial.println("[WS] Backfill: HTTP begin failed");
         http.end();
         return false;
@@ -224,12 +225,11 @@ bool wsBinanceBackfill() {
         return false;
     }
 
-    String payload = http.getString();
-    http.end();
-
-    // Parse array of arrays: [[openTime, open, high, low, close, ...], ...]
+    // Parse directly from HTTP stream — no String allocation
     JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, payload);
+    WiFiClient* stream = http.getStreamPtr();
+    DeserializationError err = deserializeJson(doc, *stream);
+    http.end();
     if (err) {
         Serial.printf("[WS] Backfill: JSON error: %s\n", err.c_str());
         return false;
@@ -333,11 +333,11 @@ bool wsBinanceBackfillSymbol(const char* symbol, bool invert) {
         return false;
     }
 
-    String payload = http.getString();
-    http.end();
-
+    // Parse directly from HTTP stream — no String allocation
     JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, payload);
+    WiFiClient* stream = http.getStreamPtr();
+    DeserializationError err = deserializeJson(doc, *stream);
+    http.end();
     if (err) {
         Serial.printf("[WS] Backfill: JSON error: %s\n", err.c_str());
         return false;

@@ -70,14 +70,14 @@ void playTone(uint16_t freqHz, uint16_t durationMs) {
             if (phase >= 2.0f * M_PI) phase -= 2.0f * M_PI;
         }
         size_t bytesWritten = 0;
-        i2s_write(I2S_PORT, buf, chunk * sizeof(int16_t), &bytesWritten, portMAX_DELAY);
+        i2s_write(I2S_PORT, buf, chunk * sizeof(int16_t), &bytesWritten, pdMS_TO_TICKS(500));
         written += chunk;
     }
 
     // Brief silence to flush DMA
     memset(buf, 0, sizeof(buf));
     size_t dummy;
-    i2s_write(I2S_PORT, buf, 64 * sizeof(int16_t), &dummy, portMAX_DELAY);
+    i2s_write(I2S_PORT, buf, 64 * sizeof(int16_t), &dummy, pdMS_TO_TICKS(200));
 }
 
 void playAlertUp() {

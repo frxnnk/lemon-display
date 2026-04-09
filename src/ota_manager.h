@@ -13,6 +13,9 @@ struct OtaInfo {
 // Check GitHub releases for a newer version
 OtaInfo otaCheck(const char* repo);
 
+// Free TLS resources from otaCheck (call before otaFlash to maximize heap)
+void otaFreeCheck();
+
 // Download .bin from url and flash via Update library; reboots on success
 // Optional progress callback receives percentage (0-100)
 bool otaFlash(const char* binUrl, void(*progressCB)(int pct) = nullptr, const char* md5 = nullptr);
