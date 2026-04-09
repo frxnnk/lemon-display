@@ -111,8 +111,25 @@ void apiStop() {
     secureClient.stop();
 }
 
-// ── Helper: perform HTTPS GET with 1 retry ──
-static String httpGet(const char* url, bool addCoinGeckoKey, ApiResult& result, int timeoutMs = 7000) {
+// ── PSRAM response buffer: allocated once, reused — eliminates heap fragmentation ──
+static char* _rspBuf = nullptr;
+static const size_t RSP_BUF_SIZE = 65536;  // 64KB max API response (in PSRAM)
+
+// ── Helper: perform HTTPS GET with 1 retry, response in PSRAM buffer ──
+static const char* httpGet(const char* url, bool addCoinGeckoKey, ApiResult& result, int timeoutMs = 7000) {
+    // Allocate PSRAM buffer once (persists for device lifetime)
+    if (!_rspBuf) {
+        _rspBuf = (char*)ps_malloc(RSP_BUF_SIZE);
+        if (!_rspBuf) _rspBuf = (char*)malloc(RSP_BUF_SIZE);  // fallback
+        if (!_rspBuf) {
+            Serial.println("[API] FATAL: cannot allocate response buffer");
+            result = API_NETWORK_ERROR;
+            static char empty[1] = {0};
+            return empty;
+        }
+    }
+    _rspBuf[0] = '\0';
+
     // Rate limit CoinGecko calls to avoid 429s — wait if too soon
     if (addCoinGeckoKey && lastCoinGeckoCall > 0) {
         unsigned long now = millis();
@@ -120,7 +137,11 @@ static String httpGet(const char* url, bool addCoinGeckoKey, ApiResult& result, 
         if (elapsed < COINGECKO_MIN_INTERVAL) {
             unsigned long wait = COINGECKO_MIN_INTERVAL - elapsed;
             Serial.printf("[API] CoinGecko rate limit: waiting %lums\n", wait);
-            delay(wait);
+            unsigned long waitEnd = millis() + wait;
+            while (millis() < waitEnd) {
+                delay(100);
+                esp_task_wdt_reset();
+            }
         }
     }
     if (addCoinGeckoKey) lastCoinGeckoCall = millis();
@@ -155,10 +176,25 @@ static String httpGet(const char* url, bool addCoinGeckoKey, ApiResult& result, 
 
         int code = http.GET();
         if (code == 200) {
-            String payload = http.getString();
+            int contentLen = http.getSize();
+            int bytesRead = 0;
+            if (contentLen > 0 && contentLen < (int)(RSP_BUF_SIZE - 1)) {
+                // Known length — direct read into PSRAM (no heap allocation)
+                WiFiClient* stream = http.getStreamPtr();
+                bytesRead = stream->readBytes(_rspBuf, contentLen);
+            } else {
+                // Chunked/unknown — getString() handles chunked decoding, copy to PSRAM
+                String tmp = http.getString();
+                int len = tmp.length();
+                if (len > 0 && len < (int)(RSP_BUF_SIZE - 1)) {
+                    memcpy(_rspBuf, tmp.c_str(), len + 1);
+                    bytesRead = len;
+                }
+            }
+            _rspBuf[bytesRead] = '\0';
             http.end();
             result = API_OK;
-            return payload;
+            return _rspBuf;
         } else if (code == -1 || code == -11) {
             Serial.printf("[API] Timeout (code %d) from %s\n", code, url);
             result = API_TIMEOUT;
@@ -168,15 +204,15 @@ static String httpGet(const char* url, bool addCoinGeckoKey, ApiResult& result, 
         }
         http.end();
     }
-    return "";
+    return _rspBuf;  // empty string on failure
 }
 
 // ── CoinGecko: BTC price + 1h/24h/7d changes ──
 ApiResult fetchBtcPrice(BtcPrice& out) {
     ApiResult result;
-    String url = "https://api.coingecko.com/api/v3/coins/bitcoin?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false";
-    String json = httpGet(url.c_str(), false, result);
-    if (json.isEmpty()) return result;
+    static const char url[] = "https://api.coingecko.com/api/v3/coins/bitcoin?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false";
+    const char* json = httpGet(url, false, result);
+    if (!json[0]) return result;
 
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, json, DeserializationOption::NestingLimit(15));
@@ -203,8 +239,8 @@ ApiResult fetchBtcPrice(BtcPrice& out) {
 // ── CoinGecko: Lightweight BTC price (for real-time mode) ──
 ApiResult fetchBtcPriceSimple(BtcPrice& out) {
     ApiResult result;
-    String json = httpGet(COINGECKO_SIMPLE_EP, false, result);
-    if (json.isEmpty()) return result;
+    const char* json = httpGet(COINGECKO_SIMPLE_EP, false, result);
+    if (!json[0]) return result;
 
     JsonDocument doc;
     if (deserializeJson(doc, json)) {
@@ -228,8 +264,8 @@ ApiResult fetchBtcPriceSimple(BtcPrice& out) {
 // ── CoinGecko: Global market data ──
 ApiResult fetchGlobalData(CryptoGlobal& out) {
     ApiResult result;
-    String json = httpGet(COINGECKO_GLOBAL_EP, false, result);
-    if (json.isEmpty()) return result;
+    const char* json = httpGet(COINGECKO_GLOBAL_EP, false, result);
+    if (!json[0]) return result;
 
     JsonDocument doc;
     if (deserializeJson(doc, json)) {
@@ -264,7 +300,7 @@ ApiResult fetchSparkline(SparklineData& out, int days, CoinId coin) {
 
     // Use the shared httpGet helper (reads full response as String)
     ApiResult result;
-    String json = httpGet(urlBuf, false, result);
+    const char* json = httpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     // Parse JSON from String with filter (only keep "prices")
@@ -312,8 +348,8 @@ ApiResult fetchSparkline(SparklineData& out, int days, CoinId coin) {
 // ── CoinGecko: Multi-coin market data (single request for all coins) ──
 ApiResult fetchMarketData(MarketData& out) {
     ApiResult result;
-    String json = httpGet(COINGECKO_MARKETS_EP, false, result);
-    if (json.isEmpty()) return result;
+    const char* json = httpGet(COINGECKO_MARKETS_EP, false, result);
+    if (!json[0]) return result;
 
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, json, DeserializationOption::NestingLimit(15));
@@ -375,7 +411,7 @@ ApiResult fetchBinanceKlines(SparklineData& out, const char* interval, int limit
              BINANCE_KLINES_EP, interval, limit);
 
     ApiResult result;
-    String json = httpGet(urlBuf, false, result);
+    const char* json = httpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     JsonDocument doc;
@@ -427,7 +463,7 @@ ApiResult fetchBinanceOhlc(OhlcData& out, const char* interval, int limit) {
              BINANCE_KLINES_EP, interval, limit);
 
     ApiResult result;
-    String json = httpGet(urlBuf, false, result);
+    const char* json = httpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     JsonDocument doc;
@@ -485,10 +521,10 @@ ApiResult fetchLemonSparkline(SparklineData& out, int days) {
     // Longer timeout for large periods (90d+ = hourly data, big response)
     int timeout = (days > 30) ? 15000 : 10000;
     ApiResult result;
-    String json = httpGet(urlBuf, false, result, timeout);
+    const char* json = httpGet(urlBuf, false, result, timeout);
     if (result != API_OK) return result;
 
-    Serial.printf("[API] Lemon sparkline response: %d bytes\n", json.length());
+    Serial.printf("[API] Lemon sparkline response: %d bytes\n", (int)strlen(json));
 
     JsonDocument filter;
     filter["prices"][0][0] = true;
@@ -498,8 +534,6 @@ ApiResult fetchLemonSparkline(SparklineData& out, int days) {
     DeserializationError err = deserializeJson(doc, json,
         DeserializationOption::Filter(filter),
         DeserializationOption::NestingLimit(15));
-    json = String();  // free memory immediately after parse
-
     if (err) {
         Serial.printf("[API] Lemon sparkline JSON error: %s\n", err.c_str());
         return API_PARSE_ERROR;
@@ -556,7 +590,7 @@ ApiResult fetchBinanceKlinesSymbol(SparklineData& out, const char* symbol,
              BINANCE_KLINES_EP, symbol, interval, limit);
 
     ApiResult result;
-    String json = httpGet(urlBuf, false, result);
+    const char* json = httpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     JsonDocument doc;
@@ -610,7 +644,7 @@ ApiResult fetchBinanceOhlcSymbol(OhlcData& out, const char* symbol,
              BINANCE_KLINES_EP, symbol, interval, limit);
 
     ApiResult result;
-    String json = httpGet(urlBuf, false, result);
+    const char* json = httpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     JsonDocument doc;
@@ -683,7 +717,7 @@ ApiResult fetchSparklineVsCurrency(SparklineData& out, int days,
              geckoId, vsCurrency, days);
 
     ApiResult result;
-    String json = httpGet(urlBuf, false, result);
+    const char* json = httpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     JsonDocument filter;
@@ -734,7 +768,7 @@ ApiResult fetchGeckoBtcPrice(const char* vsCurrency, float& outPrice) {
              vsCurrency);
 
     ApiResult result;
-    String json = httpGet(urlBuf, false, result);
+    const char* json = httpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     JsonDocument doc;
@@ -753,8 +787,8 @@ ApiResult fetchGeckoBtcPrice(const char* vsCurrency, float& outPrice) {
 // ── CriptoYa: Lemon USDC/ARS price ──
 ApiResult fetchLemonPrice(LemonPrice& out) {
     ApiResult result;
-    String json = httpGet(CRIPTOYA_LEMON_EP, false, result);
-    if (json.isEmpty()) return result;
+    const char* json = httpGet(CRIPTOYA_LEMON_EP, false, result);
+    if (!json[0]) return result;
 
     JsonDocument doc;
     if (deserializeJson(doc, json)) {
@@ -982,8 +1016,8 @@ static bool fetchBinanceRefPrice(const char* startTime, float& outPrice) {
              (unsigned long)epochSec);
 
     ApiResult result;
-    String json = httpGet(urlBuf, false, result);
-    if (result != API_OK || json.isEmpty()) {
+    const char* json = httpGet(urlBuf, false, result);
+    if (result != API_OK || !json[0]) {
         refCacheStore(startTime, 0.0f, false);
         return false;
     }
@@ -991,7 +1025,6 @@ static bool fetchBinanceRefPrice(const char* startTime, float& outPrice) {
     // Response: [[openTime,"open","high","low","close",...]]
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, json);
-    json = String();
     if (err) {
         refCacheStore(startTime, 0.0f, false);
         return false;
@@ -1089,7 +1122,7 @@ static ApiResult fetchPolyFromEventSlug(const char* slug, PolyMarket* out, uint8
              slug);
 
     ApiResult result;
-    String json = httpGet(urlBuf, false, result);
+    const char* json = httpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     JsonDocument filter;
@@ -1113,7 +1146,6 @@ static ApiResult fetchPolyFromEventSlug(const char* slug, PolyMarket* out, uint8
     DeserializationError err = deserializeJson(doc, json,
         DeserializationOption::Filter(filter),
         DeserializationOption::NestingLimit(12));
-    json = String();
     if (err) {
         Serial.printf("[API] Polymarket event parse error (%s): %s\n", slug, err.c_str());
         return API_PARSE_ERROR;
@@ -1198,7 +1230,7 @@ static ApiResult fetchPolyUpDownRecent(PolyMarket* out, uint8_t& count, uint8_t 
                  POLYMARKET_GAMMA_URL, (unsigned)PAGE_LIMIT, (unsigned)offset);
 
         ApiResult result;
-        String json = httpGet(urlBuf, false, result);
+        const char* json = httpGet(urlBuf, false, result);
         if (result != API_OK) return result;
 
         JsonDocument filter;
@@ -1220,7 +1252,6 @@ static ApiResult fetchPolyUpDownRecent(PolyMarket* out, uint8_t& count, uint8_t 
         DeserializationError err = deserializeJson(doc, json,
             DeserializationOption::Filter(filter),
             DeserializationOption::NestingLimit(10));
-        json = String();
         if (err) {
             Serial.printf("[API] Polymarket recent parse error (off=%u): %s\n",
                           (unsigned)offset, err.c_str());
@@ -1265,7 +1296,7 @@ static ApiResult fetchPolyBtcFallback(PolyMarket* out, uint8_t& count, uint8_t l
              POLYMARKET_GAMMA_URL);
 
     ApiResult result;
-    String json = httpGet(urlBuf, false, result);
+    const char* json = httpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     JsonDocument filter;
@@ -1287,7 +1318,6 @@ static ApiResult fetchPolyBtcFallback(PolyMarket* out, uint8_t& count, uint8_t l
     DeserializationError err = deserializeJson(doc, json,
         DeserializationOption::Filter(filter),
         DeserializationOption::NestingLimit(10));
-    json = String();
     if (err) return API_PARSE_ERROR;
 
     JsonArrayConst arr = doc.as<JsonArrayConst>();
@@ -1372,7 +1402,7 @@ ApiResult fetchPolyMarketByConditionId(const char* conditionId, PolyMarket& out)
              POLYMARKET_GAMMA_URL, conditionId);
 
     ApiResult result;
-    String json = httpGet(urlBuf, false, result);
+    const char* json = httpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     JsonDocument filter;
@@ -1394,7 +1424,6 @@ ApiResult fetchPolyMarketByConditionId(const char* conditionId, PolyMarket& out)
     DeserializationError err = deserializeJson(doc, json,
         DeserializationOption::Filter(filter),
         DeserializationOption::NestingLimit(10));
-    json = String();
     if (err) return API_PARSE_ERROR;
 
     JsonArrayConst arr = doc.as<JsonArrayConst>();

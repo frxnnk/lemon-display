@@ -251,7 +251,7 @@ void settingsDraw() {
         }
     }
 
-    // ── Reset WiFi button (red outline) ──
+    // ── Factory reset button (red outline) ──
     {
         int by = RESET_BTN_Y - scrollY;
         settScr.fillSmoothRoundRect(MARGIN, by, CARD_W, BTN_H, 12, Colors::BG_SURFACE);
@@ -261,7 +261,7 @@ void settingsDraw() {
         settScr.drawRoundRect(MARGIN, by, CARD_W, BTN_H, 12, borderColor);
         settScr.setTextColor(textColor, Colors::BG_SURFACE);
         settScr.setTextDatum(lgfx::middle_center);
-        settScr.drawString(confirmActive ? "Confirmar reset WiFi" : "Resetear WiFi",
+        settScr.drawString(confirmActive ? "Confirmar reset" : "Reset de fabrica",
                            MARGIN + CARD_W / 2, by + BTN_H / 2, &Satoshi12);
     }
 
@@ -441,12 +441,12 @@ void settingsHandleTouch(const TouchEvent& evt) {
         return;
     }
 
-    // ══════════ RESET WIFI BUTTON ══════════
+    // ══════════ FACTORY RESET BUTTON ══════════
     if (touchInRect(tx, cy, MARGIN, RESET_BTN_Y, CARD_W, RESET_BTN_H)) {
         if (isResetWifiConfirmActive()) {
             clearResetWifiConfirm();
-            nvsForgetWifi();
-            ESP.restart();
+            nvsFactoryReset();  // Clears ALL NVS: WiFi, tutorial, stats, settings
+            ESP.restart();      // Reboots → shows tutorial + WiFi provisioning
         } else {
             armResetWifiConfirm();
             settingsDraw();
