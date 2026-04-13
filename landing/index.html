@@ -3,18 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#000000">
+    <meta name="description" content="Lemon Box — Dashboard crypto de escritorio con ESP32-S3. Bitcoin en tiempo real, Polymarket, dólar. Open-source.">
     <title>Lemon Box — Dashboard Crypto de Escritorio</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Outfit:wght@300;400;500;600&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Outfit:wght@300;400;500;600&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
         }
 
         :root {
+            color-scheme: dark;
             --black: #000000;
             --greent: #00F068;
             --evergreen: #00A849;
@@ -26,6 +32,53 @@
         }
 
         html { scroll-behavior: smooth; }
+
+        /* Skip link — visible only on keyboard focus */
+        .skip-link {
+            position: absolute;
+            top: -100px;
+            left: 1rem;
+            padding: 0.6rem 1rem;
+            background: var(--greent);
+            color: var(--black);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-decoration: none;
+            border-radius: 6px;
+            z-index: 1000;
+            transition: top 0.2s;
+        }
+        .skip-link:focus { top: 1rem; }
+
+        .visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        /* Section anchor offset (nav is fixed) */
+        #about, #features, #explorer, #specs {
+            scroll-margin-top: 80px;
+        }
+
+        /* Keyboard focus ring */
+        .nav-links a:focus-visible,
+        .nav-logo:focus-visible,
+        .explorer-tab:focus-visible,
+        .cta-btn:focus-visible,
+        .f-card:focus-visible,
+        .skip-link:focus-visible {
+            outline: 2px solid var(--greent);
+            outline-offset: 3px;
+            border-radius: 4px;
+        }
 
         body {
             background: var(--black);
@@ -47,11 +100,11 @@
             left: 0;
             right: 0;
             z-index: 100;
-            padding: 1.25rem 3rem;
+            padding: max(1.25rem, env(safe-area-inset-top)) max(3rem, env(safe-area-inset-right)) 1.25rem max(3rem, env(safe-area-inset-left));
             display: flex;
             align-items: center;
             justify-content: space-between;
-            transition: background 0.4s, border-color 0.4s;
+            transition: background-color 0.4s, border-color 0.4s;
             border-bottom: 1px solid transparent;
         }
 
@@ -97,6 +150,7 @@
             letter-spacing: 0.08em;
             text-transform: uppercase;
             transition: color 0.3s;
+            touch-action: manipulation;
         }
 
         .nav-links a:hover { color: var(--greent); }
@@ -140,6 +194,7 @@
             color: var(--greent);
             letter-spacing: -0.03em;
             text-align: center;
+            text-wrap: balance;
             z-index: 2;
             line-height: 0.95;
             text-shadow: 0 0 80px rgba(0,240,104,0.25);
@@ -289,6 +344,11 @@
             opacity: 0.7;
         }
 
+        .section-label::before {
+            content: '// ';
+            opacity: 0.6;
+        }
+
         .section-title {
             font-family: 'Syne', sans-serif;
             font-weight: 700;
@@ -297,6 +357,7 @@
             line-height: 1.08;
             margin-bottom: 1.5rem;
             letter-spacing: -0.025em;
+            text-wrap: balance;
         }
 
         .divider {
@@ -360,7 +421,10 @@
             border: 1px solid var(--border);
             border-radius: 14px;
             background: var(--surface);
-            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            transition:
+                background-color 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                border-color 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
             position: relative;
             overflow: hidden;
         }
@@ -426,8 +490,9 @@
             border-radius: 8px;
             color: var(--moon);
             cursor: pointer;
-            transition: all 0.3s;
+            transition: background-color 0.3s, border-color 0.3s, color 0.3s;
             letter-spacing: 0.04em;
+            touch-action: manipulation;
         }
 
         .explorer-tab:hover {
@@ -548,6 +613,7 @@
             color: var(--starlight);
             margin-bottom: 1rem;
             letter-spacing: -0.02em;
+            text-wrap: balance;
         }
 
         .cta-sub {
@@ -568,8 +634,9 @@
             padding: 1rem 2.5rem;
             border: 1px solid var(--greent);
             border-radius: 10px;
-            transition: all 0.35s;
+            transition: background-color 0.35s, color 0.35s, box-shadow 0.35s;
             letter-spacing: 0.04em;
+            touch-action: manipulation;
         }
 
         .cta-btn:hover {
@@ -648,29 +715,34 @@
 </head>
 <body>
 
+<a href="#main" class="skip-link">Saltar al contenido</a>
+
 <!-- NAV -->
-<nav id="main-nav">
-    <a href="#" class="nav-logo" aria-label="home"><span class="dot"></span></a>
+<nav id="main-nav" aria-label="Principal">
+    <a href="#" class="nav-logo" aria-label="Inicio"><span class="dot" aria-hidden="true"></span></a>
     <ul class="nav-links">
         <li><a href="#about">Proyecto</a></li>
         <li><a href="#features">Features</a></li>
         <li><a href="#explorer">3D</a></li>
         <li><a href="#specs">Specs</a></li>
-        <li><a href="https://github.com/frxnnk/lemon-display" target="_blank">GitHub</a></li>
+        <li><a href="https://github.com/frxnnk/lemon-display" target="_blank" rel="noopener noreferrer">GitHub</a></li>
     </ul>
 </nav>
 
+<main id="main">
+<h1 class="visually-hidden">Lemon Box — Dashboard crypto de escritorio con ESP32-S3</h1>
+
 <!-- HERO — scroll-driven assembly -->
-<section class="hero-scroll" id="hero-scroll">
+<section class="hero-scroll" id="hero-scroll" aria-label="Animación de ensamblaje 3D">
     <div class="hero-sticky">
         <div id="hero-viewer" class="hero-3d" style="flex:1;width:100%;max-width:900px;position:relative;z-index:1;">
-            <div class="loader" id="hero-loader">
-                <span class="loader-dot">.</span><span class="loader-dot">.</span><span class="loader-dot">.</span>
+            <div class="loader" id="hero-loader" role="status" aria-live="polite" aria-label="Cargando modelo 3D">
+                <span aria-hidden="true"><span class="loader-dot">.</span><span class="loader-dot">.</span><span class="loader-dot">.</span></span>
             </div>
         </div>
 
 
-        <div id="assembly-progress"></div>
+        <div id="assembly-progress" role="progressbar" aria-label="Progreso de ensamblaje" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
     </div>
 </section>
 
@@ -678,11 +750,11 @@
 
 <!-- ABOUT -->
 <section class="section" id="about">
-    <div class="section-label reveal">// Qué es</div>
+    <div class="section-label reveal">Qué es</div>
     <h2 class="section-title reveal reveal-delay-1">Un dispositivo dedicado<br>a tus cryptos</h2>
     <p class="about-text reveal reveal-delay-2">
         <strong>Lemon Box</strong> es un dispositivo de escritorio con una
-        <span class="g">pantalla redonda táctil de 480x480</span> que muestra
+        <span class="g">pantalla redonda táctil de 480×480</span> que muestra
         el precio de Bitcoin en tiempo real, gráficos en múltiples timeframes,
         predicciones de Polymarket, cotización del dólar, y más.
         <br><br>
@@ -710,7 +782,7 @@
 
 <!-- FEATURES -->
 <section class="section" id="features">
-    <div class="section-label reveal">// Features</div>
+    <div class="section-label reveal">Features</div>
     <h2 class="section-title reveal reveal-delay-1">Todo lo que necesitás,<br>en una pantalla</h2>
 
     <div class="features-grid">
@@ -751,19 +823,19 @@
 
 <!-- 3D EXPLORER -->
 <section class="section" id="explorer">
-    <div class="section-label reveal">// Modelo 3D</div>
+    <div class="section-label reveal">Modelo 3D</div>
     <h2 class="section-title reveal reveal-delay-1">Explorá cada pieza</h2>
 
-    <div class="explorer-tabs reveal reveal-delay-2">
-        <button class="explorer-tab active" data-model="case">Case</button>
-        <button class="explorer-tab" data-model="lid">Tapa</button>
-        <button class="explorer-tab" data-model="logo">Logo</button>
-        <button class="explorer-tab" data-model="feet">Patas</button>
+    <div class="explorer-tabs reveal reveal-delay-2" role="tablist" aria-label="Partes del modelo 3D">
+        <button class="explorer-tab active" data-model="case" role="tab" id="tab-case" aria-selected="true" aria-controls="explorer-viewer">Case</button>
+        <button class="explorer-tab" data-model="lid" role="tab" id="tab-lid" aria-selected="false" aria-controls="explorer-viewer">Tapa</button>
+        <button class="explorer-tab" data-model="logo" role="tab" id="tab-logo" aria-selected="false" aria-controls="explorer-viewer">Logo</button>
+        <button class="explorer-tab" data-model="feet" role="tab" id="tab-feet" aria-selected="false" aria-controls="explorer-viewer">Patas</button>
     </div>
 
-    <div id="explorer-viewer" class="explorer-canvas reveal reveal-delay-2">
-        <div class="loader" id="explorer-loader">
-            <span class="loader-dot">.</span><span class="loader-dot">.</span><span class="loader-dot">.</span>
+    <div id="explorer-viewer" class="explorer-canvas reveal reveal-delay-2" role="tabpanel" aria-labelledby="tab-case">
+        <div class="loader" id="explorer-loader" role="status" aria-live="polite" aria-label="Cargando pieza 3D">
+            <span aria-hidden="true"><span class="loader-dot">.</span><span class="loader-dot">.</span><span class="loader-dot">.</span></span>
         </div>
     </div>
 
@@ -782,7 +854,7 @@
 
 <!-- SPECS -->
 <section class="section" id="specs">
-    <div class="section-label reveal">// Especificaciones</div>
+    <div class="section-label reveal">Especificaciones</div>
     <h2 class="section-title reveal reveal-delay-1">Bajo el capó</h2>
 
     <div class="specs-grid reveal reveal-delay-2">
@@ -831,13 +903,15 @@
 <section class="cta-section">
     <h2 class="cta-title reveal">Armá el tuyo</h2>
     <p class="cta-sub reveal reveal-delay-1">Open-source. Imprimí la carcasa, flasheá el firmware, conectá y listo.</p>
-    <a href="https://github.com/frxnnk/lemon-display" target="_blank" class="cta-btn reveal reveal-delay-2">
+    <a href="https://github.com/frxnnk/lemon-display" target="_blank" rel="noopener noreferrer" class="cta-btn reveal reveal-delay-2">
         Ver en GitHub
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
             <path d="M5 12h14M12 5l7 7-7 7"/>
         </svg>
     </a>
 </section>
+
+</main>
 
 <!-- FOOTER -->
 <footer>
@@ -860,18 +934,26 @@ import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // ── Scroll reveal ──
-const revealObserver = new IntersectionObserver((entries) => {
-    entries.forEach(e => {
-        if (e.isIntersecting) {
-            e.target.classList.add('visible');
-            revealObserver.unobserve(e.target);
-        }
+const _prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (_prefersReduced) {
+    // Skip observer entirely, show everything up front
+    requestAnimationFrame(() => {
+        document.querySelectorAll('.reveal').forEach(el => el.classList.add('visible'));
     });
-}, { threshold: 0.01, rootMargin: '0px 0px 0px 0px' });
+} else {
+    const revealObserver = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+            if (e.isIntersecting) {
+                e.target.classList.add('visible');
+                revealObserver.unobserve(e.target);
+            }
+        });
+    }, { threshold: 0.01, rootMargin: '0px 0px 0px 0px' });
 
-requestAnimationFrame(() => {
-    document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
-});
+    requestAnimationFrame(() => {
+        document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+    });
+}
 
 // ── Nav scroll effect ──
 const nav = document.getElementById('main-nav');
@@ -1396,7 +1478,9 @@ function heroAnimate() {
     const t = prefersReducedMotion ? 1.0 : (window._editGetProgress ? window._editGetProgress() : getScrollProgress());
 
     // Update progress bar
-    progressBar.style.width = (t * 100) + '%';
+    const pct = Math.round(t * 100);
+    progressBar.style.width = pct + '%';
+    progressBar.setAttribute('aria-valuenow', String(pct));
 
     if (caseMesh && !prefersReducedMotion) {
         // ── Part assembly phases ──
@@ -1846,8 +1930,13 @@ document.querySelectorAll('.explorer-tab').forEach(tab => {
         if (key === currentPart) return;
         currentPart = key;
 
-        document.querySelectorAll('.explorer-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.explorer-tab').forEach(t => {
+            t.classList.remove('active');
+            t.setAttribute('aria-selected', 'false');
+        });
         tab.classList.add('active');
+        tab.setAttribute('aria-selected', 'true');
+        document.getElementById('explorer-viewer').setAttribute('aria-labelledby', tab.id);
 
         expLoader.classList.remove('hidden');
         expViewer.load(BASE + PARTS[key].file).then(() => {
