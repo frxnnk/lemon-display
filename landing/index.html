@@ -87,6 +87,28 @@
             overflow-x: hidden;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
+            position: relative;
+        }
+
+        /* ── CRT-style scanlines overlay (basement shader-lab inspired) ── */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                to bottom,
+                transparent 0,
+                transparent 2px,
+                rgba(255, 255, 255, 0.015) 2px,
+                rgba(255, 255, 255, 0.015) 3px
+            );
+            pointer-events: none;
+            z-index: 9998;
+            mix-blend-mode: overlay;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            body::before { display: none; }
         }
 
         ::-webkit-scrollbar { width: 5px; }
@@ -347,6 +369,23 @@
         .section-label::before {
             content: '// ';
             opacity: 0.6;
+        }
+
+        .section-label::after {
+            content: '_';
+            display: inline-block;
+            margin-left: 0.25em;
+            animation: crtCursor 1.1s step-end infinite;
+            opacity: 0.8;
+        }
+
+        @keyframes crtCursor {
+            0%, 50% { opacity: 0.9; }
+            51%, 100% { opacity: 0; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .section-label::after { animation: none; opacity: 0.4; }
         }
 
         .section-title {
@@ -614,6 +653,24 @@
             margin-bottom: 1rem;
             letter-spacing: -0.02em;
             text-wrap: balance;
+            /* Subtle chromatic aberration — basement.studio CRT vibe */
+            text-shadow:
+                -1px 0 0 rgba(255, 0, 128, 0.35),
+                 1px 0 0 rgba(0, 240, 255, 0.3),
+                 0 0 40px rgba(0, 240, 104, 0.15);
+            animation: crtFlicker 7s infinite steps(1, end);
+        }
+
+        @keyframes crtFlicker {
+            0%, 96%, 100% { opacity: 1; }
+            97%  { opacity: 0.88; }
+            97.5% { opacity: 1; }
+            98%  { opacity: 0.93; }
+            98.5% { opacity: 1; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .cta-title { animation: none; }
         }
 
         .cta-sub {
@@ -735,6 +792,18 @@
         .footer-bottom .lemon-icon {
             color: var(--greent);
             margin: 0 0.15em;
+        }
+
+        .footer-author {
+            color: var(--starlight);
+            text-decoration: none;
+            border-bottom: 1px dashed var(--border);
+            padding-bottom: 1px;
+            transition: color 0.25s, border-color 0.25s;
+        }
+        .footer-author:hover {
+            color: var(--greent);
+            border-color: var(--greent);
         }
 
         @media (max-width: 680px) {
@@ -964,7 +1033,7 @@
         </div>
         <div class="spec">
             <div class="spec-k">Firmware</div>
-            <div class="spec-v">v4.8.3</div>
+            <div class="spec-v">v4.9.7</div>
         </div>
         <div class="spec">
             <div class="spec-k">Updates</div>
@@ -982,7 +1051,7 @@
 <!-- CTA -->
 <section class="cta-section">
     <h2 class="cta-title reveal">Armá el tuyo</h2>
-    <p class="cta-sub reveal reveal-delay-1">Código, STLs y guía de ensamblado en GitHub. MIT License — gratis para siempre.</p>
+    <p class="cta-sub reveal reveal-delay-1">Código, STLs y flasher en GitHub. Un solo lugar, desde el firmware hasta la carcasa.</p>
     <a href="https://github.com/frxnnk/lemon-display" target="_blank" rel="noopener noreferrer" class="cta-btn reveal reveal-delay-2">
         Ver repo en GitHub
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -1020,13 +1089,13 @@
             <div class="footer-label">Comunidad</div>
             <ul class="footer-list">
                 <li><a href="https://lemon.me" target="_blank" rel="noopener noreferrer">Lemon</a></li>
-                <li><a href="https://github.com/frxnnk" target="_blank" rel="noopener noreferrer">@frxnnk</a></li>
+                <li><a href="https://github.com/frxnnk" target="_blank" rel="noopener noreferrer">Ferced</a></li>
             </ul>
         </div>
     </div>
     <div class="footer-bottom">
-        <p>MIT License · Hardware libre · Imprimí, flasheá, usalo</p>
-        <p>Hecho con <span class="lemon-icon" aria-hidden="true">◉</span> para la comunidad</p>
+        <p>Open-hardware · Imprimí, flasheá, usalo</p>
+        <p>Hecho por <a href="https://github.com/frxnnk" target="_blank" rel="noopener noreferrer" class="footer-author">Ferced</a> <span class="lemon-icon" aria-hidden="true">◉</span></p>
     </div>
 </footer>
 
