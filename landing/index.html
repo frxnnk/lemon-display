@@ -1,0 +1,1865 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lemon Box — Dashboard Crypto de Escritorio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Outfit:wght@300;400;500;600&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --black: #000000;
+            --greent: #00F068;
+            --evergreen: #00A849;
+            --nebula: #806CF2;
+            --starlight: #E7E7E7;
+            --moon: #5B5B5B;
+            --surface: rgba(255,255,255,0.02);
+            --border: rgba(255,255,255,0.06);
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            background: var(--black);
+            color: var(--starlight);
+            font-family: 'Outfit', sans-serif;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--greent); border-radius: 3px; }
+
+        /* ── NAV ── */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            padding: 1.25rem 3rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: background 0.4s, border-color 0.4s;
+            border-bottom: 1px solid transparent;
+        }
+
+        nav.scrolled {
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border-bottom-color: var(--border);
+        }
+
+        .nav-logo {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: 1.1rem;
+            color: var(--greent);
+            text-decoration: none;
+            letter-spacing: 0.04em;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .nav-logo .dot {
+            width: 10px;
+            height: 10px;
+            background: var(--greent);
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 12px rgba(0,240,104,0.5);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2.5rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--moon);
+            text-decoration: none;
+            font-size: 0.8rem;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover { color: var(--greent); }
+
+        /* ── HERO SCROLL ASSEMBLY ── */
+        .hero-scroll {
+            height: 400vh;
+            position: relative;
+        }
+
+        .hero-sticky {
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            min-height: 600px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            padding: 0 2rem;
+        }
+
+        .hero-sticky::before {
+            content: '';
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0,240,104,0.08) 0%, transparent 70%);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        .hero-title {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: clamp(3.5rem, 9vw, 8rem);
+            color: var(--greent);
+            letter-spacing: -0.03em;
+            text-align: center;
+            z-index: 2;
+            line-height: 0.95;
+            text-shadow: 0 0 80px rgba(0,240,104,0.25);
+            animation: heroFadeIn 1s ease forwards;
+            margin-top: 3rem;
+            transition: opacity 0.1s, transform 0.1s;
+        }
+
+        .hero-sub {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 300;
+            font-size: clamp(1rem, 2vw, 1.3rem);
+            color: var(--moon);
+            text-align: center;
+            z-index: 2;
+            margin-top: 0.75rem;
+            letter-spacing: 0.02em;
+            animation: heroFadeIn 1s ease 0.2s forwards;
+            opacity: 0;
+            transition: opacity 0.1s, transform 0.1s;
+        }
+
+        .hero-3d {
+            flex: 1;
+            width: 100%;
+            max-width: 900px;
+            position: relative;
+            z-index: 1;
+            margin-top: -1rem;
+            animation: heroFadeIn 1.5s ease 0.4s forwards;
+            opacity: 0;
+        }
+
+        .hero-3d canvas { cursor: default; }
+
+        .hero-hint {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.65rem;
+            color: var(--moon);
+            opacity: 0.4;
+            text-align: center;
+            z-index: 2;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            animation: heroFadeIn 1s ease 0.8s forwards;
+            opacity: 0;
+            margin-top: -2rem;
+            transition: opacity 0.3s;
+        }
+
+        .hero-bottom {
+            text-align: center;
+            z-index: 4;
+            padding-bottom: 1rem;
+        }
+
+        .hero-version {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.7rem;
+            color: var(--greent);
+            opacity: 0.4;
+            letter-spacing: 0.1em;
+        }
+
+        .scroll-indicator {
+            position: absolute;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 5;
+            animation: bounce 2.5s ease-in-out infinite;
+            transition: opacity 0.3s;
+        }
+
+        .scroll-indicator svg {
+            width: 20px;
+            height: 20px;
+            stroke: var(--greent);
+            opacity: 0.35;
+        }
+
+        #assembly-progress {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 2px;
+            background: var(--greent);
+            z-index: 10;
+            transition: width 0.05s linear;
+            box-shadow: 0 0 8px rgba(0,240,104,0.4);
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateX(-50%) translateY(0); opacity: 0.5; }
+            50% { transform: translateX(-50%) translateY(10px); opacity: 1; }
+        }
+
+        @keyframes heroFadeIn {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── LOADING ── */
+        .loader {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.75rem;
+            color: var(--greent);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            z-index: 10;
+            transition: opacity 0.6s ease;
+        }
+
+        .loader.hidden { opacity: 0; pointer-events: none; }
+
+        .loader-dot {
+            display: inline-block;
+            animation: loaderPulse 1.4s ease-in-out infinite;
+        }
+        .loader-dot:nth-child(2) { animation-delay: 0.2s; }
+        .loader-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes loaderPulse {
+            0%, 80%, 100% { opacity: 0.2; }
+            40% { opacity: 1; }
+        }
+
+        /* ── SECTIONS ── */
+        .section {
+            padding: 7rem 3rem;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .section-label {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.7rem;
+            color: var(--greent);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-bottom: 1.25rem;
+            opacity: 0.7;
+        }
+
+        .section-title {
+            font-family: 'Syne', sans-serif;
+            font-weight: 700;
+            font-size: clamp(2rem, 4vw, 3.2rem);
+            color: var(--starlight);
+            line-height: 1.08;
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.025em;
+        }
+
+        .divider {
+            width: 100%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+        }
+
+        /* ── ABOUT ── */
+        .about-text {
+            font-size: 1.2rem;
+            line-height: 1.85;
+            color: var(--moon);
+            max-width: 640px;
+            font-weight: 300;
+        }
+
+        .about-text strong { color: var(--starlight); font-weight: 500; }
+        .about-text .g { color: var(--greent); }
+
+        .about-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+            margin-top: 4rem;
+            padding-top: 3rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .stat-val {
+            font-family: 'Space Grotesk', 'Syne', sans-serif;
+            font-weight: 700;
+            font-size: clamp(2.4rem, 4.5vw, 3.4rem);
+            color: var(--greent);
+            line-height: 1;
+            letter-spacing: -0.02em;
+            font-variant-numeric: tabular-nums;
+            font-feature-settings: "ss01", "tnum";
+        }
+
+        .stat-lbl {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.68rem;
+            font-weight: 500;
+            color: var(--moon);
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            margin-top: 0.65rem;
+        }
+
+        /* ── FEATURES ── */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.25rem;
+            margin-top: 3rem;
+        }
+
+        .f-card {
+            padding: 2rem;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            background: var(--surface);
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .f-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--greent), transparent);
+            opacity: 0;
+            transition: opacity 0.4s;
+        }
+
+        .f-card:hover {
+            background: rgba(0,240,104,0.025);
+            border-color: rgba(0,240,104,0.15);
+            transform: translateY(-3px);
+        }
+
+        .f-card:hover::after { opacity: 0.6; }
+
+        .f-num {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.65rem;
+            color: var(--greent);
+            opacity: 0.4;
+            letter-spacing: 0.1em;
+            margin-bottom: 1.25rem;
+        }
+
+        .f-title {
+            font-family: 'Space Grotesk', 'Syne', sans-serif;
+            font-weight: 600;
+            font-size: 1.25rem;
+            color: var(--starlight);
+            margin-bottom: 0.7rem;
+            letter-spacing: -0.01em;
+        }
+
+        .f-desc {
+            font-size: 0.92rem;
+            color: var(--moon);
+            line-height: 1.65;
+            font-weight: 300;
+        }
+
+        /* ── EXPLORER ── */
+        .explorer-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin: 2rem 0 1.5rem;
+        }
+
+        .explorer-tab {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.75rem;
+            padding: 0.7rem 1.4rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--moon);
+            cursor: pointer;
+            transition: all 0.3s;
+            letter-spacing: 0.04em;
+        }
+
+        .explorer-tab:hover {
+            border-color: rgba(0,240,104,0.3);
+            color: var(--starlight);
+        }
+
+        .explorer-tab.active {
+            background: rgba(0,240,104,0.08);
+            border-color: rgba(0,240,104,0.4);
+            color: var(--greent);
+        }
+
+        .explorer-canvas {
+            width: 100%;
+            height: 500px;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            position: relative;
+            background: var(--surface);
+        }
+
+        .explorer-canvas canvas { cursor: grab; }
+        .explorer-canvas canvas:active { cursor: grabbing; }
+
+        .explorer-info {
+            margin-top: 2rem;
+            display: flex;
+            gap: 3rem;
+            align-items: flex-start;
+        }
+
+        .explorer-name {
+            font-family: 'Space Grotesk', 'Syne', sans-serif;
+            font-weight: 600;
+            font-size: 1.45rem;
+            color: var(--starlight);
+            letter-spacing: -0.015em;
+        }
+
+        .explorer-file {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.68rem;
+            color: var(--greent);
+            opacity: 0.55;
+            margin-top: 0.4rem;
+            letter-spacing: -0.01em;
+        }
+
+        .explorer-desc {
+            font-size: 0.92rem;
+            color: var(--moon);
+            line-height: 1.7;
+            max-width: 500px;
+            font-weight: 300;
+        }
+
+        /* ── SPECS ── */
+        .specs-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1px;
+            margin-top: 3rem;
+            background: var(--border);
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        .spec {
+            padding: 1.75rem;
+            background: #060606;
+        }
+
+        .spec-k {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.62rem;
+            font-weight: 500;
+            color: var(--moon);
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            margin-bottom: 0.6rem;
+        }
+
+        .spec-v {
+            font-family: 'Space Grotesk', 'Syne', sans-serif;
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: var(--starlight);
+            letter-spacing: -0.01em;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* ── CTA ── */
+        .cta-section {
+            text-align: center;
+            padding: 8rem 3rem;
+            position: relative;
+        }
+
+        .cta-section::before {
+            content: '';
+            position: absolute;
+            width: 500px;
+            height: 500px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0,240,104,0.04) 0%, transparent 70%);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        .cta-title {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+            color: var(--starlight);
+            margin-bottom: 1rem;
+            letter-spacing: -0.02em;
+        }
+
+        .cta-sub {
+            color: var(--moon);
+            font-weight: 300;
+            font-size: 1.05rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .cta-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.85rem;
+            color: var(--greent);
+            text-decoration: none;
+            padding: 1rem 2.5rem;
+            border: 1px solid var(--greent);
+            border-radius: 10px;
+            transition: all 0.35s;
+            letter-spacing: 0.04em;
+        }
+
+        .cta-btn:hover {
+            background: var(--greent);
+            color: var(--black);
+            box-shadow: 0 0 40px rgba(0,240,104,0.2);
+        }
+
+        .cta-btn svg {
+            width: 16px;
+            height: 16px;
+            transition: transform 0.3s;
+        }
+
+        .cta-btn:hover svg { transform: translateX(3px); }
+
+        /* ── FOOTER ── */
+        footer {
+            padding: 3rem;
+            text-align: center;
+            border-top: 1px solid var(--border);
+        }
+
+        footer p {
+            font-size: 0.75rem;
+            color: var(--moon);
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            letter-spacing: 0.05em;
+        }
+
+        footer .lemon-icon { color: var(--greent); }
+
+        /* ── SCROLL REVEAL ── */
+        .reveal {
+            opacity: 0;
+            transform: translateY(24px);
+            transition: opacity 0.7s ease, transform 0.7s ease;
+            will-change: opacity, transform;
+        }
+
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .reveal { opacity: 1; transform: none; }
+            .hero-scroll { height: 100vh !important; }
+        }
+
+        .reveal-delay-1 { transition-delay: 0.1s; }
+        .reveal-delay-2 { transition-delay: 0.2s; }
+        .reveal-delay-3 { transition-delay: 0.3s; }
+        .reveal-delay-4 { transition-delay: 0.4s; }
+        .reveal-delay-5 { transition-delay: 0.5s; }
+
+        /* ── RESPONSIVE ── */
+        @media (max-width: 900px) {
+            .features-grid { grid-template-columns: 1fr; }
+            .specs-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 680px) {
+            nav { padding: 1rem 1.5rem; }
+            .nav-links { display: none; }
+            .section { padding: 5rem 1.5rem; }
+            .about-stats { grid-template-columns: 1fr; gap: 1.5rem; }
+            .specs-grid { grid-template-columns: 1fr; }
+            .explorer-tabs { flex-wrap: wrap; }
+            .explorer-canvas { height: 320px; }
+            .explorer-info { flex-direction: column; gap: 1rem; }
+            .cta-section { padding: 5rem 1.5rem; }
+            .hero-scroll { height: 350vh; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="main-nav">
+    <a href="#" class="nav-logo" aria-label="home"><span class="dot"></span></a>
+    <ul class="nav-links">
+        <li><a href="#about">Proyecto</a></li>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#explorer">3D</a></li>
+        <li><a href="#specs">Specs</a></li>
+        <li><a href="https://github.com/frxnnk/lemon-display" target="_blank">GitHub</a></li>
+    </ul>
+</nav>
+
+<!-- HERO — scroll-driven assembly -->
+<section class="hero-scroll" id="hero-scroll">
+    <div class="hero-sticky">
+        <div id="hero-viewer" class="hero-3d" style="flex:1;width:100%;max-width:900px;position:relative;z-index:1;">
+            <div class="loader" id="hero-loader">
+                <span class="loader-dot">.</span><span class="loader-dot">.</span><span class="loader-dot">.</span>
+            </div>
+        </div>
+
+
+        <div id="assembly-progress"></div>
+    </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ABOUT -->
+<section class="section" id="about">
+    <div class="section-label reveal">// Qué es</div>
+    <h2 class="section-title reveal reveal-delay-1">Un dispositivo dedicado<br>a tus cryptos</h2>
+    <p class="about-text reveal reveal-delay-2">
+        <strong>Lemon Box</strong> es un dispositivo de escritorio con una
+        <span class="g">pantalla redonda táctil de 480x480</span> que muestra
+        el precio de Bitcoin en tiempo real, gráficos en múltiples timeframes,
+        predicciones de Polymarket, cotización del dólar, y más.
+        <br><br>
+        Carcasa impresa en 3D, firmware open-source, actualizaciones OTA.
+        Diseñado para el ecosistema <span class="g">Lemon</span>.
+    </p>
+
+    <div class="about-stats">
+        <div class="reveal">
+            <div class="stat-val">5</div>
+            <div class="stat-lbl">Trading Pairs</div>
+        </div>
+        <div class="reveal reveal-delay-1">
+            <div class="stat-val">8</div>
+            <div class="stat-lbl">Timeframes</div>
+        </div>
+        <div class="reveal reveal-delay-2">
+            <div class="stat-val">&lt;1s</div>
+            <div class="stat-lbl">Latencia WS</div>
+        </div>
+    </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- FEATURES -->
+<section class="section" id="features">
+    <div class="section-label reveal">// Features</div>
+    <h2 class="section-title reveal reveal-delay-1">Todo lo que necesitás,<br>en una pantalla</h2>
+
+    <div class="features-grid">
+        <div class="f-card reveal">
+            <div class="f-num">01</div>
+            <div class="f-title">BTC Real-time</div>
+            <div class="f-desc">Precio de Bitcoin vía WebSocket de Binance con latencia sub-segundo. Gráficos de línea y velas OHLC en 8 timeframes.</div>
+        </div>
+        <div class="f-card reveal reveal-delay-1">
+            <div class="f-num">02</div>
+            <div class="f-title">Multi-par</div>
+            <div class="f-desc">BTC/USD, BTC/ETH, BTC/SOL, BTC/ARS y BTC/ORO. Cambiá entre pares con un toque en la pantalla.</div>
+        </div>
+        <div class="f-card reveal reveal-delay-2">
+            <div class="f-num">03</div>
+            <div class="f-title">Polymarket</div>
+            <div class="f-desc">Predicciones de mercado en tiempo real. Seguí probabilidades de eventos con countdown y alertas sonoras.</div>
+        </div>
+        <div class="f-card reveal reveal-delay-3">
+            <div class="f-num">04</div>
+            <div class="f-title">Dólar en vivo</div>
+            <div class="f-desc">Cotización USDC/ARS vía CriptoYa. Sparkline del dólar en múltiples períodos, desde 24 horas hasta 1 año.</div>
+        </div>
+        <div class="f-card reveal reveal-delay-4">
+            <div class="f-num">05</div>
+            <div class="f-title">OTA Updates</div>
+            <div class="f-desc">Actualizaciones de firmware over-the-air desde GitHub. Siempre en la última versión, sin cables ni herramientas.</div>
+        </div>
+        <div class="f-card reveal reveal-delay-5">
+            <div class="f-num">06</div>
+            <div class="f-title">Audio Alerts</div>
+            <div class="f-desc">Speaker MAX98357A integrado. Alertas sonoras cuando BTC se mueve más de 5% en una hora. Beep en countdown de Polymarket.</div>
+        </div>
+    </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- 3D EXPLORER -->
+<section class="section" id="explorer">
+    <div class="section-label reveal">// Modelo 3D</div>
+    <h2 class="section-title reveal reveal-delay-1">Explorá cada pieza</h2>
+
+    <div class="explorer-tabs reveal reveal-delay-2">
+        <button class="explorer-tab active" data-model="case">Case</button>
+        <button class="explorer-tab" data-model="lid">Tapa</button>
+        <button class="explorer-tab" data-model="logo">Logo</button>
+        <button class="explorer-tab" data-model="feet">Patas</button>
+    </div>
+
+    <div id="explorer-viewer" class="explorer-canvas reveal reveal-delay-2">
+        <div class="loader" id="explorer-loader">
+            <span class="loader-dot">.</span><span class="loader-dot">.</span><span class="loader-dot">.</span>
+        </div>
+    </div>
+
+    <div class="explorer-info reveal reveal-delay-3">
+        <div>
+            <div class="explorer-name" id="part-name">Case</div>
+            <div class="explorer-file" id="part-file">Lemon-box-with-screen.stl</div>
+        </div>
+        <div class="explorer-desc" id="part-desc">
+            Carcasa principal del Lemon Box. Aloja el ESP32-S3 y la pantalla redonda de 480x480. Diseño optimizado para impresión 3D sin soportes.
+        </div>
+    </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- SPECS -->
+<section class="section" id="specs">
+    <div class="section-label reveal">// Especificaciones</div>
+    <h2 class="section-title reveal reveal-delay-1">Bajo el capó</h2>
+
+    <div class="specs-grid reveal reveal-delay-2">
+        <div class="spec">
+            <div class="spec-k">Procesador</div>
+            <div class="spec-v">ESP32-S3</div>
+        </div>
+        <div class="spec">
+            <div class="spec-k">Display</div>
+            <div class="spec-v">480×480 Round</div>
+        </div>
+        <div class="spec">
+            <div class="spec-k">Input</div>
+            <div class="spec-v">Touch capacitivo</div>
+        </div>
+        <div class="spec">
+            <div class="spec-k">Conectividad</div>
+            <div class="spec-v">WiFi 2.4GHz</div>
+        </div>
+        <div class="spec">
+            <div class="spec-k">Audio</div>
+            <div class="spec-v">MAX98357A I2S</div>
+        </div>
+        <div class="spec">
+            <div class="spec-k">Carcasa</div>
+            <div class="spec-v">PLA / 3D Print</div>
+        </div>
+        <div class="spec">
+            <div class="spec-k">Firmware</div>
+            <div class="spec-v">v4.8.3</div>
+        </div>
+        <div class="spec">
+            <div class="spec-k">Updates</div>
+            <div class="spec-v">OTA + USB</div>
+        </div>
+        <div class="spec">
+            <div class="spec-k">Data Source</div>
+            <div class="spec-v">Binance WS</div>
+        </div>
+    </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- CTA -->
+<section class="cta-section">
+    <h2 class="cta-title reveal">Armá el tuyo</h2>
+    <p class="cta-sub reveal reveal-delay-1">Open-source. Imprimí la carcasa, flasheá el firmware, conectá y listo.</p>
+    <a href="https://github.com/frxnnk/lemon-display" target="_blank" class="cta-btn reveal reveal-delay-2">
+        Ver en GitHub
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+    </a>
+</section>
+
+<!-- FOOTER -->
+<footer>
+    <p>Hecho con <span class="lemon-icon">◉</span> Lemon</p>
+</footer>
+
+<!-- THREE.JS -->
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/"
+    }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── Scroll reveal ──
+const revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+        if (e.isIntersecting) {
+            e.target.classList.add('visible');
+            revealObserver.unobserve(e.target);
+        }
+    });
+}, { threshold: 0.01, rootMargin: '0px 0px 0px 0px' });
+
+requestAnimationFrame(() => {
+    document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+});
+
+// ── Nav scroll effect ──
+const nav = document.getElementById('main-nav');
+window.addEventListener('scroll', () => {
+    nav.classList.toggle('scrolled', window.scrollY > 60);
+}, { passive: true });
+
+// ── STL paths & data ──
+const BASE = '../modelo3d/';
+const PARTS = {
+    case: {
+        file: 'Lemon-box-with-screen.stl',
+        name: 'Case',
+        desc: 'Carcasa principal del Lemon Box. Aloja el ESP32-S3 y la pantalla redonda de 480x480. Diseño optimizado para impresión 3D sin soportes.'
+    },
+    lid: {
+        file: 'Lemon-box-lid-new.stl',
+        name: 'Tapa',
+        desc: 'Tapa trasera con sistema de encastre a presión. Acceso rápido a los componentes internos para mantenimiento o upgrades.'
+    },
+    logo: {
+        file: 'Lemon-box-lid-logo-new.stl',
+        name: 'Logo',
+        desc: 'Isotipo de Lemon en relieve. Se imprime en color separado y se incrusta en la tapa para un acabado bicolor premium.'
+    },
+    feet: {
+        file: 'Lemon-box-feet.stl',
+        name: 'Patas',
+        desc: 'Patas para la base. Elevan el dispositivo para ventilación y estabilidad sobre el escritorio.'
+    }
+};
+
+// ── Utility ──
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+function easeInOutCubic(t) { return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; }
+function phaseProgress(t, start, end) { return clamp((t - start) / (end - start), 0, 1); }
+
+// ══════════════════════════════════════════════
+// ── HERO: Scroll-driven Assembly Viewer ──
+// ══════════════════════════════════════════════
+
+const heroSection = document.getElementById('hero-scroll');
+const heroEl = document.getElementById('hero-viewer');
+const heroLoaderEl = document.getElementById('hero-loader');
+const progressBar = document.getElementById('assembly-progress');
+
+// Reduced motion: skip animation
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ── Scene setup ──
+const heroScene = new THREE.Scene();
+const heroCamera = new THREE.PerspectiveCamera(
+    38,
+    heroEl.clientWidth / heroEl.clientHeight,
+    0.1, 5000
+);
+
+const heroRenderer = new THREE.WebGLRenderer({
+    antialias: true,
+    alpha: true,
+    powerPreference: 'high-performance'
+});
+heroRenderer.setSize(heroEl.clientWidth, heroEl.clientHeight);
+heroRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+heroRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+heroRenderer.toneMappingExposure = 1.4;
+heroEl.appendChild(heroRenderer.domElement);
+
+// Lights
+heroScene.add(new THREE.AmbientLight(0x666666, 1.2));
+
+const heroKeyLight = new THREE.DirectionalLight(0xffffff, 3.0);
+heroKeyLight.position.set(60, 100, 60);
+heroScene.add(heroKeyLight);
+
+const heroRimLight = new THREE.DirectionalLight(0x00F068, 2.0);
+heroRimLight.position.set(-70, 30, -50);
+heroScene.add(heroRimLight);
+
+const heroFillLight = new THREE.DirectionalLight(0xcccccc, 1.2);
+heroFillLight.position.set(-40, -30, 60);
+heroScene.add(heroFillLight);
+
+const heroTopLight = new THREE.DirectionalLight(0xffffff, 1.5);
+heroTopLight.position.set(0, 100, 0);
+heroScene.add(heroTopLight);
+
+const heroUnderLight = new THREE.PointLight(0x00F068, 0.6, 200);
+heroUnderLight.position.set(0, -60, 0);
+heroScene.add(heroUnderLight);
+
+// OrbitControls (disabled during scroll animation)
+const heroControls = new OrbitControls(heroCamera, heroRenderer.domElement);
+heroControls.enableDamping = true;
+heroControls.dampingFactor = 0.06;
+heroControls.autoRotate = false;
+heroControls.autoRotateSpeed = 0.8;
+heroControls.enableZoom = true;
+heroControls.enablePan = false;
+heroControls.minDistance = 20;
+heroControls.maxDistance = 250;
+heroControls.maxPolarAngle = Math.PI * 0.85;
+heroControls.enabled = false; // disabled until assembly complete
+
+// Materials
+const darkMetalMat = new THREE.MeshPhysicalMaterial({
+    color: 0x3a3a3a,
+    roughness: 0.18,
+    metalness: 0.7,
+    clearcoat: 0.8,
+    clearcoatRoughness: 0.08,
+    reflectivity: 0.6,
+});
+
+const greenLogoMat = new THREE.MeshPhysicalMaterial({
+    color: 0x00F068,
+    roughness: 0.3,
+    metalness: 0.4,
+    emissive: 0x00F068,
+    emissiveIntensity: 0.3,
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.1,
+});
+
+
+// Part meshes & animation state
+let caseMesh, lidMesh, logoMesh;
+let assemblyGroup = new THREE.Group();
+heroScene.add(assemblyGroup);
+
+// Exploded offsets (in LOCAL units before group rotation)
+// With rotation.x=-PI/2: local Y → world -Z. So negative local Y = positive world Z (behind case)
+// Lid comes from behind; logo starts centered in front of camera (large -Y in local = large +Z in world)
+const EXPLODED = {
+    case: new THREE.Vector3(0, 0, 0),       // anchor
+    lid:  new THREE.Vector3(0, -75, 0),     // behind case (world +Z)
+    logo: new THREE.Vector3(0, -140, 20),   // between camera and case, slightly up
+};
+
+// Home positions (set after loading)
+const HOME = { case: null, lid: null, logo: null };
+
+// Dashboard screen
+let dashboardMesh = null;
+let dashboardTexture = null;
+
+// Camera path: single continuous spherical orbit around the assembly
+// Start: high isometric view showing exploded parts
+// End: low frontal view looking at the screen
+const CAM_PATH = {
+    startAngle: 0.25,     // ~14° from +Z axis — more frontal
+    endAngle:   Math.PI,  // 180° (straight -Z, facing screen)
+    startRadius: 280,     // farther back so exploded parts don't get cropped
+    endRadius:   130,     // close enough to read the screen, far enough to see the whole case
+    startY: 120,          // higher for isometric feel
+    endY:   0,
+};
+// World Z position of the dashboard screen (computed after load)
+let screenWorldZ = -27.6;
+
+// ── Load all STL parts in parallel ──
+const stlLoader = new STLLoader();
+
+function loadSTL(filename) {
+    return new Promise((resolve, reject) => {
+        stlLoader.load(BASE + filename, (geo) => {
+            geo.computeVertexNormals();
+            resolve(geo);
+        }, undefined, reject);
+    });
+}
+
+Promise.all([
+    loadSTL('Lemon-box-with-screen.stl'),
+    loadSTL('Lemon-box-lid-new.stl'),
+    loadSTL('Lemon-box-lid-logo-new.stl'),
+]).then(([caseGeo, lidGeo, logoGeo]) => {
+    // Create meshes — DON'T center individual parts (preserve CAD coordinates)
+    caseMesh = new THREE.Mesh(caseGeo, darkMetalMat);
+    lidMesh  = new THREE.Mesh(lidGeo, darkMetalMat);
+    logoMesh = new THREE.Mesh(logoGeo, greenLogoMat);
+
+    assemblyGroup.add(caseMesh, lidMesh, logoMesh);
+
+    // Compute combined bounding box and center the group
+    const combinedBox = new THREE.Box3().setFromObject(assemblyGroup);
+    const center = new THREE.Vector3();
+    combinedBox.getCenter(center);
+
+    // Shift all children so the group is centered at origin
+    assemblyGroup.children.forEach(child => {
+        child.position.sub(center);
+    });
+
+    // Uniform scale to fit viewport
+    const size = new THREE.Vector3();
+    combinedBox.getSize(size);
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const scale = 55 / maxDim;
+    assemblyGroup.scale.setScalar(scale);
+
+    // Rotate group: STL Z=up → Three.js Y=up (rotate -90° around X)
+    assemblyGroup.rotation.x = -Math.PI / 2;
+
+    // Record home positions (assembled state, in local coords after centering)
+    HOME.case = caseMesh.position.clone();
+    HOME.lid  = lidMesh.position.clone();
+    HOME.logo = logoMesh.position.clone();
+
+    // Debug: expose key values + geometry bounds
+    caseGeo.computeBoundingBox();
+    lidGeo.computeBoundingBox();
+    logoGeo.computeBoundingBox();
+    const bb = (g) => ({ min: g.boundingBox.min.toArray(), max: g.boundingBox.max.toArray() });
+    window._heroDebug = {
+        scale, maxDim,
+        home: { case: HOME.case.toArray(), lid: HOME.lid.toArray(), logo: HOME.logo.toArray() },
+        combinedSize: size.toArray(),
+        geoBounds: { case: bb(caseGeo), lid: bb(lidGeo), logo: bb(logoGeo) },
+    };
+
+    // If reduced motion, show assembled
+    if (prefersReducedMotion) {
+        heroControls.enabled = true;
+        heroControls.autoRotate = true;
+    }
+
+    heroLoaderEl.classList.add('hidden');
+
+    // Debug exposure — use via window._hero in devtools
+    window._hero = {
+        camera: heroCamera,
+        scene: heroScene,
+        renderer: heroRenderer,
+        controls: heroControls,
+        group: assemblyGroup,
+        meshes: { caseM: caseMesh, lid: lidMesh, logo: logoMesh, dashboard: dashboardMesh },
+        path: CAM_PATH,
+        getScreenZ: () => screenWorldZ,
+        setT: (t) => { window._editGetProgress = () => t; },
+        clearT: () => { window._editGetProgress = null; },
+    };
+    console.log('[hero] debug hook ready', { screenWorldZ });
+});
+
+window.addEventListener('unhandledrejection', e => console.error('[hero] unhandled rejection:', e.reason));
+
+// ── Dashboard canvas texture ──
+function createDashboardScreen() {
+    const size = 480;
+    const SCALE = 2; // supersample the texture for crisp text at close range
+    const canvas = document.createElement('canvas');
+    canvas.width = size * SCALE;
+    canvas.height = size * SCALE;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(SCALE, SCALE);
+
+    // Background — dark
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, size, size);
+
+    // Circular clip
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(size/2, size/2, size/2 - 2, 0, Math.PI * 2);
+    ctx.clip();
+
+    // Fill clipped area
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, size, size);
+
+    // ── Header bar (0–44px) ──
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, size, 44);
+
+    // Green dot
+    ctx.beginPath();
+    ctx.arc(24, 22, 5, 0, Math.PI * 2);
+    ctx.fillStyle = '#00F068';
+    ctx.fill();
+
+    // "LEMON" text
+    ctx.fillStyle = '#00F068';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText('LEMON', 38, 27);
+
+    // Clock
+    ctx.fillStyle = '#666';
+    ctx.font = '13px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText('14:32', size - 20, 27);
+    ctx.textAlign = 'left';
+
+    // Divider line
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(20, 44);
+    ctx.lineTo(size - 20, 44);
+    ctx.stroke();
+
+    // ── Pair label ──
+    ctx.fillStyle = '#888';
+    ctx.font = '12px monospace';
+    ctx.fillText('BTC/USD', 30, 75);
+
+    // ── Large price ──
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 38px sans-serif';
+    ctx.fillText('$103,452', 30, 125);
+
+    // ── Green change badge ──
+    const badgeText = '+2.4% 24h';
+    ctx.font = 'bold 13px monospace';
+    const badgeW = ctx.measureText(badgeText).width + 16;
+    ctx.fillStyle = 'rgba(0,240,104,0.15)';
+    roundRect(ctx, 30, 138, badgeW, 26, 6);
+    ctx.fill();
+    ctx.fillStyle = '#00F068';
+    ctx.fillText(badgeText, 38, 156);
+
+    // ── Period pills (right side) ──
+    const periods = ['5m', '15m', '1h', '4h', '24h'];
+    let px = size - 40;
+    ctx.textAlign = 'right';
+    for (let i = periods.length - 1; i >= 0; i--) {
+        const p = periods[i];
+        const isActive = p === '24h';
+        const tw = ctx.measureText(p).width + 14;
+
+        if (isActive) {
+            ctx.fillStyle = 'rgba(0,240,104,0.2)';
+            roundRect(ctx, px - tw, 62, tw, 22, 4);
+            ctx.fill();
+            ctx.fillStyle = '#00F068';
+        } else {
+            ctx.fillStyle = '#555';
+        }
+        ctx.font = '11px monospace';
+        ctx.textAlign = 'right';
+        ctx.fillText(p, px - 4, 78);
+        px -= tw + 6;
+    }
+    ctx.textAlign = 'left';
+
+    // ── Sparkline chart ──
+    const chartTop = 190;
+    const chartBottom = 380;
+    const chartLeft = 30;
+    const chartRight = size - 30;
+    const chartH = chartBottom - chartTop;
+    const chartW = chartRight - chartLeft;
+
+    // Generate BTC-like data
+    const points = 80;
+    const data = [];
+    let val = 0.5;
+    for (let i = 0; i < points; i++) {
+        val += (Math.random() - 0.48) * 0.08;
+        val = Math.max(0.1, Math.min(0.9, val));
+        data.push(val);
+    }
+
+    // Gradient fill under line
+    const grad = ctx.createLinearGradient(0, chartTop, 0, chartBottom);
+    grad.addColorStop(0, 'rgba(0,240,104,0.25)');
+    grad.addColorStop(1, 'rgba(0,240,104,0.0)');
+
+    ctx.beginPath();
+    ctx.moveTo(chartLeft, chartBottom);
+    for (let i = 0; i < data.length; i++) {
+        const x = chartLeft + (i / (data.length - 1)) * chartW;
+        const y = chartBottom - data[i] * chartH;
+        ctx.lineTo(x, y);
+    }
+    ctx.lineTo(chartRight, chartBottom);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Line itself
+    ctx.beginPath();
+    for (let i = 0; i < data.length; i++) {
+        const x = chartLeft + (i / (data.length - 1)) * chartW;
+        const y = chartBottom - data[i] * chartH;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = '#00F068';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Glow dot at end
+    const lastX = chartRight;
+    const lastY = chartBottom - data[data.length - 1] * chartH;
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 5, 0, Math.PI * 2);
+    ctx.fillStyle = '#00F068';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 10, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,240,104,0.2)';
+    ctx.fill();
+
+    // ── Bottom bar ──
+    ctx.fillStyle = '#666';
+    ctx.font = '10px monospace';
+    ctx.fillText('Binance · WebSocket', 30, size - 25);
+    ctx.textAlign = 'right';
+    ctx.fillText('LEMON BOX v4.8.3', size - 30, size - 25);
+    ctx.textAlign = 'left';
+
+    ctx.restore(); // un-clip
+
+    // Circular border
+    ctx.beginPath();
+    ctx.arc(size/2, size/2, size/2 - 2, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(0,240,104,0.15)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Create texture
+    dashboardTexture = new THREE.CanvasTexture(canvas);
+    dashboardTexture.colorSpace = THREE.SRGBColorSpace;
+    dashboardTexture.anisotropy = 8;
+
+    // ── Screen assembly: glow halo + metal bezel + display ──
+    const screenAssembly = new THREE.Group();
+
+    // 1) Soft glow halo behind the screen — radial falloff via canvas texture
+    const haloCanvas = document.createElement('canvas');
+    haloCanvas.width = haloCanvas.height = 256;
+    const hctx = haloCanvas.getContext('2d');
+    const haloGrad = hctx.createRadialGradient(128, 128, 40, 128, 128, 128);
+    haloGrad.addColorStop(0.0, 'rgba(0,240,104,0.9)');
+    haloGrad.addColorStop(0.45, 'rgba(0,240,104,0.25)');
+    haloGrad.addColorStop(1.0, 'rgba(0,240,104,0)');
+    hctx.fillStyle = haloGrad;
+    hctx.fillRect(0, 0, 256, 256);
+    const haloTex = new THREE.CanvasTexture(haloCanvas);
+    haloTex.colorSpace = THREE.SRGBColorSpace;
+
+    const haloGeo = new THREE.PlaneGeometry(105, 105);
+    const haloMat = new THREE.MeshBasicMaterial({
+        map: haloTex,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+    });
+    const haloMesh = new THREE.Mesh(haloGeo, haloMat);
+    haloMesh.position.y = -0.08; // slightly behind the display
+    screenAssembly.add(haloMesh);
+
+    // 2) The actual display — SQUARE plane matching the case front face.
+    //    The UI itself renders a circular LCD area + dark corners (plastic around
+    //    the round display inside a square case, like real round LCD hardware).
+    const screenGeo = new THREE.PlaneGeometry(88, 88);
+    const screenMat = new THREE.MeshBasicMaterial({
+        map: dashboardTexture,
+        transparent: true,
+        opacity: 0,
+        side: THREE.FrontSide,
+        toneMapped: false, // preserve UI vibrancy under scene tone mapping
+    });
+    dashboardMesh = new THREE.Mesh(screenGeo, screenMat);
+    dashboardMesh.position.y = 0.05; // slightly in front of the halo plane
+    screenAssembly.add(dashboardMesh);
+
+    // Parent the assembly to the case so it moves with the case
+    caseMesh.add(screenAssembly);
+
+    // Position on the FRONT face (max Y in STL/local geometry space = screen face)
+    caseMesh.geometry.computeBoundingBox();
+    const caseBB = caseMesh.geometry.boundingBox;
+    const caseCenter = new THREE.Vector3();
+    caseBB.getCenter(caseCenter);
+
+    // Screen is on Y-max face (front of device), facing +Y direction
+    screenAssembly.position.set(caseCenter.x, caseBB.max.y + 0.3, caseCenter.z);
+    // Rotate assembly to face +Y and un-mirror the display
+    screenAssembly.rotation.set(-Math.PI / 2, 0, Math.PI);
+
+    // Expose halo so animation loop can fade it in with the display
+    dashboardMesh.userData.halo = haloMesh;
+
+    // Compute the dashboard's WORLD Z so the camera can look directly at it at t=1
+    assemblyGroup.updateMatrixWorld(true);
+    const screenWorldPos = new THREE.Vector3();
+    dashboardMesh.getWorldPosition(screenWorldPos);
+    screenWorldZ = screenWorldPos.z;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+// ── Scroll progress ──
+function getScrollProgress() {
+    const rect = heroSection.getBoundingClientRect();
+    const distance = heroSection.scrollHeight - window.innerHeight;
+    return clamp(-rect.top / distance, 0, 1);
+}
+
+// ── Animation loop ──
+let assemblyComplete = false;
+
+function heroAnimate() {
+    requestAnimationFrame(heroAnimate);
+
+    const t = prefersReducedMotion ? 1.0 : (window._editGetProgress ? window._editGetProgress() : getScrollProgress());
+
+    // Update progress bar
+    progressBar.style.width = (t * 100) + '%';
+
+    if (caseMesh && !prefersReducedMotion) {
+        // ── Part assembly phases ──
+
+        // Lid: t=0.05–0.40 (assembles while camera still behind)
+        const lidT = easeInOutCubic(phaseProgress(t, 0.05, 0.40));
+        lidMesh.position.lerpVectors(
+            HOME.lid.clone().add(EXPLODED.lid),
+            HOME.lid,
+            lidT
+        );
+
+        // Logo: t=0.05–0.50 (starts first, flies from center to its spot on lid)
+        const logoT = easeInOutCubic(phaseProgress(t, 0.05, 0.50));
+        logoMesh.position.lerpVectors(
+            HOME.logo.clone().add(EXPLODED.logo),
+            HOME.logo,
+            logoT
+        );
+
+        // Case stays at home (anchor)
+        caseMesh.position.copy(HOME.case);
+
+        // ── Camera: single continuous spherical orbit around the assembly ──
+        if (!heroControls.enabled) {
+            const camT = easeInOutCubic(t);
+
+            const angle = CAM_PATH.startAngle + (CAM_PATH.endAngle - CAM_PATH.startAngle) * camT;
+            const radius = CAM_PATH.startRadius + (CAM_PATH.endRadius - CAM_PATH.startRadius) * camT;
+            const camY = CAM_PATH.startY + (CAM_PATH.endY - CAM_PATH.startY) * camT;
+
+            const camX = Math.sin(angle) * radius;
+            const camZ = Math.cos(angle) * radius;
+
+            heroCamera.position.set(camX, camY, camZ);
+
+            // Target: origin → screen center as the camera settles into the final frontal view
+            const targetT = easeInOutCubic(phaseProgress(t, 0.80, 1.0));
+            heroCamera.lookAt(0, 0, screenWorldZ * targetT);
+        }
+
+
+
+        // ── Post-assembly: enable orbit controls (user can drag, no auto-rotate) ──
+        if (t >= 1.0 && !assemblyComplete) {
+            assemblyComplete = true;
+            // Orbit around the screen, not the origin, so the dashboard stays centered
+            heroControls.target.set(0, 0, screenWorldZ);
+            heroControls.enabled = true;
+            heroControls.autoRotate = false;
+            heroRenderer.domElement.style.cursor = 'grab';
+        } else if (t < 1.0 && assemblyComplete) {
+            assemblyComplete = false;
+            heroControls.enabled = false;
+            heroControls.autoRotate = false;
+            heroRenderer.domElement.style.cursor = 'default';
+        }
+    }
+
+    if (heroControls.enabled) {
+        heroControls.update();
+    }
+
+    heroRenderer.render(heroScene, heroCamera);
+}
+heroAnimate();
+
+// ── Make hero-3d visible immediately (no CSS animation needed) ──
+setTimeout(() => {
+    const heroViewerEl = document.getElementById('hero-viewer');
+    heroViewerEl.style.animation = 'none';
+    heroViewerEl.style.opacity = '1';
+}, 100);
+
+// ── Responsive resize ──
+const heroRO = new ResizeObserver(() => {
+    const w = heroEl.clientWidth;
+    const h = heroEl.clientHeight;
+    heroCamera.aspect = w / h;
+    heroCamera.updateProjectionMatrix();
+    heroRenderer.setSize(w, h);
+});
+heroRO.observe(heroEl);
+
+// ══════════════════════════════════════════════
+// ── EDIT MODE: Full transform controls ──
+// ══════════════════════════════════════════════
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
+
+(function editMode() {
+    let editActive = false;
+    let editT = 0;
+    let selectedName = null;
+    let transformCtrl = null;
+
+    const btnStyle = 'padding:4px 8px;background:#222;color:#ccc;border:1px solid #555;border-radius:4px;cursor:pointer;font-family:inherit;font-size:10px;';
+    const btnActiveStyle = 'padding:4px 8px;background:#00F068;color:#000;border:1px solid #00F068;border-radius:4px;cursor:pointer;font-family:inherit;font-size:10px;font-weight:bold;';
+
+    const panel = document.createElement('div');
+    panel.innerHTML = `
+        <div id="edit-panel" style="position:fixed;top:10px;right:10px;z-index:9999;background:rgba(0,0,0,0.95);border:1px solid #00F068;border-radius:8px;padding:14px;font-family:'Fira Code',monospace;font-size:11px;color:#ccc;width:340px;display:none;max-height:90vh;overflow-y:auto;">
+            <div style="color:#00F068;font-weight:bold;margin-bottom:10px;font-size:13px;">EDIT MODE <span style="color:#555;font-weight:normal;font-size:10px;">(Ctrl+E toggle)</span></div>
+
+            <div style="margin-bottom:8px;border-bottom:1px solid #333;padding-bottom:8px;">
+                <div style="color:#888;margin-bottom:4px;">Scroll Progress</div>
+                <input type="range" id="edit-t" min="0" max="100" value="0" style="width:100%;">
+                <span id="edit-t-val" style="color:#00F068;">0.00</span>
+            </div>
+
+            <div style="margin-bottom:8px;border-bottom:1px solid #333;padding-bottom:8px;">
+                <div style="color:#888;margin-bottom:4px;">Select Part</div>
+                <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                    <button class="edit-sel" data-name="case" style="${btnStyle}">Case</button>
+                    <button class="edit-sel" data-name="lid" style="${btnStyle}">Lid</button>
+                    <button class="edit-sel" data-name="logo" style="${btnStyle}">Logo</button>
+                    <button class="edit-sel" data-name="group" style="${btnStyle}">Group</button>
+                    <button class="edit-sel" data-name="none" style="${btnStyle}">Deselect</button>
+                </div>
+            </div>
+
+            <div style="margin-bottom:8px;border-bottom:1px solid #333;padding-bottom:8px;">
+                <div style="color:#888;margin-bottom:4px;">Transform Mode</div>
+                <div style="display:flex;gap:4px;">
+                    <button id="edit-mode-translate" style="${btnActiveStyle}">Move (W)</button>
+                    <button id="edit-mode-rotate" style="${btnStyle}">Rotate (E)</button>
+                    <button id="edit-mode-scale" style="${btnStyle}">Scale (R)</button>
+                </div>
+            </div>
+
+            <div style="margin-bottom:8px;border-bottom:1px solid #333;padding-bottom:8px;">
+                <div style="color:#888;margin-bottom:4px;">Camera</div>
+                <div id="edit-cam-info" style="line-height:1.6;margin-bottom:4px;"></div>
+                <label style="color:#ff0;"><input type="checkbox" id="edit-orbit"> Orbit libre (drag fondo)</label>
+                <div style="display:flex;gap:4px;margin-top:4px;">
+                    <button id="edit-cam-start" style="${btnStyle}">Set CAM_START</button>
+                    <button id="edit-cam-end" style="${btnStyle}">Set CAM_END</button>
+                </div>
+            </div>
+
+            <div style="margin-bottom:8px;border-bottom:1px solid #333;padding-bottom:8px;">
+                <div style="color:#888;margin-bottom:4px;">Selected Object Info</div>
+                <div id="edit-obj-info" style="line-height:1.6;color:#aaa;"></div>
+            </div>
+
+            <div>
+                <div style="color:#888;margin-bottom:4px;">Export All Values</div>
+                <button id="edit-export" style="${btnStyle}width:100%;">Copy Config to Console</button>
+                <pre id="edit-output" style="margin-top:6px;color:#ff0;font-size:9px;word-break:break-all;white-space:pre-wrap;max-height:150px;overflow-y:auto;"></pre>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(panel);
+
+    const panelEl = document.getElementById('edit-panel');
+    const tSlider = document.getElementById('edit-t');
+    const tVal = document.getElementById('edit-t-val');
+    const camInfo = document.getElementById('edit-cam-info');
+    const objInfo = document.getElementById('edit-obj-info');
+    const orbitCheck = document.getElementById('edit-orbit');
+    const outputEl = document.getElementById('edit-output');
+
+    // Transform controls
+    transformCtrl = new TransformControls(heroCamera, heroRenderer.domElement);
+    transformCtrl.setSize(0.8);
+    heroScene.add(transformCtrl);
+
+    // Prevent orbit when dragging transform
+    transformCtrl.addEventListener('dragging-changed', (e) => {
+        if (orbitCheck.checked) heroControls.enabled = !e.value;
+    });
+
+    function getMeshByName(name) {
+        if (name === 'case') return caseMesh;
+        if (name === 'lid') return lidMesh;
+        if (name === 'logo') return logoMesh;
+        if (name === 'group') return assemblyGroup;
+        return null;
+    }
+
+    function selectPart(name) {
+        selectedName = name;
+        const mesh = getMeshByName(name);
+        // Update button styles
+        document.querySelectorAll('.edit-sel').forEach(b => {
+            b.style.cssText = b.dataset.name === name ? btnActiveStyle : btnStyle;
+        });
+        if (mesh) {
+            transformCtrl.attach(mesh);
+        } else {
+            transformCtrl.detach();
+        }
+    }
+
+    // Part selection buttons
+    document.querySelectorAll('.edit-sel').forEach(btn => {
+        btn.addEventListener('click', () => selectPart(btn.dataset.name));
+    });
+
+    // Transform mode buttons
+    const modeButtons = {
+        'edit-mode-translate': 'translate',
+        'edit-mode-rotate': 'rotate',
+        'edit-mode-scale': 'scale',
+    };
+    Object.entries(modeButtons).forEach(([id, mode]) => {
+        document.getElementById(id).addEventListener('click', () => {
+            transformCtrl.setMode(mode);
+            Object.keys(modeButtons).forEach(bid => {
+                document.getElementById(bid).style.cssText = bid === id ? btnActiveStyle : btnStyle;
+            });
+        });
+    });
+
+    // Keyboard shortcuts for transform mode
+    window.addEventListener('keydown', (e) => {
+        if (!editActive) return;
+        if (e.key === 'w') { transformCtrl.setMode('translate'); document.getElementById('edit-mode-translate').click(); }
+        if (e.key === 'e' && !e.ctrlKey) { transformCtrl.setMode('rotate'); document.getElementById('edit-mode-rotate').click(); }
+        if (e.key === 'r') { transformCtrl.setMode('scale'); document.getElementById('edit-mode-scale').click(); }
+    });
+
+    // Toggle with Ctrl+E
+    window.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'e') {
+            e.preventDefault();
+            editActive = !editActive;
+            panelEl.style.display = editActive ? 'block' : 'none';
+            if (editActive) {
+                document.documentElement.style.scrollBehavior = 'auto';
+                window.scrollTo(0, 0);
+                heroSection.style.height = '100vh';
+                heroControls.enabled = orbitCheck.checked;
+            } else {
+                heroSection.style.height = '';
+                transformCtrl.detach();
+                heroControls.enabled = false;
+            }
+        }
+    });
+
+    // Slider
+    tSlider.addEventListener('input', () => {
+        editT = parseInt(tSlider.value) / 100;
+        tVal.textContent = editT.toFixed(2);
+    });
+
+    // Orbit checkbox
+    orbitCheck.addEventListener('change', () => {
+        heroControls.enabled = orbitCheck.checked;
+    });
+
+    // Camera buttons
+    let savedStart = '', savedEnd = '';
+    document.getElementById('edit-cam-start').addEventListener('click', () => {
+        const p = heroCamera.position;
+        savedStart = `CAM_START = { x: ${p.x.toFixed(1)}, y: ${p.y.toFixed(1)}, z: ${p.z.toFixed(1)} }`;
+        outputEl.textContent = savedStart + (savedEnd ? '\n' + savedEnd : '');
+    });
+    document.getElementById('edit-cam-end').addEventListener('click', () => {
+        const p = heroCamera.position;
+        savedEnd = `CAM_END = { x: ${p.x.toFixed(1)}, y: ${p.y.toFixed(1)}, z: ${p.z.toFixed(1)} }`;
+        outputEl.textContent = (savedStart ? savedStart + '\n' : '') + savedEnd;
+    });
+
+    // Export all
+    document.getElementById('edit-export').addEventListener('click', () => {
+        const fmt = (v) => `(${v.x.toFixed(1)}, ${v.y.toFixed(1)}, ${v.z.toFixed(1)})`;
+        const fmtR = (r) => `(${(r.x*180/Math.PI).toFixed(1)}°, ${(r.y*180/Math.PI).toFixed(1)}°, ${(r.z*180/Math.PI).toFixed(1)}°)`;
+        const config = {
+            camera: fmt(heroCamera.position),
+            groupPos: fmt(assemblyGroup.position),
+            groupRot: fmtR(assemblyGroup.rotation),
+            groupScale: assemblyGroup.scale.x.toFixed(3),
+        };
+        if (caseMesh) {
+            config.casePos = fmt(caseMesh.position);
+            config.caseRot = fmtR(caseMesh.rotation);
+        }
+        if (lidMesh) {
+            config.lidPos = fmt(lidMesh.position);
+            config.lidRot = fmtR(lidMesh.rotation);
+        }
+        if (logoMesh) {
+            config.logoPos = fmt(logoMesh.position);
+            config.logoRot = fmtR(logoMesh.rotation);
+        }
+        const txt = JSON.stringify(config, null, 2);
+        console.log('EDIT CONFIG:', txt);
+        outputEl.textContent = txt;
+    });
+
+    // Override scroll progress
+    const origGetScrollProgress = getScrollProgress;
+    window._editGetProgress = () => editActive ? editT : origGetScrollProgress();
+
+    // Update info every frame
+    function updatePanel() {
+        requestAnimationFrame(updatePanel);
+        if (!editActive) return;
+        const p = heroCamera.position;
+        camInfo.innerHTML = `pos: (${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}) dist: ${p.length().toFixed(1)}`;
+
+        const mesh = getMeshByName(selectedName);
+        if (mesh) {
+            const mp = mesh.position;
+            const mr = mesh.rotation;
+            const ms = mesh.scale;
+            objInfo.innerHTML = `<span style="color:#00F068">${selectedName}</span><br>`
+                + `pos: (${mp.x.toFixed(1)}, ${mp.y.toFixed(1)}, ${mp.z.toFixed(1)})<br>`
+                + `rot: (${(mr.x*180/Math.PI).toFixed(1)}°, ${(mr.y*180/Math.PI).toFixed(1)}°, ${(mr.z*180/Math.PI).toFixed(1)}°)<br>`
+                + `scale: ${ms.x.toFixed(3)}`;
+        } else {
+            objInfo.innerHTML = '<span style="color:#555">nada seleccionado</span>';
+        }
+    }
+    updatePanel();
+})();
+
+
+
+// ══════════════════════════════════════════════
+// ── EXPLORER: Independent viewer (unchanged) ──
+// ══════════════════════════════════════════════
+
+function createViewer(container, opts = {}) {
+    const scene = new THREE.Scene();
+
+    const camera = new THREE.PerspectiveCamera(
+        38,
+        container.clientWidth / container.clientHeight,
+        0.1, 5000
+    );
+    camera.position.set(70, 50, 70);
+
+    const renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+        powerPreference: 'high-performance'
+    });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.4;
+    container.appendChild(renderer.domElement);
+
+    scene.add(new THREE.AmbientLight(0x666666, 1.2));
+
+    const key = new THREE.DirectionalLight(0xffffff, 3.0);
+    key.position.set(60, 100, 60);
+    scene.add(key);
+
+    const rim = new THREE.DirectionalLight(0x00F068, 2.0);
+    rim.position.set(-70, 30, -50);
+    scene.add(rim);
+
+    const fill = new THREE.DirectionalLight(0xcccccc, 1.2);
+    fill.position.set(-40, -30, 60);
+    scene.add(fill);
+
+    const top = new THREE.DirectionalLight(0xffffff, 1.5);
+    top.position.set(0, 100, 0);
+    scene.add(top);
+
+    const under = new THREE.PointLight(0x00F068, 0.6, 200);
+    under.position.set(0, -60, 0);
+    scene.add(under);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = opts.speed || 2;
+    controls.enableZoom = true;
+    controls.enablePan = false;
+    controls.minDistance = 20;
+    controls.maxDistance = 250;
+    controls.maxPolarAngle = Math.PI * 0.85;
+
+    let mesh = null;
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    const ro = new ResizeObserver(() => {
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+    });
+    ro.observe(container);
+
+    const material = new THREE.MeshPhysicalMaterial({
+        color: 0x3a3a3a,
+        roughness: 0.18,
+        metalness: 0.7,
+        clearcoat: 0.8,
+        clearcoatRoughness: 0.08,
+        reflectivity: 0.6,
+    });
+
+    const loader = new STLLoader();
+
+    function load(path) {
+        return new Promise((resolve) => {
+            loader.load(path, (geo) => {
+                if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); }
+
+                geo.computeVertexNormals();
+                geo.center();
+
+                mesh = new THREE.Mesh(geo, material);
+
+                const box = new THREE.Box3().setFromObject(mesh);
+                const size = new THREE.Vector3();
+                box.getSize(size);
+                const s = 45 / Math.max(size.x, size.y, size.z);
+                mesh.scale.setScalar(s);
+
+                scene.add(mesh);
+                resolve();
+            });
+        });
+    }
+
+    return { load };
+}
+
+// ── Explorer viewer ──
+const expEl = document.getElementById('explorer-viewer');
+const expLoader = document.getElementById('explorer-loader');
+const expViewer = createViewer(expEl, { speed: 2.5 });
+
+let currentPart = 'case';
+expViewer.load(BASE + PARTS.case.file).then(() => {
+    expLoader.classList.add('hidden');
+});
+
+// Tab switching
+document.querySelectorAll('.explorer-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        const key = tab.dataset.model;
+        if (key === currentPart) return;
+        currentPart = key;
+
+        document.querySelectorAll('.explorer-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        expLoader.classList.remove('hidden');
+        expViewer.load(BASE + PARTS[key].file).then(() => {
+            expLoader.classList.add('hidden');
+        });
+
+        document.getElementById('part-name').textContent = PARTS[key].name;
+        document.getElementById('part-file').textContent = PARTS[key].file;
+        document.getElementById('part-desc').textContent = PARTS[key].desc;
+    });
+});
+</script>
+
+</body>
+</html>
