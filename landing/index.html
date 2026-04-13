@@ -655,19 +655,99 @@
 
         /* ── FOOTER ── */
         footer {
-            padding: 3rem;
-            text-align: center;
+            padding: 4rem 3rem 2.5rem;
             border-top: 1px solid var(--border);
+            background: #050505;
         }
 
-        footer p {
-            font-size: 0.75rem;
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr 1fr 1fr;
+            gap: 2.5rem;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .footer-brand {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: 1.1rem;
+            color: var(--greent);
+            letter-spacing: -0.01em;
+            margin-bottom: 0.6rem;
+        }
+
+        .footer-tagline {
+            font-size: 0.85rem;
+            color: var(--moon);
+            line-height: 1.6;
+            font-weight: 300;
+            max-width: 260px;
+        }
+
+        .footer-label {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.62rem;
+            color: var(--greent);
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            opacity: 0.7;
+            margin-bottom: 1rem;
+        }
+
+        .footer-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.55rem;
+        }
+
+        .footer-list a {
+            font-size: 0.85rem;
+            color: var(--moon);
+            text-decoration: none;
+            font-family: 'Outfit', sans-serif;
+            transition: color 0.25s;
+            touch-action: manipulation;
+        }
+
+        .footer-list a:hover { color: var(--starlight); }
+
+        .footer-bottom {
+            max-width: 1100px;
+            margin: 3rem auto 0;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .footer-bottom p {
+            font-size: 0.72rem;
             color: var(--moon);
             font-family: 'JetBrains Mono', 'Fira Code', monospace;
             letter-spacing: 0.05em;
         }
 
-        footer .lemon-icon { color: var(--greent); }
+        .footer-bottom .lemon-icon {
+            color: var(--greent);
+            margin: 0 0.15em;
+        }
+
+        @media (max-width: 680px) {
+            footer { padding: 3rem 1.5rem 2rem; }
+            .footer-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 2rem;
+            }
+            .footer-bottom {
+                flex-direction: column;
+                text-align: center;
+            }
+        }
 
         /* ── SCROLL REVEAL ── */
         .reveal {
@@ -753,13 +833,13 @@
     <div class="section-label reveal">Qué es</div>
     <h2 class="section-title reveal reveal-delay-1">Un dispositivo dedicado<br>a tus cryptos</h2>
     <p class="about-text reveal reveal-delay-2">
-        <strong>Lemon Box</strong> es un dispositivo de escritorio con una
-        <span class="g">pantalla redonda táctil de 480×480</span> que muestra
-        el precio de Bitcoin en tiempo real, gráficos en múltiples timeframes,
-        predicciones de Polymarket, cotización del dólar, y más.
+        <strong>Lemon Box</strong> es un dispositivo de escritorio con
+        <span class="g">pantalla redonda táctil de 480×480</span>.
+        Bitcoin en tiempo real, 5 pares, 8 timeframes, probabilidades de
+        Polymarket y cotización del dólar — todo sin abrir el browser.
         <br><br>
         Carcasa impresa en 3D, firmware open-source, actualizaciones OTA.
-        Diseñado para el ecosistema <span class="g">Lemon</span>.
+        Hecho para el ecosistema <span class="g">Lemon</span>.
     </p>
 
     <div class="about-stats">
@@ -789,7 +869,7 @@
         <div class="f-card reveal">
             <div class="f-num">01</div>
             <div class="f-title">BTC Real-time</div>
-            <div class="f-desc">Precio de Bitcoin vía WebSocket de Binance con latencia sub-segundo. Gráficos de línea y velas OHLC en 8 timeframes.</div>
+            <div class="f-desc">Conexión WebSocket directa a Binance: cada tick llega en menos de un segundo. Líneas y velas OHLC en 8 timeframes, de 1 minuto a 1 día.</div>
         </div>
         <div class="f-card reveal reveal-delay-1">
             <div class="f-num">02</div>
@@ -799,7 +879,7 @@
         <div class="f-card reveal reveal-delay-2">
             <div class="f-num">03</div>
             <div class="f-title">Polymarket</div>
-            <div class="f-desc">Predicciones de mercado en tiempo real. Seguí probabilidades de eventos con countdown y alertas sonoras.</div>
+            <div class="f-desc">Probabilidades en vivo sobre elecciones, cripto y deportes. Countdown al cierre y beep cuando las odds se mueven.</div>
         </div>
         <div class="f-card reveal reveal-delay-3">
             <div class="f-num">04</div>
@@ -814,7 +894,7 @@
         <div class="f-card reveal reveal-delay-5">
             <div class="f-num">06</div>
             <div class="f-title">Audio Alerts</div>
-            <div class="f-desc">Speaker MAX98357A integrado. Alertas sonoras cuando BTC se mueve más de 5% en una hora. Beep en countdown de Polymarket.</div>
+            <div class="f-desc">Speaker I2S integrado. Beep cuando BTC se mueve más de 5% en una hora o cuando un countdown de Polymarket está por terminar.</div>
         </div>
     </div>
 </section>
@@ -845,7 +925,7 @@
             <div class="explorer-file" id="part-file">Lemon-box-with-screen.stl</div>
         </div>
         <div class="explorer-desc" id="part-desc">
-            Carcasa principal del Lemon Box. Aloja el ESP32-S3 y la pantalla redonda de 480x480. Diseño optimizado para impresión 3D sin soportes.
+            Carcasa principal. Aloja el ESP32-S3 y la pantalla redonda de 480×480. Diseñada para imprimir sin soportes.
         </div>
     </div>
 </section>
@@ -902,9 +982,9 @@
 <!-- CTA -->
 <section class="cta-section">
     <h2 class="cta-title reveal">Armá el tuyo</h2>
-    <p class="cta-sub reveal reveal-delay-1">Open-source. Imprimí la carcasa, flasheá el firmware, conectá y listo.</p>
+    <p class="cta-sub reveal reveal-delay-1">Código, STLs y guía de ensamblado en GitHub. MIT License — gratis para siempre.</p>
     <a href="https://github.com/frxnnk/lemon-display" target="_blank" rel="noopener noreferrer" class="cta-btn reveal reveal-delay-2">
-        Ver en GitHub
+        Ver repo en GitHub
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
             <path d="M5 12h14M12 5l7 7-7 7"/>
         </svg>
@@ -915,7 +995,39 @@
 
 <!-- FOOTER -->
 <footer>
-    <p>Hecho con <span class="lemon-icon">◉</span> Lemon</p>
+    <div class="footer-grid">
+        <div>
+            <div class="footer-brand">Lemon Box</div>
+            <p class="footer-tagline">Dashboard crypto de escritorio. Open-source, sin suscripciones, sin API keys.</p>
+        </div>
+        <div>
+            <div class="footer-label">Proyecto</div>
+            <ul class="footer-list">
+                <li><a href="https://github.com/frxnnk/lemon-display" target="_blank" rel="noopener noreferrer">Repositorio</a></li>
+                <li><a href="https://github.com/frxnnk/lemon-display/releases" target="_blank" rel="noopener noreferrer">Releases</a></li>
+                <li><a href="https://github.com/frxnnk/lemon-display/issues" target="_blank" rel="noopener noreferrer">Issues</a></li>
+            </ul>
+        </div>
+        <div>
+            <div class="footer-label">Hardware</div>
+            <ul class="footer-list">
+                <li><a href="#specs">Especificaciones</a></li>
+                <li><a href="#explorer">Modelo 3D</a></li>
+                <li><a href="#features">Features</a></li>
+            </ul>
+        </div>
+        <div>
+            <div class="footer-label">Comunidad</div>
+            <ul class="footer-list">
+                <li><a href="https://lemon.me" target="_blank" rel="noopener noreferrer">Lemon</a></li>
+                <li><a href="https://github.com/frxnnk" target="_blank" rel="noopener noreferrer">@frxnnk</a></li>
+            </ul>
+        </div>
+    </div>
+    <div class="footer-bottom">
+        <p>MIT License · Hardware libre · Imprimí, flasheá, usalo</p>
+        <p>Hecho con <span class="lemon-icon" aria-hidden="true">◉</span> para la comunidad</p>
+    </div>
 </footer>
 
 <!-- THREE.JS -->
@@ -962,27 +1074,27 @@ window.addEventListener('scroll', () => {
 }, { passive: true });
 
 // ── STL paths & data ──
-const BASE = '../modelo3d/';
+const BASE = './modelo3d/';
 const PARTS = {
     case: {
         file: 'Lemon-box-with-screen.stl',
         name: 'Case',
-        desc: 'Carcasa principal del Lemon Box. Aloja el ESP32-S3 y la pantalla redonda de 480x480. Diseño optimizado para impresión 3D sin soportes.'
+        desc: 'Carcasa principal. Aloja el ESP32-S3 y la pantalla redonda de 480×480. Diseñada para imprimir sin soportes.'
     },
     lid: {
         file: 'Lemon-box-lid-new.stl',
         name: 'Tapa',
-        desc: 'Tapa trasera con sistema de encastre a presión. Acceso rápido a los componentes internos para mantenimiento o upgrades.'
+        desc: 'Tapa trasera a presión. Abre en segundos para acceder al ESP32, cambiar el speaker o reflashar por USB.'
     },
     logo: {
         file: 'Lemon-box-lid-logo-new.stl',
         name: 'Logo',
-        desc: 'Isotipo de Lemon en relieve. Se imprime en color separado y se incrusta en la tapa para un acabado bicolor premium.'
+        desc: 'Isotipo Lemon en relieve. Se imprime por separado y encastra en la tapa para un acabado bicolor limpio.'
     },
     feet: {
         file: 'Lemon-box-feet.stl',
         name: 'Patas',
-        desc: 'Patas para la base. Elevan el dispositivo para ventilación y estabilidad sobre el escritorio.'
+        desc: 'Patas de goma separadas. Elevan la base para ventilación y evitan vibración en el escritorio.'
     }
 };
 
