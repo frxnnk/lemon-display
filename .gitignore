@@ -8,3 +8,43 @@ tools/fonts/Satoshi_Complete/
 cacrt_all.pem
 data/cert/
 gen_crt_bundle.py
+.vercel
+
+# Claude Code local state
+.claude/
+.worktrees/
+
+# Playwright / MCP test output
+.playwright-mcp/
+
+# Local AI assistant instructions (not for repo)
+CLAUDE.md
+AGENTS.md
+
+# Debug artifacts from landing dev sessions
+hero-*.json
+hero-*.png
+hero-*.txt
+landing-*.txt
+landing-*.png
+landing-*.md
+case-*.json
+screen-*.json
+front-centroid.json
+*-fov.json
+run_gen_script.py
+
+# Duplicate STL dropped in repo root
+/Lemon-box-with-screen.stl
+
+# Flasher tool build artifacts
+tools/build/
+tools/dist*/
+tools/__t.wav
+tools/LemonFlasher.spec
+tools/cleanup_usb.ps1
+tools/restart_usb.ps1
+lemon-box-flasher.skill
+
+# Personal/legal documents — do not commit
+src/*.pdf

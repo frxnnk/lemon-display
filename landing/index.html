@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <meta name="description" content="Lemon Box — Dashboard crypto de escritorio con ESP32-S3. Bitcoin en tiempo real, Polymarket, dólar. Open-source.">
-    <title>Lemon Box — Dashboard Crypto de Escritorio</title>
+    <meta name="description" content="Lemon Box — Un objeto de escritorio para el ecosistema Lemon. Bitcoin en vivo, Polymarket y dólar en una pantalla redonda.">
+    <title>Lemon Box — Un objeto para el ecosistema Lemon</title>
+    <link rel="icon" type="image/svg+xml" href="./assets/lemon-iso.svg">
+    <link rel="apple-touch-icon" href="./assets/lemon-iso.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
@@ -23,7 +25,6 @@
             color-scheme: dark;
             --black: #000000;
             --greent: #00F068;
-            --evergreen: #00A849;
             --nebula: #806CF2;
             --starlight: #E7E7E7;
             --moon: #5B5B5B;
@@ -126,6 +127,7 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            gap: 2.5rem;
             transition: background-color 0.4s, border-color 0.4s;
             border-bottom: 1px solid transparent;
         }
@@ -138,48 +140,49 @@
         }
 
         .nav-logo {
-            font-family: 'Syne', sans-serif;
-            font-weight: 800;
-            font-size: 1.1rem;
-            color: var(--greent);
-            text-decoration: none;
-            letter-spacing: 0.04em;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            text-decoration: none;
+            transition: opacity 0.2s;
+            touch-action: manipulation;
         }
-
-        .nav-logo .dot {
-            width: 10px;
-            height: 10px;
-            background: var(--greent);
-            border-radius: 50%;
-            display: inline-block;
-            box-shadow: 0 0 12px rgba(0,240,104,0.5);
+        .nav-logo img {
+            display: block;
+            filter: drop-shadow(0 0 8px rgba(0, 240, 104, 0.3));
         }
+        .nav-logo:hover { opacity: 0.85; }
 
         .nav-links {
             display: flex;
-            gap: 2.5rem;
+            gap: 1.5rem;
             list-style: none;
+            align-items: center;
         }
 
         .nav-links a {
             color: var(--moon);
             text-decoration: none;
-            font-size: 0.8rem;
-            font-weight: 500;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            transition: color 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            transition: color 0.3s, background-color 0.3s;
             touch-action: manipulation;
         }
 
-        .nav-links a:hover { color: var(--greent); }
+        .nav-links a svg {
+            width: 18px;
+            height: 18px;
+            stroke-width: 1.8;
+        }
+
+        .nav-links a:hover { color: var(--greent); background: rgba(0,240,104,0.08); }
 
         /* ── HERO SCROLL ASSEMBLY ── */
         .hero-scroll {
-            height: 400vh;
+            height: 520vh;
             position: relative;
         }
 
@@ -199,14 +202,57 @@
         .hero-sticky::before {
             content: '';
             position: absolute;
-            width: 600px;
-            height: 600px;
+            width: 380px;
+            height: 380px;
             border-radius: 50%;
-            background: radial-gradient(circle, rgba(0,240,104,0.08) 0%, transparent 70%);
+            background: radial-gradient(circle, rgba(0,240,104,0.07) 0%, transparent 65%);
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
             pointer-events: none;
+        }
+
+        .matrix-rain {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            opacity: var(--matrix-opacity, 0.55);
+            pointer-events: none;
+            filter: blur(0.6px) saturate(1.55);
+            transition: opacity 0.15s linear;
+        }
+
+        @keyframes crtFlicker {
+            0%, 100%   { opacity: 0.55; }
+            48%        { opacity: 0.55; }
+            49%        { opacity: 0.42; }
+            50%        { opacity: 0.55; }
+            97%        { opacity: 0.55; }
+            97.5%      { opacity: 0.48; }
+            98%        { opacity: 0.55; }
+        }
+
+        .hero-sticky::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 3;
+            background:
+                repeating-linear-gradient(
+                    to bottom,
+                    transparent 0px,
+                    transparent 2px,
+                    rgba(0, 0, 0, 0.28) 3px,
+                    transparent 4px
+                );
+            mix-blend-mode: multiply;
+            animation: crtFlicker 7s infinite;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .matrix-rain { opacity: 0.18; filter: none; }
+            .hero-sticky::after { animation: none; opacity: 0.4; }
         }
 
         .hero-title {
@@ -240,7 +286,9 @@
         }
 
         .hero-3d {
-            flex: 1;
+            flex: 1 1 0%;
+            min-height: 0;
+            min-width: 0;
             width: 100%;
             max-width: 900px;
             position: relative;
@@ -248,9 +296,10 @@
             margin-top: -1rem;
             animation: heroFadeIn 1.5s ease 0.4s forwards;
             opacity: 0;
+            overflow: hidden;
         }
 
-        .hero-3d canvas { cursor: default; }
+        .hero-3d canvas { cursor: default; display: block; touch-action: pan-y !important; }
 
         .hero-hint {
             font-family: 'JetBrains Mono', 'Fira Code', monospace;
@@ -447,6 +496,124 @@
             margin-top: 0.65rem;
         }
 
+        .about-layout {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 4rem;
+            align-items: center;
+        }
+
+        .about-display {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .ad-bezel {
+            position: relative;
+            width: min(360px, 100%);
+            aspect-ratio: 1;
+            border-radius: 32px;
+            background:
+                radial-gradient(ellipse at 30% 20%, rgba(0, 240, 104, 0.06) 0%, transparent 55%),
+                linear-gradient(160deg, #0a0d10 0%, #050709 100%);
+            border: 1px solid rgba(0, 240, 104, 0.22);
+            box-shadow:
+                0 0 0 1px rgba(0, 240, 104, 0.05),
+                0 20px 60px -20px rgba(0, 240, 104, 0.25),
+                inset 0 0 60px rgba(0, 240, 104, 0.03);
+            overflow: hidden;
+            isolation: isolate;
+        }
+
+        .ad-bg {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.22;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .ad-scanlines {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 2;
+            background: repeating-linear-gradient(
+                to bottom,
+                transparent 0px,
+                transparent 2px,
+                rgba(0, 0, 0, 0.22) 3px,
+                transparent 4px
+            );
+            mix-blend-mode: multiply;
+        }
+
+        .ad-content {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            height: 100%;
+            padding: 2rem 2rem 1.75rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            gap: 0.55rem;
+        }
+
+        .ad-pair {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.7rem;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: var(--moon);
+            margin-bottom: auto;
+        }
+        .ad-pair img { opacity: 0.9; }
+
+        .ad-price {
+            font-family: 'Space Grotesk', 'Syne', sans-serif;
+            font-weight: 700;
+            font-size: clamp(1.7rem, 4vw, 2.3rem);
+            color: var(--starlight);
+            letter-spacing: -0.02em;
+            font-variant-numeric: tabular-nums;
+            text-shadow: 0 0 20px rgba(0, 240, 104, 0.15);
+            transition: color 0.6s;
+            line-height: 1;
+        }
+        .ad-price.flash-up { color: var(--greent); text-shadow: 0 0 24px rgba(0, 240, 104, 0.55); }
+        .ad-price.flash-dn { color: #FF5577; text-shadow: 0 0 24px rgba(255, 85, 119, 0.55); }
+
+        .ad-delta {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.72rem;
+            color: var(--greent);
+            letter-spacing: 0.04em;
+        }
+        .ad-delta.down { color: #FF5577; }
+
+        .ad-spark {
+            width: 100%;
+            height: 56px;
+            display: block;
+            margin-top: 0.25rem;
+            filter: drop-shadow(0 0 8px rgba(0, 240, 104, 0.5));
+        }
+
+        @media (max-width: 900px) {
+            .about-layout {
+                grid-template-columns: 1fr;
+                gap: 2.5rem;
+            }
+            .ad-bezel { width: min(320px, 100%); }
+        }
+
         /* ── FEATURES ── */
         .features-grid {
             display: grid;
@@ -511,6 +678,196 @@
             color: var(--moon);
             line-height: 1.65;
             font-weight: 300;
+        }
+
+        .f-viz {
+            margin-top: 1.4rem;
+            padding-top: 1.2rem;
+            border-top: 1px solid var(--border);
+            min-height: 48px;
+        }
+
+        .f-viz-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 0.6rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .f-price {
+            font-family: 'Space Grotesk', 'Syne', sans-serif;
+            font-weight: 600;
+            font-size: 1.35rem;
+            color: var(--starlight);
+            letter-spacing: -0.02em;
+            transition: color 0.6s;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .f-price.flash-up { color: var(--greent); }
+        .f-price.flash-dn { color: #FF5577; }
+
+        /* Skeleton loader — pulses while live data is loading */
+        .skeleton {
+            display: inline-block;
+            color: transparent !important;
+            background: linear-gradient(90deg, rgba(0,240,104,0.08), rgba(0,240,104,0.28), rgba(0,240,104,0.08));
+            background-size: 200% 100%;
+            border-radius: 6px;
+            animation: skPulse 1.3s ease-in-out infinite;
+            min-width: 6ch;
+        }
+
+        @keyframes skPulse {
+            0%   { background-position: 100% 0; }
+            100% { background-position: -100% 0; }
+        }
+
+        .sk-spark {
+            stroke: rgba(0, 240, 104, 0.35);
+            stroke-dasharray: 4 5;
+            animation: skDash 1.6s linear infinite;
+        }
+
+        @keyframes skDash {
+            to { stroke-dashoffset: -20; }
+        }
+
+        .f-delta {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.7rem;
+            padding: 0.18rem 0.45rem;
+            border-radius: 4px;
+            background: rgba(0,240,104,0.1);
+            color: var(--greent);
+            white-space: nowrap;
+        }
+
+        .f-delta.down {
+            background: rgba(255,85,119,0.1);
+            color: #FF5577;
+        }
+
+        .f-spark {
+            width: 100%;
+            height: 36px;
+            display: block;
+            overflow: visible;
+        }
+
+        .f-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+        }
+
+        .f-chip {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.65rem;
+            letter-spacing: 0.06em;
+            padding: 0.3rem 0.55rem;
+            border-radius: 999px;
+            border: 1px solid rgba(0,240,104,0.2);
+            color: var(--starlight);
+            background: rgba(0,240,104,0.04);
+            cursor: pointer;
+            transition: border-color 0.2s, background-color 0.2s, color 0.2s;
+            font-weight: 500;
+        }
+        button.f-chip { font: inherit; font-size: 0.65rem; letter-spacing: 0.06em; }
+
+        .f-chip:hover {
+            border-color: rgba(0,240,104,0.45);
+            background: rgba(0,240,104,0.09);
+        }
+
+        .f-chip.active {
+            border-color: var(--greent);
+            background: rgba(0,240,104,0.15);
+            color: var(--greent);
+        }
+
+        .f-probbar {
+            display: flex;
+            width: 100%;
+            height: 8px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: rgba(255,255,255,0.05);
+            margin-top: 0.5rem;
+        }
+        .f-probbar-fill {
+            background: var(--greent);
+            transition: width 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        .f-timeline {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.7rem;
+            color: var(--moon);
+        }
+        .f-timeline .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--greent);
+            box-shadow: 0 0 8px rgba(0,240,104,0.5);
+        }
+        .f-timeline .dot.old {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: none;
+        }
+        .f-timeline .line {
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, var(--greent), rgba(255,255,255,0.08));
+        }
+
+        .f-bell {
+            position: relative;
+            width: 28px;
+            height: 28px;
+            color: var(--greent);
+            flex-shrink: 0;
+        }
+        .f-bell svg { width: 100%; height: 100%; }
+        .f-bell::before,
+        .f-bell::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            border: 1px solid var(--greent);
+            border-radius: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            opacity: 0;
+            animation: bellRing 2.8s ease-out infinite;
+        }
+        .f-bell::after { animation-delay: 1.4s; }
+
+        @keyframes bellRing {
+            0%   { transform: translate(-50%, -50%) scale(0.6); opacity: 0.6; }
+            80%  { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
+            100% { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
+        }
+
+        .f-alerts {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .f-alerts-labels {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.68rem;
+            color: var(--moon);
         }
 
         /* ── EXPLORER ── */
@@ -717,68 +1074,38 @@
             background: #050505;
         }
 
-        .footer-grid {
-            display: grid;
-            grid-template-columns: 1.5fr 1fr 1fr 1fr;
-            gap: 2.5rem;
+        .footer-center {
             max-width: 1100px;
             margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            text-align: center;
         }
 
-        .footer-brand {
-            font-family: 'Syne', sans-serif;
-            font-weight: 800;
-            font-size: 1.1rem;
-            color: var(--greent);
-            letter-spacing: -0.01em;
-            margin-bottom: 0.6rem;
+        .footer-logo {
+            width: 96px;
+            height: auto;
+            opacity: 0.9;
         }
 
         .footer-tagline {
-            font-size: 0.85rem;
+            font-size: 0.9rem;
             color: var(--moon);
             line-height: 1.6;
             font-weight: 300;
-            max-width: 260px;
+            max-width: 420px;
         }
-
-        .footer-label {
-            font-family: 'JetBrains Mono', 'Fira Code', monospace;
-            font-size: 0.62rem;
-            color: var(--greent);
-            letter-spacing: 0.16em;
-            text-transform: uppercase;
-            opacity: 0.7;
-            margin-bottom: 1rem;
-        }
-
-        .footer-list {
-            list-style: none;
-            display: flex;
-            flex-direction: column;
-            gap: 0.55rem;
-        }
-
-        .footer-list a {
-            font-size: 0.85rem;
-            color: var(--moon);
-            text-decoration: none;
-            font-family: 'Outfit', sans-serif;
-            transition: color 0.25s;
-            touch-action: manipulation;
-        }
-
-        .footer-list a:hover { color: var(--starlight); }
 
         .footer-bottom {
             max-width: 1100px;
-            margin: 3rem auto 0;
+            margin: 2rem auto 0;
             padding-top: 1.5rem;
             border-top: 1px solid var(--border);
             display: flex;
-            justify-content: space-between;
+            justify-content: center;
             align-items: center;
-            flex-wrap: wrap;
             gap: 1rem;
         }
 
@@ -808,10 +1135,7 @@
 
         @media (max-width: 680px) {
             footer { padding: 3rem 1.5rem 2rem; }
-            .footer-grid {
-                grid-template-columns: 1fr 1fr;
-                gap: 2rem;
-            }
+            .footer-logo { width: 80px; }
             .footer-bottom {
                 flex-direction: column;
                 text-align: center;
@@ -849,8 +1173,11 @@
         }
 
         @media (max-width: 680px) {
-            nav { padding: 1rem 1.5rem; }
-            .nav-links { display: none; }
+            nav { padding: 1rem 1.25rem; gap: 0.75rem; }
+            .nav-logo img { width: 26px; height: 26px; }
+            .nav-links { gap: 0.35rem; }
+            .nav-links a { width: 38px; height: 38px; }
+            .nav-links a svg { width: 18px; height: 18px; }
             .section { padding: 5rem 1.5rem; }
             .about-stats { grid-template-columns: 1fr; gap: 1.5rem; }
             .specs-grid { grid-template-columns: 1fr; }
@@ -858,7 +1185,7 @@
             .explorer-canvas { height: 320px; }
             .explorer-info { flex-direction: column; gap: 1rem; }
             .cta-section { padding: 5rem 1.5rem; }
-            .hero-scroll { height: 350vh; }
+            .hero-scroll { height: 460vh; }
         }
     </style>
 </head>
@@ -868,22 +1195,23 @@
 
 <!-- NAV -->
 <nav id="main-nav" aria-label="Principal">
-    <a href="#" class="nav-logo visually-hidden" aria-label="Inicio">Inicio</a>
+    <a href="#" class="nav-logo" aria-label="Inicio">
+        <img src="./assets/lemon-iso.svg" alt="Lemon" width="28" height="28">
+    </a>
     <ul class="nav-links">
-        <li><a href="#about">Proyecto</a></li>
-        <li><a href="#features">Features</a></li>
-        <li><a href="#explorer">3D</a></li>
-        <li><a href="#specs">Specs</a></li>
-        <li><a href="https://github.com/frxnnk/lemon-display" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+        <li><a href="#about" aria-label="Proyecto"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></a></li>
+        <li><a href="#features" aria-label="Features"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg></a></li>
+        <li><a href="#explorer" aria-label="3D"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></a></li>
     </ul>
 </nav>
 
 <main id="main">
-<h1 class="visually-hidden">Lemon Box — Dashboard crypto de escritorio con ESP32-S3</h1>
+<h1 class="visually-hidden">Lemon Box — Un objeto para el ecosistema Lemon</h1>
 
 <!-- HERO — scroll-driven assembly -->
 <section class="hero-scroll" id="hero-scroll" aria-label="Animación de ensamblaje 3D">
     <div class="hero-sticky">
+        <canvas id="matrix-rain" class="matrix-rain" aria-hidden="true"></canvas>
         <div id="hero-viewer" class="hero-3d" style="flex:1;width:100%;max-width:900px;position:relative;z-index:1;">
             <div class="loader" id="hero-loader" role="status" aria-live="polite" aria-label="Cargando modelo 3D">
                 <span aria-hidden="true"><span class="loader-dot">.</span><span class="loader-dot">.</span><span class="loader-dot">.</span></span>
@@ -899,30 +1227,34 @@
 
 <!-- ABOUT -->
 <section class="section" id="about">
-    <div class="section-label reveal">Qué es</div>
-    <h2 class="section-title reveal reveal-delay-1">Un dispositivo dedicado<br>a tus cryptos</h2>
-    <p class="about-text reveal reveal-delay-2">
-        <strong>Lemon Box</strong> es un dispositivo de escritorio con
-        <span class="g">pantalla redonda táctil de 480×480</span>.
-        Bitcoin en tiempo real, 5 pares, 8 timeframes, probabilidades de
-        Polymarket y cotización del dólar — todo sin abrir el browser.
-        <br><br>
-        Carcasa impresa en 3D, firmware open-source, actualizaciones OTA.
-        Hecho para el ecosistema <span class="g">Lemon</span>.
-    </p>
-
-    <div class="about-stats">
-        <div class="reveal">
-            <div class="stat-val">5</div>
-            <div class="stat-lbl">Trading Pairs</div>
+    <div class="about-layout">
+        <div class="about-copy">
+            <div class="section-label reveal">Qué es</div>
+            <h2 class="section-title reveal reveal-delay-1">Tu cripto,<br>siempre visible</h2>
+            <p class="about-text reveal reveal-delay-2">
+                <strong>Lemon Box</strong> es un objeto de escritorio que muestra
+                el <span class="g">precio de Bitcoin en vivo</span>, tus pares
+                favoritos y el dólar. Siempre encendido. Sin pestañas. Sin distracciones.
+                <br><br>
+                Un recorte del ecosistema <span class="g">Lemon</span> sobre tu mesa.
+            </p>
         </div>
-        <div class="reveal reveal-delay-1">
-            <div class="stat-val">8</div>
-            <div class="stat-lbl">Timeframes</div>
-        </div>
-        <div class="reveal reveal-delay-2">
-            <div class="stat-val">&lt;1s</div>
-            <div class="stat-lbl">Latencia WS</div>
+        <div class="about-display reveal reveal-delay-3" aria-hidden="true">
+            <div class="ad-bezel">
+                <canvas class="ad-bg" id="ad-matrix"></canvas>
+                <div class="ad-content">
+                    <div class="ad-pair">
+                        <img src="./assets/lemon-iso.svg" alt="" width="14" height="14">
+                        <span>Bitcoin</span>
+                    </div>
+                    <div class="ad-price skeleton" id="ad-btc-price">$—————</div>
+                    <div class="ad-delta" id="ad-btc-delta">24h</div>
+                    <svg class="ad-spark" viewBox="0 0 200 48" preserveAspectRatio="none">
+                        <path fill="none" stroke="#00F068" stroke-width="1.6" stroke-linejoin="round" class="sk-spark" id="ad-btc-path" d="M0 24 L200 24"></path>
+                    </svg>
+                </div>
+                <div class="ad-scanlines"></div>
+            </div>
         </div>
     </div>
 </section>
@@ -937,33 +1269,101 @@
     <div class="features-grid">
         <div class="f-card reveal">
             <div class="f-num">01</div>
-            <div class="f-title">BTC Real-time</div>
-            <div class="f-desc">Conexión WebSocket directa a Binance: cada tick llega en menos de un segundo. Líneas y velas OHLC en 8 timeframes, de 1 minuto a 1 día.</div>
+            <div class="f-title">Bitcoin en vivo</div>
+            <div class="f-desc">El precio de BTC actualizado al instante, con gráfico y variación.</div>
+            <div class="f-viz">
+                <div class="f-viz-row">
+                    <span class="f-price skeleton" id="fv-btc-price">$—————</span>
+                    <span class="f-delta" id="fv-btc-delta">24h</span>
+                </div>
+                <svg class="f-spark" id="fv-btc-spark" viewBox="0 0 200 36" preserveAspectRatio="none" aria-hidden="true">
+                    <path fill="none" stroke="#00F068" stroke-width="1.5" stroke-linejoin="round" class="sk-spark" id="fv-btc-path" d="M0 18 L200 18"></path>
+                </svg>
+            </div>
         </div>
         <div class="f-card reveal reveal-delay-1">
             <div class="f-num">02</div>
-            <div class="f-title">Multi-par</div>
-            <div class="f-desc">BTC/USD, BTC/ETH, BTC/SOL, BTC/ARS y BTC/ORO. Cambiá entre pares con un toque en la pantalla.</div>
+            <div class="f-title">Tus pares</div>
+            <div class="f-desc">BTC en dólares, ETH, SOL, pesos y oro. Cambiás con un toque.</div>
+            <div class="f-viz">
+                <div class="f-viz-row" style="margin-bottom: 0.7rem;">
+                    <span class="f-price skeleton" id="fv-pairs-price" style="font-size: 1.05rem;">$—————</span>
+                    <span class="f-delta" id="fv-pairs-unit">1 BTC · USD</span>
+                </div>
+                <div class="f-chips" id="fv-pairs-chips" role="tablist">
+                    <button class="f-chip active" data-pair="USD" type="button">BTC·USD</button>
+                    <button class="f-chip" data-pair="ETH" type="button">BTC·ETH</button>
+                    <button class="f-chip" data-pair="SOL" type="button">BTC·SOL</button>
+                    <button class="f-chip" data-pair="ARS" type="button">BTC·ARS</button>
+                    <button class="f-chip" data-pair="ORO" type="button">BTC·ORO</button>
+                </div>
+            </div>
         </div>
         <div class="f-card reveal reveal-delay-2">
             <div class="f-num">03</div>
             <div class="f-title">Polymarket</div>
-            <div class="f-desc">Probabilidades en vivo sobre elecciones, cripto y deportes. Countdown al cierre y beep cuando las odds se mueven.</div>
+            <div class="f-desc">Probabilidades en vivo sobre elecciones, cripto y deportes.</div>
+            <div class="f-viz">
+                <div class="f-viz-row">
+                    <span style="font-size:0.8rem;color:var(--starlight);font-weight:500;">¿BTC arriba de $100k este año?</span>
+                </div>
+                <div class="f-viz-row" style="margin-bottom:0;">
+                    <span class="f-price" style="font-size:1.1rem;" id="fv-poly-pct">62<span style="font-size:0.7rem;opacity:0.6;">%</span></span>
+                    <span class="f-delta" id="fv-poly-delta">YES</span>
+                </div>
+                <div class="f-probbar"><div class="f-probbar-fill" id="fv-poly-bar" style="width:62%"></div></div>
+            </div>
         </div>
         <div class="f-card reveal reveal-delay-3">
             <div class="f-num">04</div>
-            <div class="f-title">Dólar en vivo</div>
-            <div class="f-desc">Cotización USDC/ARS vía CriptoYa. Sparkline del dólar en múltiples períodos, desde 24 horas hasta 1 año.</div>
+            <div class="f-title">Dólar</div>
+            <div class="f-desc">La cotización del día con su sparkline — desde las últimas 24hs hasta un año atrás.</div>
+            <div class="f-viz">
+                <div class="f-viz-row">
+                    <span class="f-price skeleton" id="fv-usd-price">$—————</span>
+                    <span class="f-delta" id="fv-usd-delta">USD·ARS</span>
+                </div>
+                <svg class="f-spark" id="fv-usd-spark" viewBox="0 0 200 36" preserveAspectRatio="none" aria-hidden="true">
+                    <path fill="none" stroke="#00F068" stroke-width="1.5" stroke-linejoin="round" class="sk-spark" id="fv-usd-path" d="M0 18 L200 18"></path>
+                </svg>
+            </div>
         </div>
         <div class="f-card reveal reveal-delay-4">
             <div class="f-num">05</div>
-            <div class="f-title">OTA Updates</div>
-            <div class="f-desc">Actualizaciones de firmware over-the-air desde GitHub. Siempre en la última versión, sin cables ni herramientas.</div>
+            <div class="f-title">Siempre al día</div>
+            <div class="f-desc">Se mantiene actualizado solo, sin que lo toques.</div>
+            <div class="f-viz">
+                <div class="f-timeline">
+                    <span class="dot"></span>
+                    <span>v4.9.7</span>
+                    <span class="line"></span>
+                    <span class="dot old"></span>
+                    <span style="opacity:0.5;">v4.9.6</span>
+                    <span class="line" style="opacity:0.5;"></span>
+                    <span class="dot old"></span>
+                    <span style="opacity:0.3;">v4.9.5</span>
+                </div>
+            </div>
         </div>
         <div class="f-card reveal reveal-delay-5">
             <div class="f-num">06</div>
-            <div class="f-title">Audio Alerts</div>
-            <div class="f-desc">Speaker I2S integrado. Beep cuando BTC se mueve más de 5% en una hora o cuando un countdown de Polymarket está por terminar.</div>
+            <div class="f-title">Alertas</div>
+            <div class="f-desc">Un beep discreto cuando BTC se mueve fuerte o cuando una apuesta está por cerrar.</div>
+            <div class="f-viz">
+                <div class="f-alerts">
+                    <div class="f-bell">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+                            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+                        </svg>
+                    </div>
+                    <div class="f-alerts-labels">
+                        <span>BTC ±5%</span>
+                        <span>countdown cierre</span>
+                        <span>precio objetivo</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </section>
@@ -991,111 +1391,23 @@
     <div class="explorer-info reveal reveal-delay-3">
         <div>
             <div class="explorer-name" id="part-name">Case</div>
-            <div class="explorer-file" id="part-file">Lemon-box-with-screen.stl</div>
         </div>
         <div class="explorer-desc" id="part-desc">
-            Carcasa principal. Aloja el ESP32-S3 y la pantalla redonda de 480×480. Diseñada para imprimir sin soportes.
+            El cuerpo principal que contiene la pantalla redonda. Líneas limpias, presencia mínima sobre el escritorio.
         </div>
     </div>
-</section>
-
-<div class="divider"></div>
-
-<!-- SPECS -->
-<section class="section" id="specs">
-    <div class="section-label reveal">Especificaciones</div>
-    <h2 class="section-title reveal reveal-delay-1">Bajo el capó</h2>
-
-    <div class="specs-grid reveal reveal-delay-2">
-        <div class="spec">
-            <div class="spec-k">Procesador</div>
-            <div class="spec-v">ESP32-S3</div>
-        </div>
-        <div class="spec">
-            <div class="spec-k">Display</div>
-            <div class="spec-v">480×480 Round</div>
-        </div>
-        <div class="spec">
-            <div class="spec-k">Input</div>
-            <div class="spec-v">Touch capacitivo</div>
-        </div>
-        <div class="spec">
-            <div class="spec-k">Conectividad</div>
-            <div class="spec-v">WiFi 2.4GHz</div>
-        </div>
-        <div class="spec">
-            <div class="spec-k">Audio</div>
-            <div class="spec-v">MAX98357A I2S</div>
-        </div>
-        <div class="spec">
-            <div class="spec-k">Carcasa</div>
-            <div class="spec-v">PLA / 3D Print</div>
-        </div>
-        <div class="spec">
-            <div class="spec-k">Firmware</div>
-            <div class="spec-v">v4.9.7</div>
-        </div>
-        <div class="spec">
-            <div class="spec-k">Updates</div>
-            <div class="spec-v">OTA + USB</div>
-        </div>
-        <div class="spec">
-            <div class="spec-k">Data Source</div>
-            <div class="spec-v">Binance WS</div>
-        </div>
-    </div>
-</section>
-
-<div class="divider"></div>
-
-<!-- CTA -->
-<section class="cta-section">
-    <h2 class="cta-title reveal">Armá el tuyo</h2>
-    <p class="cta-sub reveal reveal-delay-1">Código, STLs y flasher en GitHub. Un solo lugar, desde el firmware hasta la carcasa.</p>
-    <a href="https://github.com/frxnnk/lemon-display" target="_blank" rel="noopener noreferrer" class="cta-btn reveal reveal-delay-2">
-        Ver repo en GitHub
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-            <path d="M5 12h14M12 5l7 7-7 7"/>
-        </svg>
-    </a>
 </section>
 
 </main>
 
 <!-- FOOTER -->
 <footer>
-    <div class="footer-grid">
-        <div>
-            <div class="footer-brand">Lemon Box</div>
-            <p class="footer-tagline">Dashboard crypto de escritorio. Open-source, sin suscripciones, sin API keys.</p>
-        </div>
-        <div>
-            <div class="footer-label">Proyecto</div>
-            <ul class="footer-list">
-                <li><a href="https://github.com/frxnnk/lemon-display" target="_blank" rel="noopener noreferrer">Repositorio</a></li>
-                <li><a href="https://github.com/frxnnk/lemon-display/releases" target="_blank" rel="noopener noreferrer">Releases</a></li>
-                <li><a href="https://github.com/frxnnk/lemon-display/issues" target="_blank" rel="noopener noreferrer">Issues</a></li>
-            </ul>
-        </div>
-        <div>
-            <div class="footer-label">Hardware</div>
-            <ul class="footer-list">
-                <li><a href="#specs">Especificaciones</a></li>
-                <li><a href="#explorer">Modelo 3D</a></li>
-                <li><a href="#features">Features</a></li>
-            </ul>
-        </div>
-        <div>
-            <div class="footer-label">Comunidad</div>
-            <ul class="footer-list">
-                <li><a href="https://lemon.me" target="_blank" rel="noopener noreferrer">Lemon</a></li>
-                <li><a href="https://github.com/frxnnk" target="_blank" rel="noopener noreferrer">Ferced</a></li>
-            </ul>
-        </div>
+    <div class="footer-center">
+        <img src="./assets/lemonlogo.png" alt="Lemon" class="footer-logo">
+        <p class="footer-tagline">Un objeto para el ecosistema Lemon.</p>
     </div>
     <div class="footer-bottom">
-        <p>Open-hardware · Imprimí, flasheá, usalo</p>
-        <p>Hecho por <a href="https://github.com/frxnnk" target="_blank" rel="noopener noreferrer" class="footer-author">Ferced</a> <span class="lemon-icon" aria-hidden="true">◉</span></p>
+        <p>Powered by <a href="https://ferced.com" target="_blank" rel="noopener noreferrer" class="footer-author">Ferced</a></p>
     </div>
 </footer>
 
@@ -1113,6 +1425,7 @@
 import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 // ── Scroll reveal ──
 const _prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1148,22 +1461,30 @@ const PARTS = {
     case: {
         file: 'Lemon-box-with-screen.stl',
         name: 'Case',
-        desc: 'Carcasa principal. Aloja el ESP32-S3 y la pantalla redonda de 480×480. Diseñada para imprimir sin soportes.'
+        desc: 'El cuerpo principal que contiene la pantalla redonda. Líneas limpias, presencia mínima sobre el escritorio.',
+        rotation: [-Math.PI / 2, Math.PI / 6, 0],
+        camDist: 180
     },
     lid: {
         file: 'Lemon-box-lid-new.stl',
         name: 'Tapa',
-        desc: 'Tapa trasera a presión. Abre en segundos para acceder al ESP32, cambiar el speaker o reflashar por USB.'
+        desc: 'La tapa trasera encaja a presión. Se abre con un gesto, queda firme en su lugar.',
+        rotation: [-Math.PI / 2.4, Math.PI / 6, 0],
+        camDist: 160
     },
     logo: {
         file: 'Lemon-box-lid-logo-new.stl',
         name: 'Logo',
-        desc: 'Isotipo Lemon en relieve. Se imprime por separado y encastra en la tapa para un acabado bicolor limpio.'
+        desc: 'El isotipo Lemon en relieve, encastrado en la tapa. Un detalle pequeño que define la pieza.',
+        rotation: [-Math.PI / 2, 0, 0],
+        camDist: 130
     },
     feet: {
         file: 'Lemon-box-feet.stl',
         name: 'Patas',
-        desc: 'Patas de goma separadas. Elevan la base para ventilación y evitan vibración en el escritorio.'
+        desc: 'Las patas de goma elevan la base y absorben la vibración del escritorio.',
+        rotation: [-Math.PI / 3, Math.PI / 5, 0],
+        camDist: 90
     }
 };
 
@@ -1181,13 +1502,17 @@ const heroEl = document.getElementById('hero-viewer');
 const heroLoaderEl = document.getElementById('hero-loader');
 const progressBar = document.getElementById('assembly-progress');
 
+function getHeroCameraFov() {
+    return window.innerWidth < 680 ? 58 : 38;
+}
+
 // Reduced motion: skip animation
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ── Scene setup ──
 const heroScene = new THREE.Scene();
 const heroCamera = new THREE.PerspectiveCamera(
-    38,
+    getHeroCameraFov(),
     heroEl.clientWidth / heroEl.clientHeight,
     0.1, 5000
 );
@@ -1199,30 +1524,30 @@ const heroRenderer = new THREE.WebGLRenderer({
 });
 heroRenderer.setSize(heroEl.clientWidth, heroEl.clientHeight);
 heroRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-heroRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-heroRenderer.toneMappingExposure = 1.4;
+heroRenderer.toneMapping = THREE.LinearToneMapping;
+heroRenderer.toneMappingExposure = 1.0;
 heroEl.appendChild(heroRenderer.domElement);
 
 // Lights
-heroScene.add(new THREE.AmbientLight(0x666666, 1.2));
+heroScene.add(new THREE.AmbientLight(0xffffff, 0.9));
 
-const heroKeyLight = new THREE.DirectionalLight(0xffffff, 3.0);
+const heroKeyLight = new THREE.DirectionalLight(0xffffff, 2.2);
 heroKeyLight.position.set(60, 100, 60);
 heroScene.add(heroKeyLight);
 
-const heroRimLight = new THREE.DirectionalLight(0x00F068, 2.0);
+const heroRimLight = new THREE.DirectionalLight(0x00F068, 0.55);
 heroRimLight.position.set(-70, 30, -50);
 heroScene.add(heroRimLight);
 
-const heroFillLight = new THREE.DirectionalLight(0xcccccc, 1.2);
+const heroFillLight = new THREE.DirectionalLight(0xdde5ff, 0.9);
 heroFillLight.position.set(-40, -30, 60);
 heroScene.add(heroFillLight);
 
-const heroTopLight = new THREE.DirectionalLight(0xffffff, 1.5);
+const heroTopLight = new THREE.DirectionalLight(0xffffff, 1.1);
 heroTopLight.position.set(0, 100, 0);
 heroScene.add(heroTopLight);
 
-const heroUnderLight = new THREE.PointLight(0x00F068, 0.6, 200);
+const heroUnderLight = new THREE.PointLight(0x00F068, 0.18, 200);
 heroUnderLight.position.set(0, -60, 0);
 heroScene.add(heroUnderLight);
 
@@ -1232,7 +1557,7 @@ heroControls.enableDamping = true;
 heroControls.dampingFactor = 0.06;
 heroControls.autoRotate = false;
 heroControls.autoRotateSpeed = 0.8;
-heroControls.enableZoom = true;
+heroControls.enableZoom = false;
 heroControls.enablePan = false;
 heroControls.minDistance = 20;
 heroControls.maxDistance = 250;
@@ -1242,21 +1567,21 @@ heroControls.enabled = false; // disabled until assembly complete
 // Materials
 const darkMetalMat = new THREE.MeshPhysicalMaterial({
     color: 0x3a3a3a,
-    roughness: 0.18,
-    metalness: 0.7,
-    clearcoat: 0.8,
-    clearcoatRoughness: 0.08,
-    reflectivity: 0.6,
+    roughness: 0.42,
+    metalness: 0.55,
+    clearcoat: 0.55,
+    clearcoatRoughness: 0.25,
+    reflectivity: 0.45,
 });
 
 const greenLogoMat = new THREE.MeshPhysicalMaterial({
     color: 0x00F068,
-    roughness: 0.3,
-    metalness: 0.4,
+    roughness: 0.5,
+    metalness: 0.1,
     emissive: 0x00F068,
-    emissiveIntensity: 0.3,
-    clearcoat: 0.6,
-    clearcoatRoughness: 0.1,
+    emissiveIntensity: 0.4,
+    clearcoat: 0.3,
+    clearcoatRoughness: 0.2,
 });
 
 
@@ -1292,6 +1617,13 @@ const CAM_PATH = {
     startY: 120,          // higher for isometric feel
     endY:   0,
 };
+
+function applyCamPathForViewport() {
+    const narrow = window.innerWidth < 680;
+    CAM_PATH.startRadius = 280;
+    CAM_PATH.endRadius   = narrow ? 190 : 130;
+}
+applyCamPathForViewport();
 // World Z position of the dashboard screen (computed after load)
 let screenWorldZ = -27.6;
 
@@ -1344,6 +1676,8 @@ Promise.all([
     HOME.lid  = lidMesh.position.clone();
     HOME.logo = logoMesh.position.clone();
 
+    createHeroScreen();
+
     // Debug: expose key values + geometry bounds
     caseGeo.computeBoundingBox();
     lidGeo.computeBoundingBox();
@@ -1383,183 +1717,201 @@ Promise.all([
 window.addEventListener('unhandledrejection', e => console.error('[hero] unhandled rejection:', e.reason));
 
 // ── Dashboard canvas texture ──
-function createDashboardScreen() {
+function createHeroScreen() {
     const size = 480;
     const SCALE = 2; // supersample the texture for crisp text at close range
+
+    // Main (visible) canvas — written via composition from offscreen
     const canvas = document.createElement('canvas');
     canvas.width = size * SCALE;
     canvas.height = size * SCALE;
     const ctx = canvas.getContext('2d');
     ctx.scale(SCALE, SCALE);
 
-    // Background — dark
-    ctx.fillStyle = '#0a0a0a';
-    ctx.fillRect(0, 0, size, size);
+    // Offscreen canvas holds the raw matrix rain with trails persisting frame-to-frame
+    const matrixCanvas = document.createElement('canvas');
+    matrixCanvas.width = size * SCALE;
+    matrixCanvas.height = size * SCALE;
+    const mctx = matrixCanvas.getContext('2d');
+    mctx.scale(SCALE, SCALE);
+    mctx.fillStyle = '#03040A';
+    mctx.fillRect(0, 0, size, size);
 
-    // Circular clip
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(size/2, size/2, size/2 - 2, 0, Math.PI * 2);
-    ctx.clip();
-
-    // Fill clipped area
-    ctx.fillStyle = '#0a0a0a';
-    ctx.fillRect(0, 0, size, size);
-
-    // ── Header bar (0–44px) ──
-    ctx.fillStyle = '#111';
-    ctx.fillRect(0, 0, size, 44);
-
-    // Green dot
-    ctx.beginPath();
-    ctx.arc(24, 22, 5, 0, Math.PI * 2);
-    ctx.fillStyle = '#00F068';
-    ctx.fill();
-
-    // "LEMON" text
-    ctx.fillStyle = '#00F068';
-    ctx.font = 'bold 14px monospace';
-    ctx.fillText('LEMON', 38, 27);
-
-    // Clock
-    ctx.fillStyle = '#666';
-    ctx.font = '13px monospace';
-    ctx.textAlign = 'right';
-    ctx.fillText('14:32', size - 20, 27);
-    ctx.textAlign = 'left';
-
-    // Divider line
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(20, 44);
-    ctx.lineTo(size - 20, 44);
-    ctx.stroke();
-
-    // ── Pair label ──
-    ctx.fillStyle = '#888';
-    ctx.font = '12px monospace';
-    ctx.fillText('BTC/USD', 30, 75);
-
-    // ── Large price ──
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 38px sans-serif';
-    ctx.fillText('$103,452', 30, 125);
-
-    // ── Green change badge ──
-    const badgeText = '+2.4% 24h';
-    ctx.font = 'bold 13px monospace';
-    const badgeW = ctx.measureText(badgeText).width + 16;
-    ctx.fillStyle = 'rgba(0,240,104,0.15)';
-    roundRect(ctx, 30, 138, badgeW, 26, 6);
-    ctx.fill();
-    ctx.fillStyle = '#00F068';
-    ctx.fillText(badgeText, 38, 156);
-
-    // ── Period pills (right side) ──
-    const periods = ['5m', '15m', '1h', '4h', '24h'];
-    let px = size - 40;
-    ctx.textAlign = 'right';
-    for (let i = periods.length - 1; i >= 0; i--) {
-        const p = periods[i];
-        const isActive = p === '24h';
-        const tw = ctx.measureText(p).width + 14;
-
-        if (isActive) {
-            ctx.fillStyle = 'rgba(0,240,104,0.2)';
-            roundRect(ctx, px - tw, 62, tw, 22, 4);
-            ctx.fill();
-            ctx.fillStyle = '#00F068';
-        } else {
-            ctx.fillStyle = '#555';
-        }
-        ctx.font = '11px monospace';
-        ctx.textAlign = 'right';
-        ctx.fillText(p, px - 4, 78);
-        px -= tw + 6;
-    }
-    ctx.textAlign = 'left';
-
-    // ── Sparkline chart ──
-    const chartTop = 190;
-    const chartBottom = 380;
-    const chartLeft = 30;
-    const chartRight = size - 30;
-    const chartH = chartBottom - chartTop;
-    const chartW = chartRight - chartLeft;
-
-    // Generate BTC-like data
-    const points = 80;
-    const data = [];
-    let val = 0.5;
-    for (let i = 0; i < points; i++) {
-        val += (Math.random() - 0.48) * 0.08;
-        val = Math.max(0.1, Math.min(0.9, val));
-        data.push(val);
-    }
-
-    // Gradient fill under line
-    const grad = ctx.createLinearGradient(0, chartTop, 0, chartBottom);
-    grad.addColorStop(0, 'rgba(0,240,104,0.25)');
-    grad.addColorStop(1, 'rgba(0,240,104,0.0)');
-
-    ctx.beginPath();
-    ctx.moveTo(chartLeft, chartBottom);
-    for (let i = 0; i < data.length; i++) {
-        const x = chartLeft + (i / (data.length - 1)) * chartW;
-        const y = chartBottom - data[i] * chartH;
-        ctx.lineTo(x, y);
-    }
-    ctx.lineTo(chartRight, chartBottom);
-    ctx.closePath();
-    ctx.fillStyle = grad;
-    ctx.fill();
-
-    // Line itself
-    ctx.beginPath();
-    for (let i = 0; i < data.length; i++) {
-        const x = chartLeft + (i / (data.length - 1)) * chartW;
-        const y = chartBottom - data[i] * chartH;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-    }
-    ctx.strokeStyle = '#00F068';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    // Glow dot at end
-    const lastX = chartRight;
-    const lastY = chartBottom - data[data.length - 1] * chartH;
-    ctx.beginPath();
-    ctx.arc(lastX, lastY, 5, 0, Math.PI * 2);
-    ctx.fillStyle = '#00F068';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(lastX, lastY, 10, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0,240,104,0.2)';
-    ctx.fill();
-
-    // ── Bottom bar ──
-    ctx.fillStyle = '#666';
-    ctx.font = '10px monospace';
-    ctx.fillText('Binance · WebSocket', 30, size - 25);
-    ctx.textAlign = 'right';
-    ctx.fillText('LEMON BOX v4.8.3', size - 30, size - 25);
-    ctx.textAlign = 'left';
-
-    ctx.restore(); // un-clip
-
-    // Circular border
-    ctx.beginPath();
-    ctx.arc(size/2, size/2, size/2 - 2, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(0,240,104,0.15)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Create texture
     dashboardTexture = new THREE.CanvasTexture(canvas);
     dashboardTexture.colorSpace = THREE.SRGBColorSpace;
     dashboardTexture.anisotropy = 8;
+
+    const logoImg = new Image();
+    logoImg.decoding = 'async';
+    logoImg.src = './assets/lemonlogo.png';
+
+    // Matrix rain on the dashboard texture
+    // Bitcoin symbol weighted heavily so it shows up as a recurring motif on the device screen
+    const M_CHARS = '₿₿₿₿₿₿₿₿₿₿₿₿₿₿アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789Ξ$%△▽';
+    const M_FONT = 16;
+    const M_COL_W = 11;
+    const M_COLS = Math.ceil(size / M_COL_W);
+    const mCols = new Array(M_COLS).fill(0).map((_, i) => ({
+        x: i * M_COL_W,
+        y: -Math.random() * 6,
+        speed: 0.05 + Math.random() * 0.08,
+        bright: Math.random() < 0.38,
+        alpha: 0.78 + Math.random() * 0.22,
+        lastRow: -1,
+        lastChar: ''
+    }));
+    const randChar = () => M_CHARS[(Math.random() * M_CHARS.length) | 0];
+
+    function drawMatrix() {
+        // Solid dark base with slight fade to create trail
+        mctx.fillStyle = 'rgba(3, 4, 7, 0.08)';
+        mctx.fillRect(0, 0, size, size);
+        mctx.font = `${M_FONT}px 'JetBrains Mono', 'Fira Code', 'Segoe UI Symbol', monospace`;
+        mctx.textBaseline = 'top';
+        for (let i = 0; i < M_COLS; i++) {
+            const c = mCols[i];
+            c.y += c.speed;
+            const row = Math.floor(c.y);
+            if (row !== c.lastRow) {
+                if (c.lastRow >= 0 && c.lastChar) {
+                    mctx.globalAlpha = c.alpha * 0.9;
+                    mctx.fillStyle = '#00F068';
+                    mctx.fillText(c.lastChar, c.x, c.lastRow * M_FONT);
+                }
+                // Bright heads always render the Bitcoin glyph; non-bright heavily favor it too
+                let ch;
+                if (c.bright) ch = '₿';
+                else if (Math.random() < 0.55) ch = '₿';
+                else ch = randChar();
+                mctx.globalAlpha = c.bright ? 1.0 : c.alpha;
+                // Draw ₿ slightly larger + in brand green so it pops
+                if (ch === '₿') {
+                    const prevFont = mctx.font;
+                    mctx.font = `bold ${M_FONT + 2}px 'JetBrains Mono', 'Fira Code', 'Segoe UI Symbol', monospace`;
+                    mctx.fillStyle = c.bright ? '#FFFFFF' : '#00F068';
+                    mctx.fillText(ch, c.x, row * M_FONT);
+                    mctx.font = prevFont;
+                } else {
+                    mctx.fillStyle = '#00F068';
+                    mctx.fillText(ch, c.x, row * M_FONT);
+                }
+                c.lastRow = row;
+                c.lastChar = ch;
+            }
+            if (row * M_FONT > size + M_FONT * 4 && Math.random() > 0.975) {
+                c.y = -Math.random() * 8 - 1;
+                c.speed = 0.05 + Math.random() * 0.08;
+                c.bright = Math.random() < 0.38;
+                c.alpha = 0.78 + Math.random() * 0.22;
+                c.lastRow = -1;
+                c.lastChar = '';
+            }
+        }
+        mctx.globalAlpha = 1;
+    }
+
+    function drawLogoOn(alpha) {
+        if (alpha <= 0) return;
+        if (logoImg.complete && logoImg.naturalWidth > 0) {
+            const maxDim = size * 0.5;
+            const scale = Math.min(maxDim / logoImg.naturalWidth, maxDim / logoImg.naturalHeight);
+            const drawWidth = logoImg.naturalWidth * scale;
+            const drawHeight = logoImg.naturalHeight * scale;
+            const drawX = (size - drawWidth) / 2;
+            const drawY = (size - drawHeight) / 2;
+            ctx.globalAlpha = alpha;
+            ctx.drawImage(logoImg, drawX, drawY, drawWidth, drawHeight);
+            ctx.globalAlpha = 1;
+        }
+    }
+
+    let matrixWasVisible = false;
+    function resetMatrix() {
+        // Clear offscreen canvas to solid black so no residual trails
+        mctx.save();
+        mctx.setTransform(1, 0, 0, 1, 0, 0);
+        mctx.fillStyle = '#03040A';
+        mctx.fillRect(0, 0, matrixCanvas.width, matrixCanvas.height);
+        mctx.restore();
+        // Reset all columns to start from just above the top
+        for (let i = 0; i < M_COLS; i++) {
+            const c = mCols[i];
+            c.y = -Math.random() * 6 - 1;
+            c.speed = 0.12 + Math.random() * 0.16;
+            c.bright = Math.random() < 0.28;
+            c.alpha = 0.78 + Math.random() * 0.22;
+            c.lastRow = -1;
+            c.lastChar = '';
+        }
+    }
+
+    function drawScreen() {
+
+        // Clear main canvas to transparent so the case shows through outside the rounded rect
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        // Clip to rounded rect (square display with soft corners)
+        ctx.save();
+        const r = size * 0.08;
+        ctx.beginPath();
+        ctx.moveTo(r, 0);
+        ctx.lineTo(size - r, 0);
+        ctx.quadraticCurveTo(size, 0, size, r);
+        ctx.lineTo(size, size - r);
+        ctx.quadraticCurveTo(size, size, size - r, size);
+        ctx.lineTo(r, size);
+        ctx.quadraticCurveTo(0, size, 0, size - r);
+        ctx.lineTo(0, r);
+        ctx.quadraticCurveTo(0, 0, r, 0);
+        ctx.closePath();
+        ctx.clip();
+
+        // Dark base so screen has a display background
+        ctx.fillStyle = '#03040A';
+        ctx.fillRect(0, 0, size, size);
+
+        // Staged reveal inside the hold zone (HOLD_END = 0.70):
+        //   raw 0.70..0.73 → black screen only
+        //   raw 0.73..0.76 → logo fades in
+        //   raw 0.76..0.88 → logo holds alone (LONG — the hero moment)
+        //   raw 0.88..0.92 → matrix fades in behind logo
+        //   raw 0.92..1.00 → full state holds (final pause before next section)
+        const raw = window.__heroRawProgress ?? 0;
+        const logoVisible = Math.max(0, Math.min(1, (raw - 0.73) / 0.03));
+        const matrixVisible = Math.max(0, Math.min(1, (raw - 0.88) / 0.04));
+
+        // Reset matrix to clean state right before it becomes visible,
+        // then only advance it while visible so the user sees it from frame one.
+        if (matrixVisible > 0 && !matrixWasVisible) {
+            resetMatrix();
+        }
+        matrixWasVisible = matrixVisible > 0;
+
+        if (matrixVisible > 0) {
+            drawMatrix();
+            ctx.globalAlpha = matrixVisible;
+            ctx.drawImage(matrixCanvas, 0, 0, size, size);
+            ctx.globalAlpha = 1;
+        }
+
+        drawLogoOn(logoVisible);
+        ctx.restore();
+        dashboardTexture.needsUpdate = true;
+    }
+
+    let dashRaf = null;
+    function tick() {
+        dashRaf = requestAnimationFrame(tick);
+        drawScreen();
+    }
+
+    logoImg.onload = () => { drawScreen(); if (!dashRaf) tick(); };
+    logoImg.onerror = () => { drawScreen(); if (!dashRaf) tick(); };
+    drawScreen();
+    tick();
 
     // ── Screen assembly: glow halo + metal bezel + display ──
     const screenAssembly = new THREE.Group();
@@ -1569,15 +1921,15 @@ function createDashboardScreen() {
     haloCanvas.width = haloCanvas.height = 256;
     const hctx = haloCanvas.getContext('2d');
     const haloGrad = hctx.createRadialGradient(128, 128, 40, 128, 128, 128);
-    haloGrad.addColorStop(0.0, 'rgba(0,240,104,0.9)');
-    haloGrad.addColorStop(0.45, 'rgba(0,240,104,0.25)');
+        haloGrad.addColorStop(0.0, 'rgba(0,240,104,0.15)');
+        haloGrad.addColorStop(0.45, 'rgba(0,240,104,0.04)');
     haloGrad.addColorStop(1.0, 'rgba(0,240,104,0)');
     hctx.fillStyle = haloGrad;
     hctx.fillRect(0, 0, 256, 256);
     const haloTex = new THREE.CanvasTexture(haloCanvas);
     haloTex.colorSpace = THREE.SRGBColorSpace;
 
-    const haloGeo = new THREE.PlaneGeometry(105, 105);
+    const haloGeo = new THREE.PlaneGeometry(82, 82);
     const haloMat = new THREE.MeshBasicMaterial({
         map: haloTex,
         transparent: true,
@@ -1590,10 +1942,8 @@ function createDashboardScreen() {
     haloMesh.position.y = -0.08; // slightly behind the display
     screenAssembly.add(haloMesh);
 
-    // 2) The actual display — SQUARE plane matching the case front face.
-    //    The UI itself renders a circular LCD area + dark corners (plastic around
-    //    the round display inside a square case, like real round LCD hardware).
-    const screenGeo = new THREE.PlaneGeometry(88, 88);
+    // 2) The actual display — square composition mapped onto the front face.
+    const screenGeo = new THREE.PlaneGeometry(70, 70);
     const screenMat = new THREE.MeshBasicMaterial({
         map: dashboardTexture,
         transparent: true,
@@ -1608,16 +1958,93 @@ function createDashboardScreen() {
     // Parent the assembly to the case so it moves with the case
     caseMesh.add(screenAssembly);
 
-    // Position on the FRONT face (max Y in STL/local geometry space = screen face)
+    function measureFrontFace(geometry) {
+        geometry.computeBoundingBox();
+
+        const box = geometry.boundingBox;
+        const size = new THREE.Vector3();
+        box.getSize(size);
+
+        const xMin = box.min.x + size.x * 0.13;
+        const xMax = box.max.x - size.x * 0.13;
+        const zMin = box.min.z + size.z * 0.01;
+        const zMax = box.max.z - size.z * 0.19;
+        const yMin = box.max.y - size.y * 0.25;
+
+        let sx = 0;
+        let sz = 0;
+        let sy = 0;
+        let sxx = 0;
+        let szz = 0;
+        let sxz = 0;
+        let sxy = 0;
+        let szy = 0;
+        let count = 0;
+
+        const pos = geometry.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+            const x = pos.getX(i);
+            const y = pos.getY(i);
+            const z = pos.getZ(i);
+
+            if (x < xMin || x > xMax || z < zMin || z > zMax || y < yMin) continue;
+
+            sx += x;
+            sz += z;
+            sy += y;
+            sxx += x * x;
+            szz += z * z;
+            sxz += x * z;
+            sxy += x * y;
+            szy += z * y;
+            count++;
+        }
+
+        const fallbackCenter = new THREE.Vector3(
+            (box.min.x + box.max.x) * 0.5,
+            box.max.y,
+            (box.min.z + box.max.z) * 0.5
+        );
+
+        if (count < 3) {
+            return {
+                normal: new THREE.Vector3(0, 1, 0),
+                center: fallbackCenter,
+            };
+        }
+
+        const det = sxx * (szz * count - sz * sz) - sxz * (sxz * count - sz * sx) + sx * (sxz * sz - szz * sx);
+        if (Math.abs(det) < 1e-6) {
+            return {
+                normal: new THREE.Vector3(0, 1, 0),
+                center: fallbackCenter,
+            };
+        }
+
+        const da = sxy * (szz * count - sz * sz) - sxz * (szy * count - sz * sy) + sx * (szy * sz - szz * sy);
+        const db = sxx * (szy * count - sz * sy) - sxy * (sxz * count - sz * sx) + sx * (sxz * sy - szy * sx);
+        const a = da / det;
+        const b = db / det;
+
+        return {
+            normal: new THREE.Vector3(-a, 1, -b).normalize(),
+            center: new THREE.Vector3(sx / count, sy / count, sz / count),
+        };
+    }
+
     caseMesh.geometry.computeBoundingBox();
     const caseBB = caseMesh.geometry.boundingBox;
     const caseCenter = new THREE.Vector3();
     caseBB.getCenter(caseCenter);
+    // Screen sits on the +Y face of the case STL (forward after group rotation)
+    const frontNormal = new THREE.Vector3(0, 1, 0);
+    const screenOffset = frontNormal.clone().multiplyScalar(1.0);
+    const planeUp = new THREE.Vector3(0, 0, 1).projectOnPlane(frontNormal).normalize();
+    const planeRight = new THREE.Vector3().crossVectors(planeUp, frontNormal).normalize();
+    const screenBasis = new THREE.Matrix4().makeBasis(planeRight, planeUp, frontNormal);
 
-    // Screen is on Y-max face (front of device), facing +Y direction
-    screenAssembly.position.set(caseCenter.x, caseBB.max.y + 0.3, caseCenter.z);
-    // Rotate assembly to face +Y and un-mirror the display
-    screenAssembly.rotation.set(-Math.PI / 2, 0, Math.PI);
+    screenAssembly.position.set(caseCenter.x + screenOffset.x, caseBB.max.y + screenOffset.y, caseCenter.z + screenOffset.z);
+    screenAssembly.quaternion.setFromRotationMatrix(screenBasis);
 
     // Expose halo so animation loop can fade it in with the display
     dashboardMesh.userData.halo = haloMesh;
@@ -1647,7 +2074,10 @@ function roundRect(ctx, x, y, w, h, r) {
 function getScrollProgress() {
     const rect = heroSection.getBoundingClientRect();
     const distance = heroSection.scrollHeight - window.innerHeight;
-    return clamp(-rect.top / distance, 0, 1);
+    const HOLD_END = 0.70;
+    const raw = clamp(-rect.top / distance, 0, 1);
+    window.__heroRawProgress = raw;
+    return clamp(raw / HOLD_END, 0, 1);
 }
 
 // ── Animation loop ──
@@ -1658,10 +2088,27 @@ function heroAnimate() {
 
     const t = prefersReducedMotion ? 1.0 : (window._editGetProgress ? window._editGetProgress() : getScrollProgress());
 
+    if (dashboardMesh) {
+        const screenT = easeInOutCubic(phaseProgress(t, 0.82, 1.0));
+        dashboardMesh.material.opacity = screenT;
+        dashboardMesh.userData.halo.material.opacity = 0.55 * screenT;
+    }
+
     // Update progress bar
     const pct = Math.round(t * 100);
     progressBar.style.width = pct + '%';
     progressBar.setAttribute('aria-valuenow', String(pct));
+
+    // Matrix opacity ramp: boost near the end of the animation
+    const matrixEl = document.getElementById('matrix-rain');
+    if (matrixEl) {
+        const boost = clamp((t - 0.75) / 0.2, 0, 1);
+        const op = 0.55 + boost * 0.35;
+        matrixEl.style.setProperty('--matrix-opacity', op.toFixed(3));
+    }
+
+    // Expose progress for dashboard texture (logo first, then matrix)
+    window.__heroProgress = t;
 
     if (caseMesh && !prefersReducedMotion) {
         // ── Part assembly phases ──
@@ -1740,6 +2187,8 @@ setTimeout(() => {
 const heroRO = new ResizeObserver(() => {
     const w = heroEl.clientWidth;
     const h = heroEl.clientHeight;
+    applyCamPathForViewport();
+    heroCamera.fov = getHeroCameraFov();
     heroCamera.aspect = w / h;
     heroCamera.updateProjectionMatrix();
     heroRenderer.setSize(w, h);
@@ -2004,36 +2453,31 @@ function createViewer(container, opts = {}) {
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.4;
+    renderer.toneMappingExposure = 1.1;
     container.appendChild(renderer.domElement);
 
-    scene.add(new THREE.AmbientLight(0x666666, 1.2));
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-    const key = new THREE.DirectionalLight(0xffffff, 3.0);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+    const key = new THREE.DirectionalLight(0xffffff, 1.8);
     key.position.set(60, 100, 60);
     scene.add(key);
 
-    const rim = new THREE.DirectionalLight(0x00F068, 2.0);
+    const rim = new THREE.DirectionalLight(0x00F068, 0.9);
     rim.position.set(-70, 30, -50);
     scene.add(rim);
 
-    const fill = new THREE.DirectionalLight(0xcccccc, 1.2);
+    const fill = new THREE.DirectionalLight(0xdde5ff, 0.6);
     fill.position.set(-40, -30, 60);
     scene.add(fill);
-
-    const top = new THREE.DirectionalLight(0xffffff, 1.5);
-    top.position.set(0, 100, 0);
-    scene.add(top);
-
-    const under = new THREE.PointLight(0x00F068, 0.6, 200);
-    under.position.set(0, -60, 0);
-    scene.add(under);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.06;
     controls.autoRotate = true;
-    controls.autoRotateSpeed = opts.speed || 2;
+    controls.autoRotateSpeed = opts.speed || 0.8;
     controls.enableZoom = true;
     controls.enablePan = false;
     controls.minDistance = 20;
@@ -2059,17 +2503,18 @@ function createViewer(container, opts = {}) {
     ro.observe(container);
 
     const material = new THREE.MeshPhysicalMaterial({
-        color: 0x3a3a3a,
-        roughness: 0.18,
-        metalness: 0.7,
-        clearcoat: 0.8,
-        clearcoatRoughness: 0.08,
-        reflectivity: 0.6,
+        color: 0x4a4a4a,
+        roughness: 0.35,
+        metalness: 0.55,
+        clearcoat: 0.6,
+        clearcoatRoughness: 0.15,
+        reflectivity: 0.5,
+        envMapIntensity: 1.2,
     });
 
     const loader = new STLLoader();
 
-    function load(path) {
+    function load(path, preset = {}) {
         return new Promise((resolve) => {
             loader.load(path, (geo) => {
                 if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); }
@@ -2079,6 +2524,10 @@ function createViewer(container, opts = {}) {
 
                 mesh = new THREE.Mesh(geo, material);
 
+                if (preset.rotation) {
+                    mesh.rotation.set(preset.rotation[0], preset.rotation[1], preset.rotation[2]);
+                }
+
                 const box = new THREE.Box3().setFromObject(mesh);
                 const size = new THREE.Vector3();
                 box.getSize(size);
@@ -2086,6 +2535,14 @@ function createViewer(container, opts = {}) {
                 mesh.scale.setScalar(s);
 
                 scene.add(mesh);
+
+                const dist = preset.camDist || 120;
+                const dir = new THREE.Vector3(1, 0.7, 1).normalize();
+                camera.position.copy(dir.multiplyScalar(dist));
+                camera.lookAt(0, 0, 0);
+                controls.target.set(0, 0, 0);
+                controls.update();
+
                 resolve();
             });
         });
@@ -2100,7 +2557,7 @@ const expLoader = document.getElementById('explorer-loader');
 const expViewer = createViewer(expEl, { speed: 2.5 });
 
 let currentPart = 'case';
-expViewer.load(BASE + PARTS.case.file).then(() => {
+expViewer.load(BASE + PARTS.case.file, PARTS.case).then(() => {
     expLoader.classList.add('hidden');
 });
 
@@ -2120,15 +2577,538 @@ document.querySelectorAll('.explorer-tab').forEach(tab => {
         document.getElementById('explorer-viewer').setAttribute('aria-labelledby', tab.id);
 
         expLoader.classList.remove('hidden');
-        expViewer.load(BASE + PARTS[key].file).then(() => {
+        expViewer.load(BASE + PARTS[key].file, PARTS[key]).then(() => {
             expLoader.classList.add('hidden');
         });
 
         document.getElementById('part-name').textContent = PARTS[key].name;
-        document.getElementById('part-file').textContent = PARTS[key].file;
         document.getElementById('part-desc').textContent = PARTS[key].desc;
     });
 });
+
+
+// ── Matrix rain (hero background) ──
+(() => {
+    const canvas = document.getElementById('matrix-rain');
+    const host = document.querySelector('.hero-sticky');
+    if (!canvas || !host) return;
+    const ctx = canvas.getContext('2d');
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const CHARS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789₿Ξ$%△▽';
+    const FONT_SIZE = 16;
+    const mobile = window.matchMedia('(max-width: 768px)').matches;
+    const COL_WIDTH = mobile ? 22 : 18;
+    const HEAD_NORMAL = '#00F068';
+    const HEAD_BRIGHT = '#FFFFFF';
+    const BODY = '#00F068';
+    const FADE = 'rgba(5, 5, 8, 0.05)';
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let cols = 0, columns = [], w = 0, h = 0;
+
+    function makeCol(i) {
+        const bright = Math.random() < 0.22;
+        return {
+            x: i * COL_WIDTH,
+            y: -Math.random() * (h + 400) / FONT_SIZE,
+            speed: 0.09 + Math.random() * 0.16,
+            bright,
+            alpha: bright ? 1.0 : 0.55 + Math.random() * 0.35,
+            lastRow: -1,
+            lastChar: ''
+        };
+    }
+
+    function resize() {
+        const rect = host.getBoundingClientRect();
+        w = rect.width; h = rect.height;
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        cols = Math.ceil(w / COL_WIDTH);
+        columns = new Array(cols).fill(0).map((_, i) => makeCol(i));
+        ctx.fillStyle = '#05050a';
+        ctx.fillRect(0, 0, w, h);
+    }
+
+    function randChar() { return CHARS[(Math.random() * CHARS.length) | 0]; }
+
+    function draw() {
+        ctx.fillStyle = FADE;
+        ctx.fillRect(0, 0, w, h);
+        ctx.font = `${FONT_SIZE}px 'JetBrains Mono', 'Fira Code', monospace`;
+        ctx.textBaseline = 'top';
+        for (let i = 0; i < cols; i++) {
+            const c = columns[i];
+            c.y += c.speed;
+            const row = Math.floor(c.y);
+            if (row !== c.lastRow) {
+                ctx.globalAlpha = c.alpha;
+                if (c.lastRow >= 0 && c.lastChar) {
+                    ctx.fillStyle = BODY;
+                    ctx.fillText(c.lastChar, c.x, c.lastRow * FONT_SIZE);
+                }
+                const ch = randChar();
+                ctx.fillStyle = c.bright ? HEAD_BRIGHT : HEAD_NORMAL;
+                ctx.fillText(ch, c.x, row * FONT_SIZE);
+                c.lastRow = row;
+                c.lastChar = ch;
+            }
+            if (row * FONT_SIZE > h + FONT_SIZE * 6 && Math.random() > 0.975) {
+                const fresh = makeCol(i);
+                fresh.y = -Math.random() * 30 - 5;
+                columns[i] = fresh;
+            }
+        }
+        ctx.globalAlpha = 1;
+    }
+
+    let rafId = null, running = false;
+    function loop() { if (!running) return; draw(); rafId = requestAnimationFrame(loop); }
+    function start() { if (running || reduced) return; running = true; loop(); }
+    function stop() { running = false; if (rafId) cancelAnimationFrame(rafId); }
+
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(host);
+
+    if (reduced) { draw(); return; }
+
+    const io = new IntersectionObserver((entries) => {
+        entries.forEach(e => e.isIntersecting ? start() : stop());
+    }, { threshold: 0 });
+    io.observe(host);
+})();
+
+// ── Live feature cards ──
+(() => {
+    const SPARK_LEN = 60;
+    const sparkPath = (values, w = 200, h = 36) => {
+        if (!values.length) return '';
+        const min = Math.min(...values), max = Math.max(...values);
+        const range = (max - min) || 1;
+        const step = w / Math.max(values.length - 1, 1);
+        return values.map((v, i) => {
+            const x = i * step;
+            const y = h - ((v - min) / range) * (h - 4) - 2;
+            return (i ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(2);
+        }).join(' ');
+    };
+
+    const fmtUSD = (n) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtARS = (n) => '$' + n.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+    // BTC live via Binance WebSocket (price + 24h change)
+    (() => {
+        const priceEl = document.getElementById('fv-btc-price');
+        const deltaEl = document.getElementById('fv-btc-delta');
+        const pathEl  = document.getElementById('fv-btc-path');
+        if (!priceEl || !pathEl) return;
+        const history = [];
+        let last = null;
+        let change24h = null;
+        let opened = false;
+        let ws = null;
+
+        async function seed() {
+            try {
+                const [klinesRes, tickerRes] = await Promise.all([
+                    fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=24'),
+                    fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT')
+                ]);
+                const klines = await klinesRes.json();
+                const ticker = await tickerRes.json();
+                klines.forEach(k => history.push(parseFloat(k[4])));
+                change24h = parseFloat(ticker.priceChangePercent);
+                if (history.length) {
+                    last = history[history.length - 1];
+                    priceEl.textContent = '$' + fmtUSD(last);
+                    priceEl.classList.remove('skeleton');
+                    pathEl.classList.remove('sk-spark');
+                    updateSpark();
+                    updateDelta();
+                }
+            } catch (e) { /* ignore, WS will populate */ }
+        }
+
+        function updateSpark() {
+            pathEl.setAttribute('d', sparkPath(history));
+        }
+
+        function updateDelta() {
+            if (change24h === null) { deltaEl.textContent = '24h'; return; }
+            const pct = change24h;
+            const absPct = Math.abs(pct);
+            if (absPct < 0.01) {
+                deltaEl.textContent = '24h · 0.00%';
+                deltaEl.classList.remove('down');
+                return;
+            }
+            const sign = pct >= 0 ? '▲ +' : '▼ ';
+            deltaEl.textContent = sign + absPct.toFixed(2) + '% · 24h';
+            deltaEl.classList.toggle('down', pct < 0);
+        }
+
+        async function refresh24h() {
+            try {
+                const res = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT');
+                const t = await res.json();
+                change24h = parseFloat(t.priceChangePercent);
+                updateDelta();
+            } catch (e) {}
+        }
+
+        function connect() {
+            ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@trade');
+            ws.onmessage = (ev) => {
+                const msg = JSON.parse(ev.data);
+                const p = parseFloat(msg.p);
+                if (!Number.isFinite(p)) return;
+                priceEl.textContent = '$' + fmtUSD(p);
+                priceEl.classList.remove('skeleton');
+                pathEl.classList.remove('sk-spark');
+                if (last !== null) {
+                    if (p > last) { priceEl.classList.add('flash-up'); priceEl.classList.remove('flash-dn'); }
+                    else if (p < last) { priceEl.classList.add('flash-dn'); priceEl.classList.remove('flash-up'); }
+                    setTimeout(() => priceEl.classList.remove('flash-up','flash-dn'), 600);
+                }
+                last = p;
+                if (history.length === 0) history.push(p);
+                else history[history.length - 1] = p;
+                updateSpark();
+                opened = true;
+            };
+            ws.onclose = () => { if (opened) setTimeout(connect, 2000); };
+            ws.onerror = () => ws.close();
+        }
+
+        setInterval(refresh24h, 60000);
+
+        seed().then(connect);
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && ws) ws.close();
+            else if (!document.hidden && (!ws || ws.readyState > 1)) connect();
+        });
+    })();
+
+    // About mini-display: live BTC ticker sitting next to the "Qué es?" copy
+    (() => {
+        const priceEl = document.getElementById('ad-btc-price');
+        const deltaEl = document.getElementById('ad-btc-delta');
+        const pathEl  = document.getElementById('ad-btc-path');
+        const bgCanvas = document.getElementById('ad-matrix');
+        if (!priceEl || !pathEl) return;
+
+        const history = [];
+        let last = null;
+        let change24h = null;
+        let opened = false;
+        let ws = null;
+
+        async function seed() {
+            try {
+                const [klinesRes, tickerRes] = await Promise.all([
+                    fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=24'),
+                    fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT')
+                ]);
+                const klines = await klinesRes.json();
+                const ticker = await tickerRes.json();
+                klines.forEach(k => history.push(parseFloat(k[4])));
+                change24h = parseFloat(ticker.priceChangePercent);
+                if (history.length) {
+                    last = history[history.length - 1];
+                    priceEl.textContent = '$' + fmtUSD(last);
+                    priceEl.classList.remove('skeleton');
+                    pathEl.classList.remove('sk-spark');
+                    pathEl.setAttribute('d', sparkPath(history, 200, 48));
+                    updateDelta();
+                }
+            } catch (e) { /* silent */ }
+        }
+
+        function updateDelta() {
+            if (change24h === null) { deltaEl.textContent = '24h'; return; }
+            const abs = Math.abs(change24h);
+            if (abs < 0.01) {
+                deltaEl.textContent = '24h · 0.00%';
+                deltaEl.classList.remove('down');
+                return;
+            }
+            const sign = change24h >= 0 ? '▲ +' : '▼ ';
+            deltaEl.textContent = sign + abs.toFixed(2) + '% · 24h';
+            deltaEl.classList.toggle('down', change24h < 0);
+        }
+
+        async function refresh24h() {
+            try {
+                const res = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT');
+                const t = await res.json();
+                change24h = parseFloat(t.priceChangePercent);
+                updateDelta();
+            } catch (e) {}
+        }
+
+        function connect() {
+            ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@trade');
+            ws.onmessage = (ev) => {
+                const msg = JSON.parse(ev.data);
+                const p = parseFloat(msg.p);
+                if (!Number.isFinite(p)) return;
+                priceEl.textContent = '$' + fmtUSD(p);
+                priceEl.classList.remove('skeleton');
+                pathEl.classList.remove('sk-spark');
+                if (last !== null) {
+                    if (p > last) { priceEl.classList.add('flash-up'); priceEl.classList.remove('flash-dn'); }
+                    else if (p < last) { priceEl.classList.add('flash-dn'); priceEl.classList.remove('flash-up'); }
+                    setTimeout(() => priceEl.classList.remove('flash-up','flash-dn'), 600);
+                }
+                last = p;
+                if (history.length === 0) history.push(p);
+                else history[history.length - 1] = p;
+                pathEl.setAttribute('d', sparkPath(history, 200, 48));
+                opened = true;
+            };
+            ws.onclose = () => { if (opened) setTimeout(connect, 2000); };
+            ws.onerror = () => ws.close();
+        }
+
+        setInterval(refresh24h, 60000);
+        seed().then(connect);
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && ws) ws.close();
+            else if (!document.hidden && (!ws || ws.readyState > 1)) connect();
+        });
+
+        // Subtle matrix background inside the bezel
+        if (bgCanvas) {
+            const ctx = bgCanvas.getContext('2d');
+            const CHARS = '₿₿₿アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789Ξ$%△▽';
+            const FONT = 13;
+            const COL_W = 11;
+            const FADE = 'rgba(5, 7, 9, 0.08)';
+            let cols = [], w = 0, h = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+            function resize() {
+                const r = bgCanvas.getBoundingClientRect();
+                w = r.width; h = r.height;
+                bgCanvas.width = w * dpr;
+                bgCanvas.height = h * dpr;
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                const n = Math.ceil(w / COL_W);
+                cols = new Array(n).fill(0).map((_, i) => ({
+                    x: i * COL_W,
+                    y: -Math.random() * 8 - 1,
+                    speed: 0.05 + Math.random() * 0.08,
+                    bright: Math.random() < 0.3,
+                    alpha: 0.7 + Math.random() * 0.3,
+                    lastRow: -1,
+                    lastChar: ''
+                }));
+                ctx.fillStyle = '#05070a';
+                ctx.fillRect(0, 0, w, h);
+            }
+
+            function tick() {
+                if (!running) return;
+                rafId = requestAnimationFrame(tick);
+                ctx.fillStyle = FADE;
+                ctx.fillRect(0, 0, w, h);
+                ctx.font = `${FONT}px 'JetBrains Mono', 'Fira Code', monospace`;
+                ctx.textBaseline = 'top';
+                for (const c of cols) {
+                    c.y += c.speed;
+                    const row = Math.floor(c.y);
+                    if (row !== c.lastRow) {
+                        if (c.lastRow >= 0 && c.lastChar) {
+                            ctx.globalAlpha = c.alpha * 0.85;
+                            ctx.fillStyle = '#00F068';
+                            ctx.fillText(c.lastChar, c.x, c.lastRow * FONT);
+                        }
+                        const ch = c.bright ? '₿' : CHARS[(Math.random() * CHARS.length) | 0];
+                        ctx.globalAlpha = c.bright ? 1.0 : c.alpha;
+                        ctx.fillStyle = c.bright ? '#FFFFFF' : '#00F068';
+                        ctx.fillText(ch, c.x, row * FONT);
+                        c.lastRow = row;
+                        c.lastChar = ch;
+                    }
+                    if (row * FONT > h + FONT * 4 && Math.random() > 0.975) {
+                        c.y = -Math.random() * 8 - 1;
+                        c.speed = 0.05 + Math.random() * 0.08;
+                        c.bright = Math.random() < 0.3;
+                        c.alpha = 0.7 + Math.random() * 0.3;
+                        c.lastRow = -1;
+                        c.lastChar = '';
+                    }
+                }
+                ctx.globalAlpha = 1;
+            }
+
+            let rafId = null, running = false;
+            function start() { if (running) return; running = true; tick(); }
+            function stop() { running = false; if (rafId) cancelAnimationFrame(rafId); }
+
+            resize();
+            new ResizeObserver(resize).observe(bgCanvas);
+            const io = new IntersectionObserver((entries) => {
+                entries.forEach(e => e.isIntersecting ? start() : stop());
+            }, { threshold: 0 });
+            io.observe(bgCanvas);
+        }
+    })();
+
+    // Tus pares — tap a chip to see 1 BTC priced in that asset
+    (() => {
+        const priceEl = document.getElementById('fv-pairs-price');
+        const unitEl  = document.getElementById('fv-pairs-unit');
+        const chipsEl = document.getElementById('fv-pairs-chips');
+        if (!priceEl || !chipsEl) return;
+
+        const state = { btcUsd: null, ethBtc: null, solUsd: null, arsPerUsd: null, goldUsd: null, active: 'USD' };
+
+        const fmt = (n, opts) => n.toLocaleString('en-US', opts);
+
+        function render() {
+            const p = state.active;
+            let value, unit;
+            switch (p) {
+                case 'USD':
+                    if (state.btcUsd == null) return;
+                    value = '$' + fmt(state.btcUsd, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    unit = '1 BTC · USD';
+                    break;
+                case 'ETH':
+                    if (state.ethBtc == null) return;
+                    value = fmt(1 / state.ethBtc, { maximumFractionDigits: 3 });
+                    unit = '1 BTC · ETH';
+                    break;
+                case 'SOL':
+                    if (state.btcUsd == null || state.solUsd == null) return;
+                    value = fmt(state.btcUsd / state.solUsd, { maximumFractionDigits: 2 });
+                    unit = '1 BTC · SOL';
+                    break;
+                case 'ARS':
+                    if (state.btcUsd == null || state.arsPerUsd == null) return;
+                    value = '$' + (state.btcUsd * state.arsPerUsd).toLocaleString('es-AR', { maximumFractionDigits: 0 });
+                    unit = '1 BTC · ARS';
+                    break;
+                case 'ORO':
+                    if (state.btcUsd == null || state.goldUsd == null) return;
+                    value = fmt(state.btcUsd / state.goldUsd, { maximumFractionDigits: 3 });
+                    unit = '1 BTC · oz ORO';
+                    break;
+            }
+            priceEl.textContent = value;
+            unitEl.textContent = unit;
+            priceEl.classList.remove('skeleton');
+        }
+
+        async function fetchRates() {
+            try {
+                const [btc, eth, sol, ars, gold] = await Promise.allSettled([
+                    fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT').then(r => r.json()),
+                    fetch('https://api.binance.com/api/v3/ticker/price?symbol=ETHBTC').then(r => r.json()),
+                    fetch('https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT').then(r => r.json()),
+                    fetch('https://criptoya.com/api/dolar').then(r => r.json()),
+                    fetch('https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=usd').then(r => r.json()),
+                ]);
+                if (btc.status === 'fulfilled') state.btcUsd = parseFloat(btc.value.price);
+                if (eth.status === 'fulfilled') state.ethBtc = parseFloat(eth.value.price);
+                if (sol.status === 'fulfilled') state.solUsd = parseFloat(sol.value.price);
+                if (ars.status === 'fulfilled') {
+                    const d = ars.value;
+                    state.arsPerUsd = d.cripto?.ccb?.ask || d.cripto?.usdt?.ask || d.blue?.ask || null;
+                }
+                if (gold.status === 'fulfilled') state.goldUsd = gold.value['pax-gold']?.usd || null;
+                render();
+            } catch (e) { /* silent */ }
+        }
+
+        const PAIR_ORDER = ['USD', 'ETH', 'SOL', 'ARS', 'ORO'];
+        let manualPauseUntil = 0;
+
+        function setActive(pair) {
+            state.active = pair;
+            chipsEl.querySelectorAll('.f-chip').forEach(c => {
+                c.classList.toggle('active', c.dataset.pair === pair);
+            });
+            render();
+        }
+
+        chipsEl.addEventListener('click', (ev) => {
+            const btn = ev.target.closest('.f-chip');
+            if (!btn) return;
+            setActive(btn.dataset.pair);
+            manualPauseUntil = performance.now() + 12000;
+        });
+
+        // Auto-cycle through pairs every 3s (paused briefly after user click)
+        setInterval(() => {
+            if (performance.now() < manualPauseUntil) return;
+            const idx = PAIR_ORDER.indexOf(state.active);
+            const next = PAIR_ORDER[(idx + 1) % PAIR_ORDER.length];
+            setActive(next);
+        }, 3000);
+
+        fetchRates();
+        setInterval(fetchRates, 60000);
+    })();
+
+    // USD/ARS live via CriptoYa
+    (() => {
+        const priceEl = document.getElementById('fv-usd-price');
+        const pathEl  = document.getElementById('fv-usd-path');
+        if (!priceEl || !pathEl) return;
+        const history = [];
+
+        async function tick() {
+            try {
+                const res = await fetch('https://criptoya.com/api/dolar');
+                const data = await res.json();
+                const v = data.cripto?.ccb?.ask || data.cripto?.usdt?.ask || data.blue?.ask;
+                if (!Number.isFinite(v)) return;
+                priceEl.textContent = fmtARS(v);
+                priceEl.classList.remove('skeleton');
+                pathEl.classList.remove('sk-spark');
+                history.push(v);
+                if (history.length > SPARK_LEN) history.shift();
+                pathEl.setAttribute('d', sparkPath(history));
+            } catch (e) { /* show dash */ }
+        }
+        tick();
+        setInterval(tick, 30000);
+    })();
+
+    // Polymarket probability drift (visual only, no external fetch to avoid CORS)
+    (() => {
+        const pctEl = document.getElementById('fv-poly-pct');
+        const barEl = document.getElementById('fv-poly-bar');
+        if (!pctEl || !barEl) return;
+        let p = 62;
+        setInterval(() => {
+            p += (Math.random() - 0.5) * 1.2;
+            p = Math.max(40, Math.min(85, p));
+            const r = Math.round(p);
+            pctEl.innerHTML = r + '<span style="font-size:0.7rem;opacity:0.6;">%</span>';
+            barEl.style.width = r + '%';
+        }, 2500);
+    })();
+
+    // Animated matrix title in browser tab — always running
+    (() => {
+        const CHARS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789₿Ξ$%△▽';
+        const WIDTH = 18;
+        setInterval(() => {
+            let s = '';
+            for (let i = 0; i < WIDTH; i++) {
+                s += CHARS[(Math.random() * CHARS.length) | 0];
+            }
+            document.title = s;
+        }, 220);
+    })();
+})();
 </script>
 
 </body>
