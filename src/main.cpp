@@ -247,7 +247,7 @@ static SparklineAnimator sparkAnim;
 
 // ── Scheduler & task IDs ──
 static Scheduler scheduler;
-static uint8_t taskClock, taskBtc, taskSparkline, taskLemon, taskDollarSpark, taskCrossRate, taskPolymarket;
+static uint8_t taskClock, taskBtc, taskSparkline, taskLemon, taskDollarSpark, taskCrossRate, taskPolymarket, taskStocks;
 
 // ── WS price dedup (only redraw when displayed integer changes) ──
 static float lastRenderedPrice = 0.0f;
@@ -1601,6 +1601,7 @@ void setup() {
     dashboardSetTouchCallback(onDashboardTouch);
     appSetDashboardRedrawCB(redrawDashboard);
     viewsRegisterRedraw(VIEW_STOCKS, stocksDrawAll);
+    stocksInit();
 
     taskClock     = scheduler.add("clock",     UPDATE_CLOCK_MS,      updateClock);
     taskBtc       = scheduler.add("btc",       UPDATE_BTC_PRICE_MS,  updateBtc);
@@ -1610,6 +1611,7 @@ void setup() {
     taskCrossRate   = scheduler.add("crossRate", 60000, updateCrossRate);  // 60s for XAU/ARS rates
     taskPolymarket  = scheduler.add("polymarket", POLYMARKET_REFRESH_MS, updatePolymarket);
     scheduler.enable(taskPolymarket, false);  // Disabled by default, enabled in prediction mode
+    taskStocks      = scheduler.add("stocks",    UPDATE_STOCKS_MS,     stocksFetchTask);
 
     applyModePolicyNow(false);
 
