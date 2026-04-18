@@ -146,7 +146,9 @@ public:
 };
 
 // ── Helper: perform HTTPS GET with 1 retry, response in PSRAM buffer ──
-static const char* httpGet(const char* url, bool addCoinGeckoKey, ApiResult& result, int timeoutMs = 7000) {
+// Exposed as apiHttpGet() via api_client.h so sibling clients (stocks, poly)
+// can reuse the hardened TLS / chunked / WDT logic.
+const char* apiHttpGet(const char* url, bool addCoinGeckoKey, ApiResult& result, int timeoutMs) {
     // Allocate PSRAM buffer once (persists for device lifetime)
     if (!_rspBuf) {
         _rspBuf = (char*)ps_malloc(RSP_BUF_SIZE);
@@ -276,7 +278,7 @@ static const char* httpGet(const char* url, bool addCoinGeckoKey, ApiResult& res
 ApiResult fetchBtcPrice(BtcPrice& out) {
     ApiResult result;
     static const char url[] = "https://api.coingecko.com/api/v3/coins/bitcoin?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false";
-    const char* json = httpGet(url, false, result);
+    const char* json = apiHttpGet(url, false, result);
     if (!json[0]) return result;
 
     JsonDocument doc;
@@ -304,7 +306,7 @@ ApiResult fetchBtcPrice(BtcPrice& out) {
 // ── CoinGecko: Lightweight BTC price (for real-time mode) ──
 ApiResult fetchBtcPriceSimple(BtcPrice& out) {
     ApiResult result;
-    const char* json = httpGet(COINGECKO_SIMPLE_EP, false, result);
+    const char* json = apiHttpGet(COINGECKO_SIMPLE_EP, false, result);
     if (!json[0]) return result;
 
     JsonDocument doc;
@@ -329,7 +331,7 @@ ApiResult fetchBtcPriceSimple(BtcPrice& out) {
 // ── CoinGecko: Global market data ──
 ApiResult fetchGlobalData(CryptoGlobal& out) {
     ApiResult result;
-    const char* json = httpGet(COINGECKO_GLOBAL_EP, false, result);
+    const char* json = apiHttpGet(COINGECKO_GLOBAL_EP, false, result);
     if (!json[0]) return result;
 
     JsonDocument doc;
@@ -363,9 +365,9 @@ ApiResult fetchSparkline(SparklineData& out, int days, CoinId coin) {
     static char urlBuf[256];  // static: off the 8KB stack
     snprintf(urlBuf, sizeof(urlBuf), COINGECKO_CHART_EP_FMT "%d", geckoId, days);
 
-    // Use the shared httpGet helper (reads full response as String)
+    // Use the shared apiHttpGet helper (reads full response into PSRAM buffer)
     ApiResult result;
-    const char* json = httpGet(urlBuf, false, result);
+    const char* json = apiHttpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     // Parse JSON from String with filter (only keep "prices")
@@ -413,7 +415,7 @@ ApiResult fetchSparkline(SparklineData& out, int days, CoinId coin) {
 // ── CoinGecko: Multi-coin market data (single request for all coins) ──
 ApiResult fetchMarketData(MarketData& out) {
     ApiResult result;
-    const char* json = httpGet(COINGECKO_MARKETS_EP, false, result);
+    const char* json = apiHttpGet(COINGECKO_MARKETS_EP, false, result);
     if (!json[0]) return result;
 
     JsonDocument doc;
@@ -476,7 +478,7 @@ ApiResult fetchBinanceKlines(SparklineData& out, const char* interval, int limit
              BINANCE_KLINES_EP, interval, limit);
 
     ApiResult result;
-    const char* json = httpGet(urlBuf, false, result);
+    const char* json = apiHttpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     JsonDocument doc;
@@ -528,7 +530,7 @@ ApiResult fetchBinanceOhlc(OhlcData& out, const char* interval, int limit) {
              BINANCE_KLINES_EP, interval, limit);
 
     ApiResult result;
-    const char* json = httpGet(urlBuf, false, result);
+    const char* json = apiHttpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     JsonDocument doc;
@@ -586,7 +588,7 @@ ApiResult fetchLemonSparkline(SparklineData& out, int days) {
     // Longer timeout for large periods (90d+ = hourly data, big response)
     int timeout = (days > 30) ? 15000 : 10000;
     ApiResult result;
-    const char* json = httpGet(urlBuf, false, result, timeout);
+    const char* json = apiHttpGet(urlBuf, false, result, timeout);
     if (result != API_OK) return result;
 
     Serial.printf("[API] Lemon sparkline response: %d bytes\n", (int)strlen(json));
@@ -655,7 +657,7 @@ ApiResult fetchBinanceKlinesSymbol(SparklineData& out, const char* symbol,
              BINANCE_KLINES_EP, symbol, interval, limit);
 
     ApiResult result;
-    const char* json = httpGet(urlBuf, false, result);
+    const char* json = apiHttpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     JsonDocument doc;
@@ -709,7 +711,7 @@ ApiResult fetchBinanceOhlcSymbol(OhlcData& out, const char* symbol,
              BINANCE_KLINES_EP, symbol, interval, limit);
 
     ApiResult result;
-    const char* json = httpGet(urlBuf, false, result);
+    const char* json = apiHttpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     JsonDocument doc;
@@ -782,7 +784,7 @@ ApiResult fetchSparklineVsCurrency(SparklineData& out, int days,
              geckoId, vsCurrency, days);
 
     ApiResult result;
-    const char* json = httpGet(urlBuf, false, result);
+    const char* json = apiHttpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     JsonDocument filter;
@@ -833,7 +835,7 @@ ApiResult fetchGeckoBtcPrice(const char* vsCurrency, float& outPrice) {
              vsCurrency);
 
     ApiResult result;
-    const char* json = httpGet(urlBuf, false, result);
+    const char* json = apiHttpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     JsonDocument doc;
@@ -852,7 +854,7 @@ ApiResult fetchGeckoBtcPrice(const char* vsCurrency, float& outPrice) {
 // ── CriptoYa: Lemon USDC/ARS price ──
 ApiResult fetchLemonPrice(LemonPrice& out) {
     ApiResult result;
-    const char* json = httpGet(CRIPTOYA_LEMON_EP, false, result);
+    const char* json = apiHttpGet(CRIPTOYA_LEMON_EP, false, result);
     if (!json[0]) return result;
 
     JsonDocument doc;
@@ -1081,7 +1083,7 @@ static bool fetchBinanceRefPrice(const char* startTime, float& outPrice) {
              (unsigned long)epochSec);
 
     ApiResult result;
-    const char* json = httpGet(urlBuf, false, result);
+    const char* json = apiHttpGet(urlBuf, false, result);
     if (result != API_OK || !json[0]) {
         refCacheStore(startTime, 0.0f, false);
         return false;
@@ -1187,7 +1189,7 @@ static ApiResult fetchPolyFromEventSlug(const char* slug, PolyMarket* out, uint8
              slug);
 
     ApiResult result;
-    const char* json = httpGet(urlBuf, false, result);
+    const char* json = apiHttpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     JsonDocument filter;
@@ -1299,7 +1301,7 @@ static ApiResult fetchPolyUpDownRecent(PolyMarket* out, uint8_t& count, uint8_t 
                  POLYMARKET_GAMMA_URL, (unsigned)PAGE_LIMIT, (unsigned)offset);
 
         ApiResult result;
-        const char* json = httpGet(urlBuf, false, result);
+        const char* json = apiHttpGet(urlBuf, false, result);
         if (result != API_OK) return result;
 
         JsonDocument filter;
@@ -1368,7 +1370,7 @@ static ApiResult fetchPolyBtcFallback(PolyMarket* out, uint8_t& count, uint8_t l
              POLYMARKET_GAMMA_URL);
 
     ApiResult result;
-    const char* json = httpGet(urlBuf, false, result);
+    const char* json = apiHttpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     JsonDocument filter;
@@ -1474,7 +1476,7 @@ ApiResult fetchPolyMarketByConditionId(const char* conditionId, PolyMarket& out)
              POLYMARKET_GAMMA_URL, conditionId);
 
     ApiResult result;
-    const char* json = httpGet(urlBuf, false, result);
+    const char* json = apiHttpGet(urlBuf, false, result);
     if (result != API_OK) return result;
 
     JsonDocument filter;
