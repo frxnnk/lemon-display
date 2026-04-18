@@ -205,6 +205,10 @@ const char* apiHttpGet(const char* url, bool addCoinGeckoKey, ApiResult& result,
             continue;
         }
         http.addHeader("Accept", "application/json");
+        // Some APIs (notably Yahoo Finance) return 401/429 for the default
+        // "ESP32HTTPClient" user-agent. A neutral browser-ish UA avoids that
+        // without affecting the other CoinGecko / Binance / Criptoya endpoints.
+        http.setUserAgent("Mozilla/5.0 (compatible; Lemon-Box/5.0)");
 
         esp_task_wdt_reset();
         int code = http.GET();

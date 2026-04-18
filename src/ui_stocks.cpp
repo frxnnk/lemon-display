@@ -6,6 +6,7 @@
 #include "nvs_storage.h"
 #include "stocks_client.h"
 #include "ui_components.h"
+#include "scheduler.h"
 #include "data/satoshi_fonts.h"
 #include "data_models.h"
 #include "time_manager.h"
@@ -14,6 +15,9 @@
 #include <cstdio>
 #include <cstring>
 #include <esp_task_wdt.h>
+
+extern Scheduler scheduler;
+extern uint8_t   taskStocks;
 
 // ── Module state ──
 static StockWatchlist  s_watchlist = {};
@@ -75,29 +79,30 @@ void stocksMarkDirty() { s_dirty = true; }
 
 void stocksFetchTask() {
     if (s_watchlist.count == 0) return;
+    if (s_focusedIdx >= s_watchlist.count) s_focusedIdx = 0;
 
-    char csv[128];
-    buildCsv(csv, sizeof(csv));
+    const char* sym = s_watchlist.symbols[s_focusedIdx];
 
-    int count = 0;
-    ApiResult r = fetchStockQuotes(csv, s_quotes, STOCK_MAX_SYMBOLS, count);
-    if (r == API_OK) {
-        s_quoteCount = (uint8_t)count;
-        s_everFetched = true;
-    } else {
-        Serial.printf("[Stocks] quotes failed: %d\n", (int)r);
-    }
-
-    // Only fetch chart for the focused symbol — saves bandwidth on slow networks.
+    // Single request returns quote meta + sparkline for the focused symbol.
+    // Non-focused symbols keep their last-known quote until the user swipes
+    // to them — this keeps us inside one Yahoo request per 60 s instead of N.
+    StockQuote   tmpQuote = {};
+    SparklineData tmpSpark = {};
+    ApiResult r = fetchStockChart(sym, "1d", "5m", tmpQuote, tmpSpark);
     esp_task_wdt_reset();
-    if (s_focusedIdx < s_watchlist.count) {
-        const char* sym = s_watchlist.symbols[s_focusedIdx];
-        // 1-day 5-minute bars; sufficient for a glanceable intraday sparkline.
-        ApiResult rc = fetchStockChart(sym, "1d", "5m", s_focusedSpark);
-        if (rc != API_OK) {
-            Serial.printf("[Stocks] chart failed for %s: %d\n", sym, (int)rc);
-            s_focusedSpark.valid = false;
+    if (r == API_OK && tmpQuote.valid) {
+        // Upsert into s_quotes keyed by symbol
+        int slot = -1;
+        for (int i = 0; i < (int)s_quoteCount; i++) {
+            if (strcmp(s_quotes[i].symbol, tmpQuote.symbol) == 0) { slot = i; break; }
         }
+        if (slot < 0 && s_quoteCount < STOCK_MAX_SYMBOLS) slot = s_quoteCount++;
+        if (slot >= 0) s_quotes[slot] = tmpQuote;
+        s_focusedSpark = tmpSpark;
+        s_everFetched  = true;
+    } else {
+        Serial.printf("[Stocks] fetch failed for %s: %d\n", sym, (int)r);
+        s_focusedSpark.valid = false;
     }
     s_dirty = true;
 }
@@ -212,6 +217,10 @@ static void drawStockCard(LGFX_Sprite& spr, const StockQuote& q) {
 }
 
 void stocksDrawAll() {
+    // First visit: kick the scheduler to fetch immediately instead of waiting
+    // for the 60 s cadence. Safe to call repeatedly — requestRun is idempotent.
+    if (!s_everFetched) scheduler.requestRun(taskStocks);
+
     if (!ensureSprite()) {
         // Fallback: direct-to-tft minimal state so the view isn't blank.
         tft.fillScreen(Colors::BG_BASE);
@@ -249,11 +258,12 @@ void stocksHandleTouch(const TouchEvent& evt) {
     if (next < 0) next = s_watchlist.count - 1;
     if (next >= s_watchlist.count) next = 0;
     s_focusedIdx = (uint8_t)next;
-    s_focusedSpark.valid = false;    // will reload on next fetch
-    // Trigger an immediate quote refresh is overkill — we already have quotes
-    // for all symbols in the watchlist; only the chart needs refresh.
-    stocksFetchTask();                // blocking, but we're already in touch handler
-    stocksDrawAll();
+    s_focusedSpark.valid = false;               // cleared until next fetch lands
+    // Async refresh via scheduler — keeps the touch handler non-blocking so
+    // the UI doesn't freeze during the Yahoo round trip.
+    scheduler.requestRun(taskStocks);
+    s_dirty = true;
+    stocksDrawAll();                            // paint placeholder for new symbol immediately
 }
 
 void stocksTick() {

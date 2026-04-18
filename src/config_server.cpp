@@ -2,6 +2,7 @@
 #include "data_models.h"
 #include "nvs_storage.h"
 #include "ui_stocks.h"
+#include "scheduler.h"
 #include "config.h"
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
@@ -106,7 +107,13 @@ static void handleWatchlistPost(AsyncWebServerRequest* req) {
     }
     nvsSaveWatchlist(wl);
     stocksInit();                 // reload watchlist in-memory
-    stocksFetchTask();            // kick off an immediate fetch so user sees fresh data
+    // Defer the actual fetch to the scheduler so we don't block the HTTP
+    // response for 3-8 s while Yahoo responds.
+    {
+        extern Scheduler scheduler;
+        extern uint8_t   taskStocks;
+        scheduler.requestRun(taskStocks);
+    }
     char flash[64];
     snprintf(flash, sizeof(flash), "Saved %u symbols.", (unsigned)wl.count);
     req->send(200, "text/html", renderWatchlistPage(flash));
