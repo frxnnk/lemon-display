@@ -6,71 +6,15 @@
 #include <cstring>
 #include <cmath>
 
-// ── Yahoo Finance v7 quote: /v7/finance/quote?symbols=AAPL,TSLA,NVDA ──
-ApiResult fetchStockQuotes(const char* csvSymbols, StockQuote* out, int maxOut, int& outCount) {
-    outCount = 0;
-    if (!csvSymbols || !out || maxOut <= 0) return API_PARSE_ERROR;
-
-    static char urlBuf[512];
-    int n = snprintf(urlBuf, sizeof(urlBuf), "%s%s", YAHOO_QUOTE_EP, csvSymbols);
-    if (n <= 0 || n >= (int)sizeof(urlBuf)) return API_NETWORK_ERROR;
-
-    ApiResult result;
-    const char* json = apiHttpGet(urlBuf, false, result, 10000);
-    if (result != API_OK) return result;
-    if (!json || !json[0]) return API_NETWORK_ERROR;
-
-    // Filter: only the fields we actually render.
-    JsonDocument filter;
-    filter["quoteResponse"]["result"][0]["symbol"]                      = true;
-    filter["quoteResponse"]["result"][0]["shortName"]                   = true;
-    filter["quoteResponse"]["result"][0]["longName"]                    = true;
-    filter["quoteResponse"]["result"][0]["regularMarketPrice"]          = true;
-    filter["quoteResponse"]["result"][0]["regularMarketChange"]         = true;
-    filter["quoteResponse"]["result"][0]["regularMarketChangePercent"]  = true;
-    filter["quoteResponse"]["result"][0]["regularMarketDayHigh"]        = true;
-    filter["quoteResponse"]["result"][0]["regularMarketDayLow"]         = true;
-
-    JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, json,
-        DeserializationOption::Filter(filter),
-        DeserializationOption::NestingLimit(15));
-    if (err) {
-        Serial.printf("[Yahoo] quote JSON error: %s\n", err.c_str());
-        return API_PARSE_ERROR;
-    }
-
-    JsonArray arr = doc["quoteResponse"]["result"];
-    if (arr.isNull()) return API_PARSE_ERROR;
-
-    for (JsonObject obj : arr) {
-        if (outCount >= maxOut) break;
-        StockQuote& q = out[outCount];
-        memset(&q, 0, sizeof(q));
-        const char* sym  = obj["symbol"]    | (const char*)nullptr;
-        const char* nm   = obj["shortName"] | obj["longName"] | "";
-        if (!sym) continue;
-        strncpy(q.symbol, sym, STOCK_SYMBOL_LEN - 1);
-        strncpy(q.name,   nm,  STOCK_NAME_LEN - 1);
-        q.price      = obj["regularMarketPrice"]         | NAN;
-        q.change     = obj["regularMarketChange"]        | 0.0f;
-        q.changePct  = obj["regularMarketChangePercent"] | 0.0f;
-        q.dayHigh    = obj["regularMarketDayHigh"]       | NAN;
-        q.dayLow     = obj["regularMarketDayLow"]        | NAN;
-        q.valid      = isfinite(q.price) && q.price > 0.0f;
-        q.lastUpdate = millis();
-        outCount++;
-    }
-
-    Serial.printf("[Yahoo] Got %d quotes\n", outCount);
-    return (outCount > 0) ? API_OK : API_PARSE_ERROR;
-}
-
-// ── Yahoo Finance v8 chart: /v8/finance/chart/AAPL?range=...&interval=... ──
+// ── Yahoo Finance v8 chart: /v8/finance/chart/SYM?range=...&interval=... ──
+// Single request returns both quote-like meta + the close[] array we
+// downsample into a SparklineData. Avoids the /v7/finance/quote endpoint
+// which now requires auth (401 without crumb/cookie).
 ApiResult fetchStockChart(const char* symbol, const char* range, const char* interval,
-                          SparklineData& out) {
-    out.valid = false;
-    out.count = 0;
+                          StockQuote& quote, SparklineData& spark) {
+    memset(&quote, 0, sizeof(quote));
+    spark.valid = false;
+    spark.count = 0;
     if (!symbol || !range || !interval) return API_PARSE_ERROR;
 
     static char urlBuf[256];
@@ -80,11 +24,21 @@ ApiResult fetchStockChart(const char* symbol, const char* range, const char* int
     if (n <= 0 || n >= (int)sizeof(urlBuf)) return API_NETWORK_ERROR;
 
     ApiResult result;
-    const char* json = apiHttpGet(urlBuf, false, result, 12000);
+    const char* json = apiHttpGet(urlBuf, false, result, 8000);
     if (result != API_OK) return result;
+    if (!json || !json[0]) return API_NETWORK_ERROR;
 
+    // Filter: only the fields we actually render.
     JsonDocument filter;
-    filter["chart"]["result"][0]["indicators"]["quote"][0]["close"] = true;
+    filter["chart"]["result"][0]["meta"]["symbol"]                   = true;
+    filter["chart"]["result"][0]["meta"]["shortName"]                = true;
+    filter["chart"]["result"][0]["meta"]["longName"]                 = true;
+    filter["chart"]["result"][0]["meta"]["regularMarketPrice"]       = true;
+    filter["chart"]["result"][0]["meta"]["previousClose"]            = true;
+    filter["chart"]["result"][0]["meta"]["chartPreviousClose"]       = true;
+    filter["chart"]["result"][0]["meta"]["regularMarketDayHigh"]     = true;
+    filter["chart"]["result"][0]["meta"]["regularMarketDayLow"]      = true;
+    filter["chart"]["result"][0]["indicators"]["quote"][0]["close"]  = true;
 
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, json,
@@ -95,8 +49,37 @@ ApiResult fetchStockChart(const char* symbol, const char* range, const char* int
         return API_PARSE_ERROR;
     }
 
+    JsonObject meta = doc["chart"]["result"][0]["meta"];
+    if (meta.isNull()) {
+        Serial.printf("[Yahoo] chart result missing for %s\n", symbol);
+        return API_PARSE_ERROR;
+    }
+
+    // ── Quote ──
+    const char* sym  = meta["symbol"]    | symbol;
+    const char* nm   = meta["shortName"] | meta["longName"] | "";
+    strncpy(quote.symbol, sym, STOCK_SYMBOL_LEN - 1);
+    strncpy(quote.name,   nm,  STOCK_NAME_LEN - 1);
+    quote.price     = meta["regularMarketPrice"]     | NAN;
+    float prevClose = meta["previousClose"]          | (meta["chartPreviousClose"] | NAN);
+    quote.dayHigh   = meta["regularMarketDayHigh"]   | NAN;
+    quote.dayLow    = meta["regularMarketDayLow"]    | NAN;
+    if (isfinite(quote.price) && isfinite(prevClose) && prevClose > 0.0f) {
+        quote.change    = quote.price - prevClose;
+        quote.changePct = (quote.change / prevClose) * 100.0f;
+    } else {
+        quote.change = 0.0f;
+        quote.changePct = 0.0f;
+    }
+    quote.valid      = isfinite(quote.price) && quote.price > 0.0f;
+    quote.lastUpdate = millis();
+
+    // ── Sparkline ──
     JsonArray closes = doc["chart"]["result"][0]["indicators"]["quote"][0]["close"];
-    if (closes.isNull() || closes.size() == 0) return API_PARSE_ERROR;
+    if (closes.isNull() || closes.size() == 0) {
+        Serial.printf("[Yahoo] %s: quote OK, chart empty\n", symbol);
+        return quote.valid ? API_OK : API_PARSE_ERROR;
+    }
 
     int total = (int)closes.size();
     int targetCount = (total <= SPARKLINE_POINTS) ? total : SPARKLINE_POINTS;
@@ -110,24 +93,27 @@ ApiResult fetchStockChart(const char* symbol, const char* range, const char* int
         if (idx >= total) idx = total - 1;
         float v = closes[idx] | NAN;
         if (!isfinite(v) || v <= 0.0f) {
-            // Yahoo sometimes returns null for pre-market / post-close bars —
-            // carry last good forward rather than drop the point.
             if (isfinite(lastGood)) v = lastGood;
             else continue;
         }
-        out.points[written++] = v;
+        spark.points[written++] = v;
         lastGood = v;
         if (v < minV) minV = v;
         if (v > maxV) maxV = v;
     }
 
-    if (written < 2 || !(maxV > 0.0f)) return API_PARSE_ERROR;
-    out.count = (uint16_t)written;
-    out.minVal = minV;
-    out.maxVal = maxV;
-    out.valid  = true;
-    out.lastUpdate = millis();
-    Serial.printf("[Yahoo] %s chart (%s/%s): %d pts, $%.2f-$%.2f\n",
-                  symbol, range, interval, out.count, out.minVal, out.maxVal);
-    return API_OK;
+    if (written >= 2 && maxV > 0.0f) {
+        spark.count  = (uint16_t)written;
+        spark.minVal = minV;
+        spark.maxVal = maxV;
+        spark.valid  = true;
+        spark.lastUpdate = millis();
+        Serial.printf("[Yahoo] %s chart (%s/%s): $%.2f %+.2f (%.2f%%)  %d spark pts\n",
+                      quote.symbol, range, interval, quote.price,
+                      quote.change, quote.changePct, spark.count);
+    } else {
+        Serial.printf("[Yahoo] %s quote OK but spark invalid\n", quote.symbol);
+    }
+
+    return quote.valid ? API_OK : API_PARSE_ERROR;
 }

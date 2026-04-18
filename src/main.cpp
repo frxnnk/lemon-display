@@ -247,8 +247,9 @@ static ValueAnimator lemonAskAnim;
 static SparklineAnimator sparkAnim;
 
 // ── Scheduler & task IDs ──
-static Scheduler scheduler;
-static uint8_t taskClock, taskBtc, taskSparkline, taskLemon, taskDollarSpark, taskCrossRate, taskPolymarket, taskStocks;
+Scheduler scheduler;  // non-static: ui_stocks references it via extern
+static uint8_t taskClock, taskBtc, taskSparkline, taskLemon, taskDollarSpark, taskCrossRate, taskPolymarket;
+uint8_t taskStocks;  // non-static: ui_stocks references it to schedule off-thread refreshes
 
 // ── WS price dedup (only redraw when displayed integer changes) ──
 static float lastRenderedPrice = 0.0f;
