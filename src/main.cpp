@@ -13,6 +13,7 @@
 #include "ui_dashboard.h"
 #include "ui_views.h"
 #include "ui_stocks.h"
+#include "config_server.h"
 #include "ui_components.h"
 #include "touch_manager.h"
 #include "touch_utils.h"
@@ -1489,6 +1490,7 @@ static void enterDashboard() {
     dashboardDrawLoading(LOAD_NTP);
     timeSetup();
     apiSetup();
+    configServerStart();   // app config HTTP server on device IP (port 80)
 
     unsigned long start = millis();
     while (!timeReady() && millis() - start < 5000) {

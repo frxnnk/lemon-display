@@ -13,6 +13,7 @@
 #include "audio_manager.h"
 #include "ws_binance.h"
 #include "api_client.h"
+#include "config_server.h"
 #include "data/satoshi_fonts.h"
 #include <Arduino.h>
 
@@ -422,6 +423,7 @@ void settingsHandleTouch(const TouchEvent& evt) {
             // Free everything possible before OTA — TLS needs ~50KB heap
             wsBinanceStop();          // Close WebSocket + its TLS session
             apiStop();                // Release API TLS session
+            configServerStop();       // Shut down app config HTTP server
             if (settScrReady) {
                 settScr.deleteSprite();
                 settScrReady = false;
