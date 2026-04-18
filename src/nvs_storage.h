@@ -61,5 +61,10 @@ struct PredHistoryEntry;
 void     nvsSavePredHistory(const PredHistoryEntry* entries, uint8_t head, uint8_t count);
 void     nvsLoadPredHistory(PredHistoryEntry* entries, uint8_t& head, uint8_t& count);
 
+// Stocks watchlist
+struct StockWatchlist;
+void     nvsLoadWatchlist(StockWatchlist& out);   // falls back to defaults if empty
+void     nvsSaveWatchlist(const StockWatchlist& wl);
+
 // Factory reset — erases all NVS keys
 void     nvsFactoryReset();

@@ -127,6 +127,28 @@ struct PolyStats {
     uint16_t streak, bestStreak;
 };
 
+// ── Stocks (Yahoo Finance) ──
+#define STOCK_MAX_SYMBOLS    8
+#define STOCK_SYMBOL_LEN    12
+#define STOCK_NAME_LEN      32
+
+struct StockQuote {
+    char  symbol[STOCK_SYMBOL_LEN];   // "AAPL"
+    char  name[STOCK_NAME_LEN];       // "Apple Inc."
+    float price;                      // regularMarketPrice
+    float change;                     // regularMarketChange (absolute)
+    float changePct;                  // regularMarketChangePercent
+    float dayHigh;
+    float dayLow;
+    bool  valid;
+    unsigned long lastUpdate;
+};
+
+struct StockWatchlist {
+    char    symbols[STOCK_MAX_SYMBOLS][STOCK_SYMBOL_LEN];
+    uint8_t count;
+};
+
 // ── Prediction history ring buffer ──
 #define PRED_HISTORY_MAX 20
 

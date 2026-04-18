@@ -1,7 +1,10 @@
 #include "nvs_storage.h"
+#include "data_models.h"
+#include "config.h"
 #include <Preferences.h>
 #include <Arduino.h>
 #include <esp_system.h>
+#include <cstring>
 
 static Preferences prefs;
 static const char* NVS_NAMESPACE = "lemon";
@@ -258,6 +261,64 @@ void nvsLoadPredHistory(PredHistoryEntry* entries, uint8_t& head, uint8_t& count
         head = 0;
         count = 0;
     }
+}
+
+// ── Stocks watchlist ──
+// Stored as single comma-separated string under "wl". Keeps NVS simple and
+// roundtrip-safe with the captive portal (which exchanges JSON).
+
+static void loadDefaultWatchlist(StockWatchlist& out) {
+    out.count = 0;
+    uint8_t n = STOCK_DEFAULT_WATCHLIST_COUNT;
+    if (n > STOCK_MAX_SYMBOLS) n = STOCK_MAX_SYMBOLS;
+    for (uint8_t i = 0; i < n; i++) {
+        strncpy(out.symbols[i], STOCK_DEFAULT_WATCHLIST[i], STOCK_SYMBOL_LEN - 1);
+        out.symbols[i][STOCK_SYMBOL_LEN - 1] = '\0';
+        out.count++;
+    }
+}
+
+void nvsLoadWatchlist(StockWatchlist& out) {
+    out.count = 0;
+    String csv = prefs.getString("wl", "");
+    if (csv.length() == 0) {
+        loadDefaultWatchlist(out);
+        return;
+    }
+    int start = 0;
+    while (start < (int)csv.length() && out.count < STOCK_MAX_SYMBOLS) {
+        int comma = csv.indexOf(',', start);
+        int end = (comma < 0) ? (int)csv.length() : comma;
+        int len = end - start;
+        if (len > 0 && len < STOCK_SYMBOL_LEN) {
+            memcpy(out.symbols[out.count], csv.c_str() + start, len);
+            out.symbols[out.count][len] = '\0';
+            // Uppercase + strip whitespace
+            char* s = out.symbols[out.count];
+            int w = 0;
+            for (int r = 0; s[r]; r++) {
+                char c = s[r];
+                if (c == ' ' || c == '\t') continue;
+                if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+                s[w++] = c;
+            }
+            s[w] = '\0';
+            if (w > 0) out.count++;
+        }
+        if (comma < 0) break;
+        start = comma + 1;
+    }
+    if (out.count == 0) loadDefaultWatchlist(out);
+}
+
+void nvsSaveWatchlist(const StockWatchlist& wl) {
+    String csv;
+    for (uint8_t i = 0; i < wl.count && i < STOCK_MAX_SYMBOLS; i++) {
+        if (i > 0) csv += ',';
+        csv += wl.symbols[i];
+    }
+    prefs.putString("wl", csv);
+    Serial.printf("[NVS] Watchlist saved (%u): %s\n", (unsigned)wl.count, csv.c_str());
 }
 
 // ── Factory Reset ──

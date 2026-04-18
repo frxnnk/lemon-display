@@ -8,7 +8,7 @@
 #endif
 
 // ── App version ──
-#define APP_VERSION "4.9.8"
+#define APP_VERSION "5.0.0"
 
 // 0 = normal app
 // 1 = minimal static display diagnostic mode
@@ -29,6 +29,20 @@
 // ── Polymarket endpoints ──
 #define POLYMARKET_GAMMA_URL "https://gamma-api.polymarket.com/markets"
 #define POLYMARKET_REFRESH_MS 15000
+
+// ── Yahoo Finance endpoints (stocks, no auth required) ──
+#define YAHOO_QUOTE_EP    "https://query1.finance.yahoo.com/v7/finance/quote?symbols="
+#define YAHOO_CHART_EP    "https://query1.finance.yahoo.com/v8/finance/chart/"
+
+// Default stock watchlist (used when NVS has no saved watchlist)
+static const char* const STOCK_DEFAULT_WATCHLIST[] = {
+    "AAPL", "TSLA", "NVDA", "SPY", "MSTR"
+};
+static const uint8_t STOCK_DEFAULT_WATCHLIST_COUNT =
+    sizeof(STOCK_DEFAULT_WATCHLIST) / sizeof(STOCK_DEFAULT_WATCHLIST[0]);
+
+// Stocks polling interval — Yahoo is free/no-auth, keep the cadence gentle
+#define UPDATE_STOCKS_MS       60000   // 60s
 
 // ── Binance endpoints ──
 #define BINANCE_WS_HOST   "stream.binance.com"

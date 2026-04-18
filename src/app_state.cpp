@@ -1,6 +1,7 @@
 #include "app_state.h"
 #include "touch_utils.h"
 #include "ui_dashboard.h"
+#include "ui_views.h"
 #include "ui_settings.h"
 #include "audio_manager.h"
 #include "nvs_storage.h"
@@ -8,15 +9,16 @@
 
 static AppScreen currentScreen  = SCREEN_BOOT_SPLASH;
 static AppScreen previousScreen = SCREEN_BOOT_SPLASH;
-static DashboardRedrawCB dashRedrawCB = nullptr;
 
 void appSetDashboardRedrawCB(DashboardRedrawCB cb) {
-    dashRedrawCB = cb;
+    // The legacy "dashboard" is now the Crypto view inside the views carousel.
+    viewsRegisterRedraw(VIEW_CRYPTO, cb);
 }
 
 void appInit() {
     currentScreen  = SCREEN_BOOT_SPLASH;
     previousScreen = SCREEN_BOOT_SPLASH;
+    viewsInit();
 }
 
 void appSetScreen(AppScreen screen) {
@@ -45,7 +47,7 @@ void appHandleTouch(const TouchEvent& evt) {
 
     switch (currentScreen) {
         case SCREEN_DASHBOARD:
-            dashboardHandleTouch(evt);
+            viewsHandleTouch(evt);
             break;
         case SCREEN_SETTINGS:
             settingsHandleTouch(evt);
@@ -59,7 +61,7 @@ void appHandleTouch(const TouchEvent& evt) {
 void appTick() {
     switch (currentScreen) {
         case SCREEN_DASHBOARD:
-            dashboardUpdateFlash();
+            viewsTick();
             break;
         case SCREEN_SETTINGS:
             settingsTick();
@@ -77,9 +79,9 @@ void appDrawCurrent() {
             break;
         case SCREEN_DASHBOARD:
             if (previousScreen == SCREEN_SETTINGS) {
-                dashboardFillGaps();  // Clear settings screen remnants from gap areas
+                viewsFillGaps();  // Clear settings screen remnants from gap areas
             }
-            if (dashRedrawCB) dashRedrawCB();
+            viewsDraw();
             break;
         // SCREEN_BOOT_SPLASH, SCREEN_WIFI_QR, SCREEN_WIFI_CONNECTING,
         // SCREEN_LOADING are drawn directly by main.cpp

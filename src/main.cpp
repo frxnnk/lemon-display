@@ -11,6 +11,9 @@
 #include "data/satoshi_fonts.h"
 #include "data/lemon_logo.h"
 #include "ui_dashboard.h"
+#include "ui_views.h"
+#include "ui_stocks.h"
+#include "config_server.h"
 #include "ui_components.h"
 #include "touch_manager.h"
 #include "touch_utils.h"
@@ -245,7 +248,7 @@ static SparklineAnimator sparkAnim;
 
 // ── Scheduler & task IDs ──
 static Scheduler scheduler;
-static uint8_t taskClock, taskBtc, taskSparkline, taskLemon, taskDollarSpark, taskCrossRate, taskPolymarket;
+static uint8_t taskClock, taskBtc, taskSparkline, taskLemon, taskDollarSpark, taskCrossRate, taskPolymarket, taskStocks;
 
 // ── WS price dedup (only redraw when displayed integer changes) ──
 static float lastRenderedPrice = 0.0f;
@@ -1384,6 +1387,10 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
         if (zoneId == 0) {
             updateClock();
         }
+    } else if (evt.gesture == TOUCH_DOUBLE_TAP && zoneId == 0) {
+        // Temporary UX while swipe-between-views is being designed:
+        // double-tap the header to cycle through the views carousel.
+        viewsCycleNext();
     } else if (evt.gesture == TOUCH_LONG_PRESS && zoneId == 0) {
         appSetScreen(SCREEN_SETTINGS);
     }
@@ -1399,6 +1406,7 @@ static void redrawDashboard() {
                      state.lemon, !state.online, wsBinanceConnected(),
                      periodChanges, chartStyle, &state.ohlc, &state.lemonSpark,
                      dollarPeriod, dollarChartStyle, dollarChangePercent);
+    if (!tutorialIsActive()) viewsDrawDotsOverlay();
     frameDirty = true;
 }
 
@@ -1482,6 +1490,7 @@ static void enterDashboard() {
     dashboardDrawLoading(LOAD_NTP);
     timeSetup();
     apiSetup();
+    configServerStart();   // app config HTTP server on device IP (port 80)
 
     unsigned long start = millis();
     while (!timeReady() && millis() - start < 5000) {
@@ -1593,6 +1602,8 @@ void setup() {
 
     dashboardSetTouchCallback(onDashboardTouch);
     appSetDashboardRedrawCB(redrawDashboard);
+    viewsRegisterRedraw(VIEW_STOCKS, stocksDrawAll);
+    stocksInit();
 
     taskClock     = scheduler.add("clock",     UPDATE_CLOCK_MS,      updateClock);
     taskBtc       = scheduler.add("btc",       UPDATE_BTC_PRICE_MS,  updateBtc);
@@ -1602,6 +1613,7 @@ void setup() {
     taskCrossRate   = scheduler.add("crossRate", 60000, updateCrossRate);  // 60s for XAU/ARS rates
     taskPolymarket  = scheduler.add("polymarket", POLYMARKET_REFRESH_MS, updatePolymarket);
     scheduler.enable(taskPolymarket, false);  // Disabled by default, enabled in prediction mode
+    taskStocks      = scheduler.add("stocks",    UPDATE_STOCKS_MS,     stocksFetchTask);
 
     applyModePolicyNow(false);
 
