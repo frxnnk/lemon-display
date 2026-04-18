@@ -117,6 +117,34 @@ void apiStop() {
 static char* _rspBuf = nullptr;
 static const size_t RSP_BUF_SIZE = 98304;  // 96KB max API response (in PSRAM) — fits BTC 1Y klines (~67KB)
 
+// Stream adapter that writes into _rspBuf. Used with HTTPClient::writeToStream()
+// so chunked Transfer-Encoding is parsed correctly (getStreamPtr() would leave
+// chunk size markers in the data and break JSON parsing).
+class PSRAMBufStream : public Stream {
+public:
+    int bytesWritten = 0;
+    size_t write(uint8_t c) override {
+        if (bytesWritten >= (int)(RSP_BUF_SIZE - 1)) return 0;
+        _rspBuf[bytesWritten++] = (char)c;
+        return 1;
+    }
+    size_t write(const uint8_t* buf, size_t size) override {
+        int avail = (int)(RSP_BUF_SIZE - 1) - bytesWritten;
+        int toWrite = (int)size;
+        if (toWrite > avail) toWrite = avail;
+        if (toWrite > 0) {
+            memcpy(_rspBuf + bytesWritten, buf, toWrite);
+            bytesWritten += toWrite;
+            esp_task_wdt_reset();
+        }
+        return toWrite;
+    }
+    int available() override { return 0; }
+    int read() override { return -1; }
+    int peek() override { return -1; }
+    void flush() override {}
+};
+
 // ── Helper: perform HTTPS GET with 1 retry, response in PSRAM buffer ──
 static const char* httpGet(const char* url, bool addCoinGeckoKey, ApiResult& result, int timeoutMs = 7000) {
     // Allocate PSRAM buffer once (persists for device lifetime)
@@ -180,41 +208,49 @@ static const char* httpGet(const char* url, bool addCoinGeckoKey, ApiResult& res
         int code = http.GET();
         esp_task_wdt_reset();
         if (code == 200) {
-            int contentLen = http.getSize();  // -1 if chunked
-            int maxRead = (contentLen > 0 && contentLen < (int)(RSP_BUF_SIZE - 1))
-                          ? contentLen : (int)(RSP_BUF_SIZE - 1);
-            WiFiClient* stream = http.getStreamPtr();
+            int contentLen = http.getSize();  // -1 if chunked / unknown
             int bytesRead = 0;
-            unsigned long readStart = millis();
-            unsigned long readDeadline = (unsigned long)timeoutMs;
-            int idleCycles = 0;
-            while (bytesRead < maxRead) {
-                if (millis() - readStart > readDeadline) {
-                    Serial.printf("[API] Body read timeout after %dms (%d bytes)\n",
-                                  timeoutMs, bytesRead);
-                    break;
-                }
-                int avail = stream->available();
-                if (avail > 0) {
-                    int toRead = avail;
-                    if (toRead > maxRead - bytesRead) toRead = maxRead - bytesRead;
-                    int n = stream->readBytes(_rspBuf + bytesRead, toRead);
-                    if (n <= 0) break;
-                    bytesRead += n;
-                    idleCycles = 0;
-                    esp_task_wdt_reset();
-                } else if (!stream->connected()) {
-                    break;  // connection closed — done
-                } else {
-                    // No data yet: for chunked, exit after sustained idle
-                    idleCycles++;
-                    if (contentLen <= 0 && bytesRead > 0 && idleCycles > 50) {
-                        break;  // chunked: 500ms idle after receiving data → done
+
+            if (contentLen > 0 && contentLen < (int)(RSP_BUF_SIZE - 1)) {
+                // Known length — raw stream read, WDT-safe
+                WiFiClient* stream = http.getStreamPtr();
+                unsigned long readStart = millis();
+                unsigned long readDeadline = (unsigned long)timeoutMs;
+                while (bytesRead < contentLen) {
+                    if (millis() - readStart > readDeadline) {
+                        Serial.printf("[API] Body read timeout after %dms (%d/%d bytes)\n",
+                                      timeoutMs, bytesRead, contentLen);
+                        break;
                     }
-                    delay(10);
-                    if (idleCycles % 100 == 0) esp_task_wdt_reset();
+                    int avail = stream->available();
+                    if (avail > 0) {
+                        int toRead = avail;
+                        if (toRead > contentLen - bytesRead) toRead = contentLen - bytesRead;
+                        int n = stream->readBytes(_rspBuf + bytesRead, toRead);
+                        if (n <= 0) break;
+                        bytesRead += n;
+                        esp_task_wdt_reset();
+                    } else if (!stream->connected()) {
+                        break;
+                    } else {
+                        delay(10);
+                        esp_task_wdt_reset();
+                    }
+                }
+            } else {
+                // Chunked / unknown length — let HTTPClient parse chunk framing.
+                // Reading raw from getStreamPtr() would leave chunk-size markers
+                // in the buffer and break JSON parsing (the v4.9.7 bug).
+                PSRAMBufStream bufStream;
+                int written = http.writeToStream(&bufStream);
+                esp_task_wdt_reset();
+                bytesRead = bufStream.bytesWritten;
+                if (written < 0) {
+                    Serial.printf("[API] writeToStream error %d (%d bytes) %s\n",
+                                  written, bytesRead, url);
                 }
             }
+
             _rspBuf[bytesRead] = '\0';
             http.end();
             if (bytesRead > 0) {
