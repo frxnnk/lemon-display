@@ -13,6 +13,14 @@ enum ApiResult : uint8_t {
 void apiSetup();
 void apiStop();  // Release TLS session to free heap before OTA
 
+// Shared HTTPS GET helper. Response is written into a reusable PSRAM buffer
+// owned by api_client; returned pointer is valid until the next call.
+// Handles chunked Transfer-Encoding, TLS timeouts, WDT resets, and a single
+// retry on empty body. Intended for use by sibling client modules
+// (stocks_client, poly_client) that want the same hardened code path.
+const char* apiHttpGet(const char* url, bool addCoinGeckoKey, ApiResult& result,
+                       int timeoutMs = 7000);
+
 // Each returns ApiResult. On failure, struct is left unchanged.
 ApiResult fetchBtcPrice(BtcPrice& out);
 ApiResult fetchBtcPriceSimple(BtcPrice& out);
