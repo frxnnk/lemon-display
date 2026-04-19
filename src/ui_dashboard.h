@@ -15,6 +15,13 @@ struct CarouselState {
 
 void dashboardSetup();
 
+// When true, all public dashboardDraw* entry points early-return without
+// touching the TFT. Used by the views carousel so other views (Stocks,
+// Polymarket) aren't overwritten by WS / scheduler / morph draws that
+// keep firing in the background.
+void dashboardSetMuted(bool muted);
+bool dashboardIsMuted();
+
 // Layout presets (0=standard, 1=btc_focus, 2=compact)
 void dashboardSetLayout(uint8_t idx);
 uint8_t dashboardGetLayout();

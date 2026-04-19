@@ -38,6 +38,14 @@ static int z2H = 120;
 static int z2Y = 354;  // Z1_Y + z1H + GAP
 static uint8_t currentLayout = 0;
 
+// When true, all public draw functions no-op. Set by ui_views when the
+// carousel is showing a different view (Stocks, Polymarket) so background
+// WS / scheduler / morph draws don't clobber it.
+static bool s_muted = false;
+
+void dashboardSetMuted(bool m) { s_muted = m; }
+bool dashboardIsMuted()        { return s_muted; }
+
 // ── Pair label + dropdown layout (inside Z1) ──
 #define PAIR_LABEL_X     (MARGIN + CARD_PAD)  // 30
 #define PAIR_LABEL_Y     10
@@ -170,6 +178,7 @@ static uint16_t blendColor565(uint16_t c1, uint16_t c2, float t) {
 }
 
 void dashboardFlashPrice(bool up) {
+    if (s_muted) return;
     // Don't restart flash mid-animation (prevents color direction flip on rapid updates)
     if (priceFlashActive) return;
     priceFlashUp = up;
@@ -315,6 +324,7 @@ void dashboardSetLayout(uint8_t idx) {
 // ══════════════════════════════════════════
 
 void dashboardDrawHeader(const char* timeStr, bool offline, bool wsConnected) {
+    if (s_muted) return;
     sprZ0.fillSprite(Colors::BG_BASE);
 
     // ── Toast overlay: replaces normal header content while active ──
@@ -453,6 +463,7 @@ static void drawPairDropdown(LGFX_Sprite& spr, uint8_t currentPair) {
 
 // ── Direct-to-framebuffer time update (stable-width, single clear) ──
 void dashboardUpdateTimeDirect(const char* timeStr) {
+    if (s_muted) return;
     if (!spritesReady) return;
 
     // Measure max digit width for Orbitron (cached)
@@ -527,6 +538,7 @@ void dashboardUpdateTimeDirect(const char* timeStr) {
 
 // ── Direct-to-framebuffer price update (stable-width, single strip clear) ──
 void dashboardUpdatePriceDirect(const BtcPrice& btc, uint8_t selectedPair) {
+    if (s_muted) return;
     if (!spritesReady || !btc.valid) return;
 
     char priceBuf[24];
@@ -580,6 +592,7 @@ void dashboardUpdatePriceDirect(const BtcPrice& btc, uint8_t selectedPair) {
 void dashboardDrawBtcHero(const BtcPrice& btc, const SparklineData& spark, uint8_t selectedPeriod,
                           const float* periodChanges, ChartStyle chartStyle, const OhlcData* ohlc,
                           uint8_t selectedPair) {
+    if (s_muted) return;
     sprZ1.clearClipRect();
     sprZ1.fillSprite(Colors::BG_BASE);
 
@@ -757,6 +770,7 @@ void dashboardDrawBtcHero(const BtcPrice& btc, const SparklineData& spark, uint8
 // ── Price-only partial update ──
 // Only redraws the price text strip, clipped between pair carousel and period carousel.
 void dashboardDrawPriceOnly(const BtcPrice& btc, uint8_t selectedPair) {
+    if (s_muted) return;
     if (!spritesReady || !btc.valid) return;
 
     // Skip price-only update when dropdown is open
@@ -806,6 +820,7 @@ void dashboardDrawPriceOnly(const BtcPrice& btc, uint8_t selectedPair) {
 
 // ── Chart-only partial update (for morph animation — avoids full 288KB sprite push) ──
 void dashboardRedrawChartOnly(const SparklineData& spark, ChartStyle chartStyle, const OhlcData* ohlc, float ath) {
+    if (s_muted) return;
     if (!spritesReady) return;
     // Skip chart-only update when dropdown is open (would overwrite overlay)
     if (pairDropdownOpen) return;
@@ -964,6 +979,7 @@ static void drawDollarCarousel(LGFX_Sprite& spr, uint8_t selected) {
 void dashboardDrawLemonDollar(const LemonPrice& lemon, const SparklineData* lemonSpark,
                               uint8_t dollarPeriod, ChartStyle dollarChartStyle,
                               float dollarChange) {
+    if (s_muted) return;
     if (z2H <= 0) return;  // BTC-only layout — no Z2
     sprZ2.clearClipRect();
     sprZ2.fillSprite(Colors::BG_BASE);
@@ -1211,6 +1227,7 @@ void dashboardDrawAll(const char* timeStr,
                       uint8_t dollarPeriod,
                       ChartStyle dollarChartStyle,
                       float dollarChange) {
+    if (s_muted) return;
     // Batch mode: draw all sprites without pushing, then push all at once
     _batchMode = true;
     dashboardDrawHeader(timeStr, offline, wsConnected);
@@ -1232,6 +1249,7 @@ void dashboardDrawAll(const char* timeStr,
 // ══════════════════════════════════════════
 
 void dashboardSyncDrawBuffer() {
+    if (s_muted) return;
     if (!spritesReady) return;
 
     uint8_t dz = dirtyZones;
@@ -1270,6 +1288,7 @@ void dashboardMarkAllDirty() {
 }
 
 void dashboardFillGaps() {
+    if (s_muted) return;
     displayWaitVSync();
     // Header-Z1 gap
     tft.fillRect(0, Z0_Y + Z0_H, SCREEN_W, Z1_Y - (Z0_Y + Z0_H), Colors::BG_BASE);
@@ -1436,6 +1455,7 @@ void dashboardDrawLoading(LoadPhase phase) {
 // ══════════════════════════════════════════
 
 void dashboardDrawOffline() {
+    if (s_muted) return;
     dashboardDrawHeader("--:--:--", true);
 }
 
@@ -1452,6 +1472,7 @@ void dashboardStartFlash(uint8_t zoneId) {
 }
 
 void dashboardUpdateFlash() {
+    if (s_muted) return;
     if (!flashActive) return;
 
     if (millis() - flashStartMs >= FLASH_DURATION_MS) {
@@ -1744,6 +1765,7 @@ void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t s
                              uint32_t periodStepSec,
                              const PredHistoryEntry* history,
                              uint8_t histHead, uint8_t histCount) {
+    if (s_muted) return;
     if (z2H <= 0) return;  // BTC-only layout — no Z2
     sprZ2.clearClipRect();
     sprZ2.fillSprite(Colors::BG_BASE);
@@ -1877,6 +1899,7 @@ uint32_t dashboardGetPredEndEpoch() {
 
 // Direct-to-framebuffer countdown update (no full Z2 redraw — no flicker)
 void dashboardUpdateCountdownDirect() {
+    if (s_muted) return;
     if (!spritesReady || z2H <= 0 || !dashboardIsPredictionMode()) return;
 
     // Clear only the countdown strip in the sprite (Y=184 to Y=206)
