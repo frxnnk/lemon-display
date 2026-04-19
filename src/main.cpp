@@ -1388,13 +1388,12 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
         if (zoneId == 0) {
             updateClock();
         }
-    } else if (evt.gesture == TOUCH_DOUBLE_TAP && zoneId == 0) {
-        // Temporary UX while swipe-between-views is being designed:
-        // double-tap the header to cycle through the views carousel.
-        viewsCycleNext();
     } else if (evt.gesture == TOUCH_LONG_PRESS && zoneId == 0) {
         appSetScreen(SCREEN_SETTINGS);
     }
+    // TOUCH_DOUBLE_TAP on zone 0 (header) is intercepted at the ui_views
+    // layer — it cycles through the views carousel regardless of which view
+    // is active, so every view benefits from the same gesture.
 }
 
 // ── Redraw dashboard ──

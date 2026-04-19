@@ -11,6 +11,7 @@ static ViewRedrawCB  redrawCBs[VIEW_COUNT] = { nullptr };
 void viewsInit() {
     currentView = VIEW_CRYPTO;
     for (int i = 0; i < VIEW_COUNT; i++) redrawCBs[i] = nullptr;
+    dashboardSetMuted(false);
 }
 
 ViewId viewsGetCurrent() {
@@ -25,7 +26,11 @@ void viewsSetCurrent(ViewId v) {
     if (v >= VIEW_COUNT) return;
     if (v == currentView) return;
     currentView = v;
-    Serial.printf("[Views] switched to %d\n", (int)v);
+    // Silence background dashboard draws (WS ticks, morph anim, countdown,
+    // etc.) while a non-Crypto view owns the screen — otherwise zone
+    // pushSprites overwrite it.
+    dashboardSetMuted(v != VIEW_CRYPTO);
+    Serial.printf("[Views] switched to %d (dashMuted=%d)\n", (int)v, (int)(v != VIEW_CRYPTO));
     viewsDraw();
 }
 
@@ -41,6 +46,14 @@ void viewsRegisterRedraw(ViewId v, ViewRedrawCB cb) {
 }
 
 void viewsHandleTouch(const TouchEvent& evt) {
+    // Intercept the provisional view-switch gesture at the top level so it
+    // works across every view (including Stocks, whose own touch handler
+    // doesn't know about double-tap). Header zone: y < 44.
+    if (evt.gesture == TOUCH_DOUBLE_TAP && evt.y < 44) {
+        viewsCycleNext();
+        return;
+    }
+
     switch (currentView) {
         case VIEW_CRYPTO:
             dashboardHandleTouch(evt);
