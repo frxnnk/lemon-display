@@ -23,3 +23,7 @@ const SparklineData* stocksGetFocusedSpark();     // nullptr if no sparkline cac
 
 // Advance focused ticker (wraps). Triggers a priority refresh.
 void stocksAdvanceFocused();
+
+// True while the async worker has a fetch in flight. Rendering can use
+// this to show a "loading" indicator.
+bool stocksIsFetching();

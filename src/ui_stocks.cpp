@@ -7,6 +7,9 @@
 #include <Arduino.h>
 #include <cstring>
 #include <esp_task_wdt.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
 
 extern Scheduler scheduler;
 extern uint8_t   taskStocks;
@@ -22,6 +25,15 @@ static uint8_t         s_priorityIdx    = 0xFF;             // user-tapped refre
 static bool            s_dirty          = true;
 static bool            s_everFetched    = false;
 static bool            s_cacheDirty     = false;            // quotes changed since last NVS flush
+
+// ── Async worker (core 0) ──
+// The scheduler runs on core 1 (main loop); fetchStockChart blocks on
+// Yahoo's TLS handshake for 1-5s and would freeze the UI. Running it on
+// a dedicated FreeRTOS task on core 0 keeps the main loop free.
+static TaskHandle_t   s_workerHandle  = nullptr;
+static volatile bool  s_fetching      = false;
+
+static void stocksWorkerTask(void*);
 
 static uint8_t findQuoteSlot(const char* sym) {
     for (uint8_t i = 0; i < s_quoteCount; i++) {
@@ -52,11 +64,20 @@ void stocksInit() {
     s_cacheDirty = false;
 
     s_dirty = true;
+
+    // Spawn the worker once — pinned to core 0 so Yahoo's TLS handshake
+    // never runs on the main loop. 8KB stack fits HTTPClient + mbedtls +
+    // ArduinoJson comfortably.
+    if (!s_workerHandle) {
+        xTaskCreatePinnedToCore(stocksWorkerTask, "stocksW", 8192,
+                                nullptr, 1, &s_workerHandle, 0);
+    }
 }
 
 void stocksMarkDirty() { s_dirty = true; }
 
-void stocksFetchTask() {
+// Actual fetch body — runs on the worker task (core 0).
+static void stocksFetchBody() {
     if (s_watchlist.count == 0) return;
 
     // Pick target: priority (user-tapped ticker) wins over round-robin cursor.
@@ -79,7 +100,6 @@ void stocksFetchTask() {
         if (slot == 0xFF && s_quoteCount < STOCK_MAX_SYMBOLS) slot = s_quoteCount++;
         if (slot != 0xFF) s_quotes[slot] = tmpQuote;
 
-        // Sparkline keyed by watchlist index (robust if quotes re-order).
         uint8_t wIdx = watchlistIndexOf(tmpQuote.symbol);
         if (wIdx != 0xFF) s_sparks[wIdx] = tmpSpark;
 
@@ -90,10 +110,8 @@ void stocksFetchTask() {
         Serial.printf("[Stocks] fetch failed for %s: %d\n", sym, (int)r);
     }
 
-    // Advance round-robin only when this tick was a RR tick (not a priority refresh).
     if (target == s_rrIdx) {
         s_rrIdx = (s_rrIdx + 1) % s_watchlist.count;
-        // Persist quotes at the end of each full loop so NVS writes stay bounded.
         if (s_rrIdx == 0 && s_cacheDirty) {
             nvsSaveStockQuotes(s_quotes, s_quoteCount);
             s_cacheDirty = false;
@@ -102,6 +120,23 @@ void stocksFetchTask() {
     }
     s_dirty = true;
 }
+
+static void stocksWorkerTask(void*) {
+    for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        s_fetching = true;
+        stocksFetchBody();
+        s_fetching = false;
+    }
+}
+
+// Called by the scheduler on core 1. Just notifies the worker — no blocking.
+void stocksFetchTask() {
+    if (!s_workerHandle) return;
+    xTaskNotifyGive(s_workerHandle);
+}
+
+bool stocksIsFetching() { return s_fetching; }
 
 uint8_t stocksGetFocusedIdx() { return s_focusedIdx; }
 uint8_t stocksGetWatchlistCount() { return s_watchlist.count; }
