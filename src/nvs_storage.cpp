@@ -355,6 +355,62 @@ void nvsSaveStockQuotes(const StockQuote* quotes, uint8_t count) {
     prefs.putBytes("sq_data", quotes, sz);
 }
 
+// ── Stocks sparkline cache ──
+// Saved as two parallel blobs: "sp_syms" (symbol strings) + "sp_data"
+// (SparklineData array). Symbol keys make the cache robust to watchlist
+// reorders — on load we map each saved spark back into the current
+// watchlist slot by symbol match. Full SparklineData (~1480B × 8 = ~12KB)
+// is written only on full-rotation flush, same cadence as the quote cache.
+static const uint8_t STOCK_SPARKS_VER = 1;
+
+// File-scope scratch to keep the 12KB blob off the task stack.
+static char           _spSymScratch[STOCK_MAX_SYMBOLS][STOCK_SYMBOL_LEN];
+static SparklineData  _spDataScratch[STOCK_MAX_SYMBOLS];
+
+void nvsLoadStockSparks(SparklineData* out, const StockWatchlist& wl) {
+    for (uint8_t i = 0; i < STOCK_MAX_SYMBOLS; i++) out[i].valid = false;
+
+    uint8_t ver = prefs.getUChar("sp_ver", 0);
+    if (ver != STOCK_SPARKS_VER) return;
+
+    size_t symsSz  = sizeof(_spSymScratch);
+    size_t sparksSz = sizeof(_spDataScratch);
+    if (prefs.getBytes("sp_syms", _spSymScratch, symsSz) != symsSz) return;
+    if (prefs.getBytes("sp_data", _spDataScratch, sparksSz) != sparksSz) return;
+
+    uint8_t placed = 0;
+    for (uint8_t s = 0; s < STOCK_MAX_SYMBOLS; s++) {
+        if (!_spDataScratch[s].valid) continue;
+        if (_spSymScratch[s][0] == '\0') continue;
+        for (uint8_t w = 0; w < wl.count; w++) {
+            if (strncmp(_spSymScratch[s], wl.symbols[w], STOCK_SYMBOL_LEN) == 0) {
+                out[w] = _spDataScratch[s];
+                out[w].lastUpdate = 0;   // millis() doesn't survive reboot
+                placed++;
+                break;
+            }
+        }
+    }
+    Serial.printf("[NVS] Stock sparks loaded: %u/%u\n",
+                  (unsigned)placed, (unsigned)wl.count);
+}
+
+void nvsSaveStockSparks(const SparklineData* sparks, const StockWatchlist& wl) {
+    memset(_spSymScratch, 0, sizeof(_spSymScratch));
+    memset(_spDataScratch, 0, sizeof(_spDataScratch));
+
+    for (uint8_t i = 0; i < wl.count && i < STOCK_MAX_SYMBOLS; i++) {
+        if (!sparks[i].valid) continue;
+        strncpy(_spSymScratch[i], wl.symbols[i], STOCK_SYMBOL_LEN - 1);
+        _spSymScratch[i][STOCK_SYMBOL_LEN - 1] = '\0';
+        _spDataScratch[i] = sparks[i];
+    }
+
+    prefs.putUChar("sp_ver", STOCK_SPARKS_VER);
+    prefs.putBytes("sp_syms", _spSymScratch, sizeof(_spSymScratch));
+    prefs.putBytes("sp_data", _spDataScratch, sizeof(_spDataScratch));
+}
+
 // ── Z2 slot mode ──
 
 uint8_t nvsGetZ2Mode() {

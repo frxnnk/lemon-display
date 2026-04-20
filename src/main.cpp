@@ -957,7 +957,10 @@ static void applyZ2Mode(Z2Mode target) {
     // main-loop HTTPS burst off first-boot when default mode is USD.
     bool stocksOn = (target == Z2_STOCKS);
     scheduler.enable(taskStocks, stocksOn);
-    if (stocksOn) scheduler.requestRun(taskStocks);
+    // Burst-refresh every watchlist symbol on mode entry so charts fill in
+    // ~N×1-3s instead of N×60s of round-robin. Scheduler's 60s poll kicks
+    // in normally after the burst finishes.
+    if (stocksOn) stocksRequestBurst();
 
     if (target == Z2_MARKETS) {
         // Prediction mode has guards (Pro-mode, z2H>0). If they fail, it
@@ -1631,6 +1634,12 @@ static void enterDashboard() {
 
     appSetScreen(SCREEN_DASHBOARD);
     tutorialInit();  // Show tutorial on first boot (checks NVS)
+
+    // If the user booted directly into Stocks mode (persisted from last
+    // session), kick the burst refresh now that WiFi is up. Otherwise the
+    // cached NVS sparks render immediately and the scheduler tick would
+    // only refresh the first symbol 60s later.
+    if (dashboardGetZ2Mode() == Z2_STOCKS) stocksRequestBurst();
 }
 
 void setup() {
