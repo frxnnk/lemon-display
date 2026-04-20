@@ -32,6 +32,7 @@ static bool            s_cacheDirty     = false;            // quotes changed si
 // a dedicated FreeRTOS task on core 0 keeps the main loop free.
 static TaskHandle_t   s_workerHandle  = nullptr;
 static volatile bool  s_fetching      = false;
+static char           s_lastDbg[64]   = "";
 
 static void stocksWorkerTask(void*);
 
@@ -95,6 +96,10 @@ static void stocksFetchBody() {
     SparklineData tmpSpark = {};
     ApiResult r = fetchStockChart(sym, "1d", "5m", tmpQuote, tmpSpark);
     esp_task_wdt_reset();
+    snprintf(s_lastDbg, sizeof(s_lastDbg),
+             "r=%d v=%d sv=%d sc=%d",
+             (int)r, (int)tmpQuote.valid,
+             (int)tmpSpark.valid, (int)tmpSpark.count);
     if (r == API_OK && tmpQuote.valid) {
         uint8_t slot = findQuoteSlot(tmpQuote.symbol);
         if (slot == 0xFF && s_quoteCount < STOCK_MAX_SYMBOLS) slot = s_quoteCount++;
@@ -137,6 +142,8 @@ void stocksFetchTask() {
 }
 
 bool stocksIsFetching() { return s_fetching; }
+
+const char* stocksLastDebug() { return s_lastDbg; }
 
 void stocksStop() {
     if (s_workerHandle) {
