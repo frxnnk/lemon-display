@@ -8,6 +8,7 @@
 #include "data/market_icons.h"
 #include "data/satoshi_fonts.h"
 #include "api_client.h"
+#include "nvs_storage.h"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -37,6 +38,7 @@ static int z1H = 300;  // Default: standard layout
 static int z2H = 120;
 static int z2Y = 354;  // Z1_Y + z1H + GAP
 static uint8_t currentLayout = 0;
+static Z2Mode  s_z2Mode = Z2_USD;      // Which card occupies Z2 slot
 
 // When true, all public draw functions no-op. Set by ui_views when the
 // carousel is showing a different view (Stocks, Polymarket) so background
@@ -230,6 +232,9 @@ void dashboardSetup() {
     resetDollarFilterToAll();
     pairSelectorEnabled = true;
 
+    // Restore Z2 slot mode from NVS (USD / Markets / Stocks).
+    s_z2Mode = (Z2Mode)nvsGetZ2Mode();
+
     // Allocate persistent zone sprites in PSRAM (once, never freed)
     sprZ0.setPsram(true);
     sprZ0.setColorDepth(16);
@@ -257,6 +262,27 @@ void dashboardSetup() {
 
     Serial.printf("[Dashboard] Zone sprites allocated: Z0=%dB Z1=%dB Z2=%dB\n",
                   SCREEN_W * Z0_H * 2, SCREEN_W * z1H * 2, SCREEN_W * z2H * 2);
+}
+
+// ══════════════════════════════════════════
+//  Z2 MODE (USD / Markets / Stocks)
+// ══════════════════════════════════════════
+
+Z2Mode dashboardGetZ2Mode() { return s_z2Mode; }
+
+void dashboardSetZ2Mode(Z2Mode mode) {
+    if ((uint8_t)mode >= Z2_COUNT) mode = Z2_USD;
+    if (mode == s_z2Mode) return;
+    s_z2Mode = mode;
+    nvsSetZ2Mode((uint8_t)mode);
+    Serial.printf("[Dashboard] Z2 mode -> %d\n", (int)mode);
+}
+
+void dashboardCycleZ2Mode(int8_t dir) {
+    int8_t n = (int8_t)s_z2Mode + dir;
+    while (n < 0) n += Z2_COUNT;
+    n %= Z2_COUNT;
+    dashboardSetZ2Mode((Z2Mode)n);
 }
 
 // ══════════════════════════════════════════

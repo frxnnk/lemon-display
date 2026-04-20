@@ -26,6 +26,17 @@ bool dashboardIsMuted();
 void dashboardSetLayout(uint8_t idx);
 uint8_t dashboardGetLayout();
 
+// Z2 slot mode — what lives below the BTC hero.
+enum Z2Mode : uint8_t {
+    Z2_USD     = 0,   // Lemon Dollar
+    Z2_MARKETS = 1,   // Polymarket prediction
+    Z2_STOCKS  = 2,   // Watchlist ticker card
+    Z2_COUNT   = 3
+};
+Z2Mode dashboardGetZ2Mode();
+void   dashboardSetZ2Mode(Z2Mode mode);
+void   dashboardCycleZ2Mode(int8_t dir);   // dir = +1 (next) or -1 (prev)
+
 // Zone geometry accessors (for overlays)
 int dashboardGetZ1H();
 int dashboardGetZ2Y();

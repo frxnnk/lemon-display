@@ -66,5 +66,15 @@ struct StockWatchlist;
 void     nvsLoadWatchlist(StockWatchlist& out);   // falls back to defaults if empty
 void     nvsSaveWatchlist(const StockWatchlist& wl);
 
+// Stocks quote cache (blob — array of StockQuote)
+struct StockQuote;
+void     nvsLoadStockQuotes(StockQuote* out, uint8_t& count);
+void     nvsSaveStockQuotes(const StockQuote* quotes, uint8_t count);
+
+// Z2 slot mode (0=USD, 1=Markets, 2=Stocks) — persisted so the reboot comes
+// back to whatever the user was looking at.
+uint8_t  nvsGetZ2Mode();
+void     nvsSetZ2Mode(uint8_t mode);
+
 // Factory reset — erases all NVS keys
 void     nvsFactoryReset();
