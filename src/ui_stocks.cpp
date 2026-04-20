@@ -153,6 +153,8 @@ void stocksStop() {
         Serial.println("[Stocks] worker stopped");
     }
     s_fetching = false;
+    // Release the worker's dedicated TLS session too — frees ~30KB DRAM.
+    stocksClientStop();
 }
 
 uint8_t stocksGetFocusedIdx() { return s_focusedIdx; }
