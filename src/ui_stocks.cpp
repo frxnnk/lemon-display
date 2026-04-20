@@ -163,14 +163,17 @@ void stocksFetchTask() {
 
 // Request a burst refresh — fetches every watchlist symbol back-to-back
 // (one RR step per fetch). Called when the user first enters Stocks mode
-// so all charts populate within ~N×1-3s instead of N×60s.
+// so all charts populate within ~N×1-3s instead of N×60s. Kicks off with
+// the currently focused symbol so the user sees *their* chart fill in on
+// the first fetch (~2-3s) instead of waiting for the RR cursor to reach
+// it after 2-5 earlier fetches.
 void stocksRequestBurst() {
     if (!s_workerHandle) return;
     if (s_watchlist.count == 0) return;
-    // The triggering notify below fetches 1; burstRemaining covers the rest.
+    s_priorityIdx = s_focusedIdx;
     s_burstRemaining = (s_watchlist.count > 1) ? (s_watchlist.count - 1) : 0;
-    Serial.printf("[Stocks] burst refresh requested (%u symbols)\n",
-                  (unsigned)s_watchlist.count);
+    Serial.printf("[Stocks] burst refresh requested (%u symbols, focus=%u)\n",
+                  (unsigned)s_watchlist.count, (unsigned)s_focusedIdx);
     xTaskNotifyGive(s_workerHandle);
 }
 
