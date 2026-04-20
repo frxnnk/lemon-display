@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include "touch_manager.h"
 #include "data_models.h"
 
 // One-time init: loads the watchlist from NVS.
@@ -14,11 +13,6 @@ void stocksFetchTask();
 // Force a redraw next time the Stocks view is active (e.g. after watchlist
 // edit via captive portal).
 void stocksMarkDirty();
-
-// Legacy fullscreen path — kept until Phase 4 removes it.
-void stocksDrawAll();
-void stocksHandleTouch(const TouchEvent& evt);
-void stocksTick();
 
 // ── Accessors used by ui_dashboard to render the compact Z2 card ──
 uint8_t             stocksGetFocusedIdx();
