@@ -234,10 +234,10 @@ void settingsDraw() {
             char statusBuf[64];
             if (otaResult.httpCode != 200) {
                 snprintf(statusBuf, sizeof(statusBuf),
-                         "HTTP %d h=%uk w=%d",
+                         "HTTP %d h=%uk m=%uk",
                          otaResult.httpCode,
                          (unsigned)(ESP.getFreeHeap() / 1024),
-                         (int)WiFi.status());
+                         (unsigned)(ESP.getMaxAllocHeap() / 1024));
                 settScr.setTextColor(Colors::NEGATIVE, Colors::BG_SURFACE);
             } else {
                 snprintf(statusBuf, sizeof(statusBuf), "Estas al dia");

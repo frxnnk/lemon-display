@@ -72,7 +72,16 @@ OtaInfo otaCheck(const char* repo) {
     OtaInfo info = {};
     info.available = false;
 
+    // TLS handshake needs ~20KB contiguous. When the device has been running
+    // for a while, api_client's secureClient + the WS TLS session leave only
+    // ~50KB free with bad fragmentation, and mbedtls fails → HTTP -1. Drop
+    // the shared TLS session first (scheduler re-opens on its next fetch)
+    // and ask mbedtls for small per-connection buffers so this one fits.
+    extern void apiStop();
+    apiStop();
+
     checkClient.setInsecure();
+
     static char url[256];    // static: off the stack
     snprintf(url, sizeof(url), "https://api.github.com/repos/%s/releases/latest", repo);
 
