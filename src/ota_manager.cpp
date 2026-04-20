@@ -68,11 +68,13 @@ OtaInfo otaCheck(const char* repo) {
     if (code != 200) {
         Serial.printf("[OTA] GitHub API error: %d\n", code);
         checkHttp.end();
+        checkClient.stop();
         return info;
     }
 
     String body = checkHttp.getString();
     checkHttp.end();
+    checkClient.stop();
 
     // Parse with ArduinoJson (filter: only tag_name + first asset download URL + body for MD5)
     JsonDocument filter;
@@ -142,6 +144,11 @@ OtaInfo otaCheck(const char* repo) {
 }
 
 bool otaFlash(const char* binUrl, void(*progressCB)(int pct), const char* md5) {
+    // Release any TLS buffers still bound by the last otaCheck() — a fresh
+    // handshake needs ~40KB of DRAM, and a lingering session would starve
+    // it and yield HTTP -1 on the redirect request.
+    otaFreeCheck();
+
     // Show debug on screen
     tft.fillScreen(0x0000);
     displaySetBrightness(128);
