@@ -68,20 +68,35 @@ static const char* stocksHttpGet(const char* url, ApiResult& result, int timeout
     }
     _stkBuf[0] = '\0';
 
-    _stkClient.setInsecure();
-    _stkHttp.setConnectTimeout(5000);
-    _stkHttp.setTimeout(timeoutMs);
-    if (!_stkHttp.begin(_stkClient, url)) {
-        _stkClient.stop();
-        _stkLastCode = -9002;  // marker: begin() failed
-        return "";
-    }
-    _stkHttp.addHeader("Accept", "application/json");
-    _stkHttp.setUserAgent("Mozilla/5.0 (compatible; Lemon-Box/5.0)");
+    // TLS handshake on fragmented DRAM can fail intermittently (HTTP -1).
+    // Retry up to 3 times with a short backoff — mbedtls usually releases
+    // intermediate allocations between attempts and the next handshake
+    // finds a contiguous block.
+    int code = -1;
+    for (int attempt = 0; attempt < 3 && code < 0; attempt++) {
+        if (attempt > 0) {
+            _stkHttp.end();
+            _stkClient.stop();
+            esp_task_wdt_reset();
+            vTaskDelay(pdMS_TO_TICKS(300));
+            esp_task_wdt_reset();
+        }
 
-    esp_task_wdt_reset();
-    int code = _stkHttp.GET();
-    esp_task_wdt_reset();
+        _stkClient.setInsecure();
+        _stkHttp.setConnectTimeout(5000);
+        _stkHttp.setTimeout(timeoutMs);
+        if (!_stkHttp.begin(_stkClient, url)) {
+            _stkClient.stop();
+            _stkLastCode = -9002;  // marker: begin() failed
+            return "";
+        }
+        _stkHttp.addHeader("Accept", "application/json");
+        _stkHttp.setUserAgent("Mozilla/5.0 (compatible; Lemon-Box/5.0)");
+
+        esp_task_wdt_reset();
+        code = _stkHttp.GET();
+        esp_task_wdt_reset();
+    }
     _stkLastCode = code;
     if (code != 200) {
         Serial.printf("[Stocks] HTTP %d %s\n", code, url);

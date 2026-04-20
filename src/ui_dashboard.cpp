@@ -1238,11 +1238,17 @@ void dashboardDrawStocksZ2() {
                       up ? Colors::POSITIVE : Colors::NEGATIVE,
                       up ? Colors::CHART_FILL : Colors::BADGE_BG_NEG);
     } else {
-        sprZ2.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+        // Animated "Cargando" with a trailing-dot counter so the card feels
+        // alive while the async worker pulls data from Yahoo.
+        int dots = (int)((millis() / 400) % 4);
+        char load[16];
+        snprintf(load, sizeof(load), "Cargando%s",
+                 dots == 0 ? ""    :
+                 dots == 1 ? "."   :
+                 dots == 2 ? ".."  : "...");
+        sprZ2.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
         sprZ2.setTextDatum(lgfx::middle_center);
-        const char* dbg = stocksLastDebug();
-        const char* msg = (dbg && dbg[0]) ? dbg : "chart loading";
-        sprZ2.drawString(msg, chartX + chartW / 2, chartY + chartH / 2, &Satoshi9);
+        sprZ2.drawString(load, chartX + chartW / 2, chartY + chartH / 2, &Satoshi12);
     }
 
     // Footer: H / L left, page idx center, timestamp right
