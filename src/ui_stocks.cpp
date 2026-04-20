@@ -127,12 +127,13 @@ static void stocksFetchBody() {
     ApiResult r = fetchStockChart(sym, "1d", "5m", tmpQuote, tmpSpark);
     esp_task_wdt_reset();
     snprintf(s_lastDbg, sizeof(s_lastDbg),
-             "r=%d c=%d b=%d v=%d sv=%d sc=%d",
+             "%s r=%d c=%d b=%d h=%uk m=%uk",
+             sym,
              (int)r,
              stocksClientLastCode(),
              stocksClientLastBytes(),
-             (int)tmpQuote.valid,
-             (int)tmpSpark.valid, (int)tmpSpark.count);
+             (unsigned)(ESP.getFreeHeap() / 1024),
+             (unsigned)(ESP.getMaxAllocHeap() / 1024));
     if (r == API_OK && tmpQuote.valid) {
         uint8_t slot = findQuoteSlot(tmpQuote.symbol);
         if (slot == 0xFF && s_quoteCount < STOCK_MAX_SYMBOLS) slot = s_quoteCount++;
