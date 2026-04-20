@@ -18,6 +18,37 @@ static HTTPClient       _stkHttp;
 static char*            _stkBuf = nullptr;
 static const size_t     STK_BUF_SIZE = 64 * 1024;
 
+// Stream adapter that drains http.writeToStream() into _stkBuf. Needed
+// because Yahoo returns Transfer-Encoding: chunked with no Content-Length
+// — reading raw from getStreamPtr() would leave chunk-size markers in the
+// data. writeToStream lets HTTPClient parse the chunk framing for us.
+class StkBufStream : public Stream {
+public:
+    int bytesWritten = 0;
+    size_t write(uint8_t c) override {
+        if (!_stkBuf) return 0;
+        if (bytesWritten >= (int)(STK_BUF_SIZE - 1)) return 0;
+        _stkBuf[bytesWritten++] = (char)c;
+        return 1;
+    }
+    size_t write(const uint8_t* buf, size_t size) override {
+        if (!_stkBuf) return 0;
+        int avail = (int)(STK_BUF_SIZE - 1) - bytesWritten;
+        int toWrite = (int)size;
+        if (toWrite > avail) toWrite = avail;
+        if (toWrite > 0) {
+            memcpy(_stkBuf + bytesWritten, buf, toWrite);
+            bytesWritten += toWrite;
+            esp_task_wdt_reset();
+        }
+        return toWrite;
+    }
+    int available() override { return 0; }
+    int read() override { return -1; }
+    int peek() override { return -1; }
+    void flush() override {}
+};
+
 static const char* stocksHttpGet(const char* url, ApiResult& result, int timeoutMs) {
     result = API_NETWORK_ERROR;
     if (!_stkBuf) {
@@ -52,6 +83,7 @@ static const char* stocksHttpGet(const char* url, ApiResult& result, int timeout
     int contentLen = _stkHttp.getSize();
     int bytesRead = 0;
     if (contentLen > 0 && contentLen < (int)(STK_BUF_SIZE - 1)) {
+        // Known length — raw stream read
         WiFiClient* stream = _stkHttp.getStreamPtr();
         unsigned long readStart = millis();
         while (bytesRead < contentLen) {
@@ -73,6 +105,18 @@ static const char* stocksHttpGet(const char* url, ApiResult& result, int timeout
                 vTaskDelay(pdMS_TO_TICKS(10));
                 esp_task_wdt_reset();
             }
+        }
+    } else {
+        // Yahoo returns Transfer-Encoding: chunked (no Content-Length). Let
+        // HTTPClient parse chunk framing via writeToStream so we don't end
+        // up with chunk-size markers interleaved in _stkBuf.
+        StkBufStream bufStream;
+        int written = _stkHttp.writeToStream(&bufStream);
+        esp_task_wdt_reset();
+        bytesRead = bufStream.bytesWritten;
+        if (written < 0) {
+            Serial.printf("[Stocks] writeToStream err %d (%d bytes) %s\n",
+                          written, bytesRead, url);
         }
     }
     _stkBuf[bytesRead] = '\0';
