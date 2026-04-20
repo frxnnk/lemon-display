@@ -138,6 +138,16 @@ void stocksFetchTask() {
 
 bool stocksIsFetching() { return s_fetching; }
 
+void stocksStop() {
+    if (s_workerHandle) {
+        TaskHandle_t h = s_workerHandle;
+        s_workerHandle = nullptr;   // stocksFetchTask sees null and no-ops
+        vTaskDelete(h);
+        Serial.println("[Stocks] worker stopped");
+    }
+    s_fetching = false;
+}
+
 uint8_t stocksGetFocusedIdx() { return s_focusedIdx; }
 uint8_t stocksGetWatchlistCount() { return s_watchlist.count; }
 

@@ -14,6 +14,7 @@
 #include "ws_binance.h"
 #include "api_client.h"
 #include "config_server.h"
+#include "ui_stocks.h"
 #include "data/satoshi_fonts.h"
 #include <Arduino.h>
 #include <WiFi.h>
@@ -429,6 +430,7 @@ void settingsHandleTouch(const TouchEvent& evt) {
             wsBinanceStop();          // Close WebSocket + its TLS session
             apiStop();                // Release API TLS session
             configServerStop();       // Shut down app config HTTP server
+            stocksStop();             // Tear down stocks worker + its TLS
             if (settScrReady) {
                 settScr.deleteSprite();
                 settScrReady = false;

@@ -27,3 +27,7 @@ void stocksAdvanceFocused();
 // True while the async worker has a fetch in flight. Rendering can use
 // this to show a "loading" indicator.
 bool stocksIsFetching();
+
+// Tear down the async worker + its TLS session. Used before OTA so the
+// flash TLS handshake can claim the DRAM that the stocks session holds.
+void stocksStop();

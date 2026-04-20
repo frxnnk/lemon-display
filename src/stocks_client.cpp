@@ -109,7 +109,12 @@ ApiResult fetchStockChart(const char* symbol, const char* range, const char* int
     if (result != API_OK) return result;
     if (!json || !json[0]) return API_NETWORK_ERROR;
 
-    // Filter: only the fields we actually render.
+    // Filter: only the fields we actually render. "indicators" is pulled in
+    // whole because ArduinoJson's filter semantics on nested arrays
+    // (result[0].indicators.quote[0].close) dropped the close series on
+    // some Yahoo responses, leaving the sparkline permanently invalid.
+    // Including the full indicators subtree adds a few KB of parse work but
+    // guarantees close[] lands in the doc.
     JsonDocument filter;
     filter["chart"]["result"][0]["meta"]["symbol"]                   = true;
     filter["chart"]["result"][0]["meta"]["shortName"]                = true;
@@ -119,7 +124,7 @@ ApiResult fetchStockChart(const char* symbol, const char* range, const char* int
     filter["chart"]["result"][0]["meta"]["chartPreviousClose"]       = true;
     filter["chart"]["result"][0]["meta"]["regularMarketDayHigh"]     = true;
     filter["chart"]["result"][0]["meta"]["regularMarketDayLow"]      = true;
-    filter["chart"]["result"][0]["indicators"]["quote"][0]["close"]  = true;
+    filter["chart"]["result"][0]["indicators"]                       = true;
 
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, json,
