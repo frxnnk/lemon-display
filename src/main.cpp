@@ -11,7 +11,6 @@
 #include "data/satoshi_fonts.h"
 #include "data/lemon_logo.h"
 #include "ui_dashboard.h"
-#include "ui_views.h"
 #include "ui_stocks.h"
 #include "config_server.h"
 #include "ui_components.h"
@@ -1469,7 +1468,6 @@ static void redrawDashboard() {
                      state.lemon, !state.online, wsBinanceConnected(),
                      periodChanges, chartStyle, &state.ohlc, &state.lemonSpark,
                      dollarPeriod, dollarChartStyle, dollarChangePercent);
-    if (!tutorialIsActive()) viewsDrawDotsOverlay();
     frameDirty = true;
 }
 
@@ -1665,7 +1663,6 @@ void setup() {
 
     dashboardSetTouchCallback(onDashboardTouch);
     appSetDashboardRedrawCB(redrawDashboard);
-    viewsRegisterRedraw(VIEW_STOCKS, stocksDrawAll);
     stocksInit();
 
     taskClock     = scheduler.add("clock",     UPDATE_CLOCK_MS,      updateClock);
