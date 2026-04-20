@@ -1253,12 +1253,33 @@ void dashboardDrawStocksZ2() {
         sprZ2.drawString(hl, MARGIN + CARD_PAD, footerY, &Satoshi9);
     }
 
-    char pageLabel[12];
-    snprintf(pageLabel, sizeof(pageLabel), "%u/%u",
-             (unsigned)(stocksGetFocusedIdx() + 1), (unsigned)wlCount);
+    // Right side: page index + staleness indicator. "lastUpdate == 0" marks a
+    // quote restored from NVS cache (millis timestamps don't survive reboot),
+    // so surface it as "stale" instead of a bogus "0m ago".
+    char rightLabel[32];
+    char ageBuf[16] = "";
+    if (q && q->valid) {
+        if (q->lastUpdate == 0) {
+            strncpy(ageBuf, "stale", sizeof(ageBuf) - 1);
+        } else {
+            uint32_t now = millis();
+            uint32_t age = (now > q->lastUpdate) ? (now - q->lastUpdate) : 0;
+            uint32_t sec = age / 1000;
+            if      (sec < 60)    snprintf(ageBuf, sizeof(ageBuf), "%us",  (unsigned)sec);
+            else if (sec < 3600)  snprintf(ageBuf, sizeof(ageBuf), "%um",  (unsigned)(sec / 60));
+            else                  snprintf(ageBuf, sizeof(ageBuf), "%uh",  (unsigned)(sec / 3600));
+        }
+    }
+    if (ageBuf[0]) {
+        snprintf(rightLabel, sizeof(rightLabel), "%u/%u  %s",
+                 (unsigned)(stocksGetFocusedIdx() + 1), (unsigned)wlCount, ageBuf);
+    } else {
+        snprintf(rightLabel, sizeof(rightLabel), "%u/%u",
+                 (unsigned)(stocksGetFocusedIdx() + 1), (unsigned)wlCount);
+    }
     sprZ2.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
     sprZ2.setTextDatum(lgfx::middle_right);
-    sprZ2.drawString(pageLabel, MARGIN + CARD_W - CARD_PAD, footerY, &Satoshi9);
+    sprZ2.drawString(rightLabel, MARGIN + CARD_W - CARD_PAD, footerY, &Satoshi9);
 
     sprZ2.setTextDatum(lgfx::top_left);
 
