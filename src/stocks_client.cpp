@@ -24,7 +24,8 @@ ApiResult fetchStockChart(const char* symbol, const char* range, const char* int
     if (n <= 0 || n >= (int)sizeof(urlBuf)) return API_NETWORK_ERROR;
 
     ApiResult result;
-    const char* json = apiHttpGet(urlBuf, false, result, 8000);
+    // 5s cap on Yahoo so a slow symbol can't freeze the UI for the full 8s.
+    const char* json = apiHttpGet(urlBuf, false, result, 5000);
     if (result != API_OK) return result;
     if (!json || !json[0]) return API_NETWORK_ERROR;
 

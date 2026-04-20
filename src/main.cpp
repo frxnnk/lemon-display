@@ -952,6 +952,13 @@ static void applyZ2Mode(Z2Mode target) {
         exitPredictionMode();
     }
 
+    // Stocks scheduler task follows the slot mode — only runs while the
+    // user is actually viewing stocks. Saves Yahoo quota and keeps the
+    // main-loop HTTPS burst off first-boot when default mode is USD.
+    bool stocksOn = (target == Z2_STOCKS);
+    scheduler.enable(taskStocks, stocksOn);
+    if (stocksOn) scheduler.requestRun(taskStocks);
+
     if (target == Z2_MARKETS) {
         // Prediction mode has guards (Pro-mode, z2H>0). If they fail, it
         // shows a toast and returns — we stay on the previous mode.
@@ -1675,6 +1682,10 @@ void setup() {
     taskPolymarket  = scheduler.add("polymarket", POLYMARKET_REFRESH_MS, updatePolymarket);
     scheduler.enable(taskPolymarket, false);  // Disabled by default, enabled in prediction mode
     taskStocks      = scheduler.add("stocks",    UPDATE_STOCKS_MS,     stocksFetchTask);
+    // Stocks stays idle until the user swaps into Stocks mode — otherwise the
+    // first-boot burst of HTTPS fetches blocks the main loop and the UI feels
+    // trabada. applyZ2Mode enables/disables as the user cycles.
+    scheduler.enable(taskStocks, dashboardGetZ2Mode() == Z2_STOCKS);
 
     applyModePolicyNow(false);
 
