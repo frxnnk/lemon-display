@@ -24,6 +24,12 @@ const SparklineData* stocksGetFocusedSpark();     // nullptr if no sparkline cac
 // Advance focused ticker (wraps). Triggers a priority refresh.
 void stocksAdvanceFocused();
 
+// Kick a burst refresh that fetches every watchlist symbol back-to-back
+// on the worker. Used when the user enters Stocks mode so all charts
+// populate within seconds instead of waiting N × 60s for the scheduler
+// to round-robin through them.
+void stocksRequestBurst();
+
 // True while the async worker has a fetch in flight. Rendering can use
 // this to show a "loading" indicator.
 bool stocksIsFetching();

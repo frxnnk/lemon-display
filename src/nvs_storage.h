@@ -71,6 +71,13 @@ struct StockQuote;
 void     nvsLoadStockQuotes(StockQuote* out, uint8_t& count);
 void     nvsSaveStockQuotes(const StockQuote* quotes, uint8_t count);
 
+// Stocks sparkline cache — keyed by symbol internally so watchlist reorders
+// don't corrupt the chart/symbol mapping. On load, sparks are placed into
+// the current watchlist slots; symbols no longer in the watchlist are dropped.
+struct SparklineData;
+void     nvsLoadStockSparks(SparklineData* out, const StockWatchlist& wl);
+void     nvsSaveStockSparks(const SparklineData* sparks, const StockWatchlist& wl);
+
 // Z2 slot mode (0=USD, 1=Markets, 2=Stocks) — persisted so the reboot comes
 // back to whatever the user was looking at.
 uint8_t  nvsGetZ2Mode();

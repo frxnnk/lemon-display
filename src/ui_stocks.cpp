@@ -33,6 +33,10 @@ static bool            s_cacheDirty     = false;            // quotes changed si
 static TaskHandle_t   s_workerHandle  = nullptr;
 static volatile bool  s_fetching      = false;
 static char           s_lastDbg[64]   = "";
+// Burst mode: after an initial kick, worker self-notifies N-1 more times
+// to fetch every watchlist symbol back-to-back. Used when the user first
+// enters Stocks mode so all charts fill within ~15s instead of N × 60s.
+static volatile uint8_t s_burstRemaining = 0;
 
 static void stocksWorkerTask(void*);
 
@@ -57,10 +61,11 @@ void stocksInit() {
     s_rrIdx = 0;
     s_priorityIdx = 0xFF;
 
-    // Restore quote cache from NVS — gives us stale-but-visible data on boot
-    // instead of a "Loading…" placeholder.
+    // Restore quote + sparkline caches from NVS — gives us stale-but-visible
+    // data on boot instead of a "Loading…" placeholder. Sparks are keyed by
+    // symbol so watchlist reorders don't misalign charts.
     nvsLoadStockQuotes(s_quotes, s_quoteCount);
-    for (uint8_t i = 0; i < STOCK_MAX_SYMBOLS; i++) s_sparks[i].valid = false;
+    nvsLoadStockSparks(s_sparks, s_watchlist);
     s_everFetched = (s_quoteCount > 0);
     s_cacheDirty = false;
 
@@ -122,8 +127,10 @@ static void stocksFetchBody() {
         s_rrIdx = (s_rrIdx + 1) % s_watchlist.count;
         if (s_rrIdx == 0 && s_cacheDirty) {
             nvsSaveStockQuotes(s_quotes, s_quoteCount);
+            nvsSaveStockSparks(s_sparks, s_watchlist);
             s_cacheDirty = false;
-            Serial.printf("[Stocks] quote cache flushed to NVS (%u symbols)\n", (unsigned)s_quoteCount);
+            Serial.printf("[Stocks] quote+spark cache flushed to NVS (%u symbols)\n",
+                          (unsigned)s_quoteCount);
         }
     }
     s_dirty = true;
@@ -135,12 +142,35 @@ static void stocksWorkerTask(void*) {
         s_fetching = true;
         stocksFetchBody();
         s_fetching = false;
+
+        // Burst chain: if more symbols pending from a burst request, kick
+        // the next fetch immediately (after a short breather so the UI can
+        // repaint the just-fetched symbol and the TCP/TLS session has time
+        // to tear down before the next handshake).
+        if (s_burstRemaining > 0) {
+            s_burstRemaining--;
+            vTaskDelay(pdMS_TO_TICKS(400));
+            xTaskNotifyGive(s_workerHandle);
+        }
     }
 }
 
 // Called by the scheduler on core 1. Just notifies the worker — no blocking.
 void stocksFetchTask() {
     if (!s_workerHandle) return;
+    xTaskNotifyGive(s_workerHandle);
+}
+
+// Request a burst refresh — fetches every watchlist symbol back-to-back
+// (one RR step per fetch). Called when the user first enters Stocks mode
+// so all charts populate within ~N×1-3s instead of N×60s.
+void stocksRequestBurst() {
+    if (!s_workerHandle) return;
+    if (s_watchlist.count == 0) return;
+    // The triggering notify below fetches 1; burstRemaining covers the rest.
+    s_burstRemaining = (s_watchlist.count > 1) ? (s_watchlist.count - 1) : 0;
+    Serial.printf("[Stocks] burst refresh requested (%u symbols)\n",
+                  (unsigned)s_watchlist.count);
     xTaskNotifyGive(s_workerHandle);
 }
 
@@ -162,6 +192,7 @@ void stocksStop() {
         Serial.println("[Stocks] worker stopped");
     }
     s_fetching = false;
+    s_burstRemaining = 0;
     // Release the worker's dedicated TLS session too — frees ~30KB DRAM.
     stocksClientStop();
 }
