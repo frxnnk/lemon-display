@@ -109,26 +109,13 @@ ApiResult fetchStockChart(const char* symbol, const char* range, const char* int
     if (result != API_OK) return result;
     if (!json || !json[0]) return API_NETWORK_ERROR;
 
-    // Filter: only the fields we actually render. "indicators" is pulled in
-    // whole because ArduinoJson's filter semantics on nested arrays
-    // (result[0].indicators.quote[0].close) dropped the close series on
-    // some Yahoo responses, leaving the sparkline permanently invalid.
-    // Including the full indicators subtree adds a few KB of parse work but
-    // guarantees close[] lands in the doc.
-    JsonDocument filter;
-    filter["chart"]["result"][0]["meta"]["symbol"]                   = true;
-    filter["chart"]["result"][0]["meta"]["shortName"]                = true;
-    filter["chart"]["result"][0]["meta"]["longName"]                 = true;
-    filter["chart"]["result"][0]["meta"]["regularMarketPrice"]       = true;
-    filter["chart"]["result"][0]["meta"]["previousClose"]            = true;
-    filter["chart"]["result"][0]["meta"]["chartPreviousClose"]       = true;
-    filter["chart"]["result"][0]["meta"]["regularMarketDayHigh"]     = true;
-    filter["chart"]["result"][0]["meta"]["regularMarketDayLow"]      = true;
-    filter["chart"]["result"][0]["indicators"]                       = true;
-
+    // Parse the full response — the original filter on the doubly-nested
+    // "indicators.quote[0].close" path was silently stripping the close
+    // array in ArduinoJson v7, leaving sparkline permanently invalid even
+    // though meta parsed fine. Memory is fine (response is ~30-40KB, PSRAM
+    // has it), so just let it all through.
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, json,
-        DeserializationOption::Filter(filter),
         DeserializationOption::NestingLimit(20));
     if (err) {
         Serial.printf("[Yahoo] chart JSON error (%s): %s\n", symbol, err.c_str());
@@ -162,6 +149,9 @@ ApiResult fetchStockChart(const char* symbol, const char* range, const char* int
 
     // ── Sparkline ──
     JsonArray closes = doc["chart"]["result"][0]["indicators"]["quote"][0]["close"];
+    Serial.printf("[Yahoo] %s parse: closes null=%d size=%d overflow=%d\n",
+                  symbol, (int)closes.isNull(), (int)closes.size(),
+                  (int)doc.overflowed());
     if (closes.isNull() || closes.size() == 0) {
         Serial.printf("[Yahoo] %s: quote OK, chart empty\n", symbol);
         return quote.valid ? API_OK : API_PARSE_ERROR;
