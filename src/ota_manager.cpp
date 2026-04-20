@@ -26,15 +26,36 @@ static void otaScreen(const char* msg, uint16_t color = 0xFFFF, bool inPlace = f
     Serial.println(msg);
 }
 
-// Simple semver comparison: returns true if remote > local
+// Parse "M.m.p" or "M.m.p-beta.N" / "M.m.p-rcN" etc.
+// Stable release (no prerelease suffix) is treated as INT_MAX so it always
+// wins against any prerelease of the same M.m.p.
+static void parseVersion(const char* s, int& maj, int& min, int& pat, int& pre) {
+    maj = min = pat = 0;
+    pre = 0x7FFFFFFF;  // stable = highest
+    if (!s) return;
+    sscanf(s, "%d.%d.%d", &maj, &min, &pat);
+    const char* dash = strchr(s, '-');
+    if (!dash) return;
+    const char* p = dash + 1;
+    while (*p && (*p < '0' || *p > '9')) p++;
+    if (!*p) return;
+    int n = 0;
+    sscanf(p, "%d", &n);
+    pre = n;
+}
+
+// Semver-ish comparison: returns true if remote > local. Recognises a
+// numeric prerelease suffix (beta.N, rcN) so 5.1.0-beta.7 < 5.1.0-beta.8 <
+// 5.1.0 works correctly.
 static bool isNewer(const char* remote, const char* local) {
-    int rMaj = 0, rMin = 0, rPat = 0;
-    int lMaj = 0, lMin = 0, lPat = 0;
-    sscanf(remote, "%d.%d.%d", &rMaj, &rMin, &rPat);
-    sscanf(local, "%d.%d.%d", &lMaj, &lMin, &lPat);
+    int rMaj, rMin, rPat, rPre;
+    int lMaj, lMin, lPat, lPre;
+    parseVersion(remote, rMaj, rMin, rPat, rPre);
+    parseVersion(local,  lMaj, lMin, lPat, lPre);
     if (rMaj != lMaj) return rMaj > lMaj;
     if (rMin != lMin) return rMin > lMin;
-    return rPat > lPat;
+    if (rPat != lPat) return rPat > lPat;
+    return rPre > lPre;
 }
 
 // File-scope so otaFreeCheck() can release TLS buffers
