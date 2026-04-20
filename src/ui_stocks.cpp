@@ -145,6 +145,12 @@ bool stocksIsFetching() { return s_fetching; }
 
 const char* stocksLastDebug() { return s_lastDbg; }
 
+bool stocksConsumeDirty() {
+    if (!s_dirty) return false;
+    s_dirty = false;
+    return true;
+}
+
 void stocksStop() {
     if (s_workerHandle) {
         TaskHandle_t h = s_workerHandle;

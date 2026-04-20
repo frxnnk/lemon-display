@@ -1902,6 +1902,19 @@ void loop() {
 
         scheduler.tick();
 
+        // ── Stocks async worker → UI repaint ──
+        // The worker runs on core 0 and mutates s_quotes / s_sparks after
+        // a Yahoo fetch; it can't touch the TFT itself, so we poll
+        // stocksConsumeDirty() here and redraw Z2 from the main loop.
+        if (stocksConsumeDirty() &&
+            appGetScreen() == SCREEN_DASHBOARD &&
+            !dashboardIsPredictionMode() &&
+            dashboardGetZ2Mode() == Z2_STOCKS &&
+            dashboardGetZ2H() > 0) {
+            dashboardDrawStocksZ2();
+            frameDirty = true;
+        }
+
         // ── Prediction countdown tick (1Hz Z2 refresh + adaptive polling + beep) ──
         if (dashboardIsPredictionMode() && polyDataLoaded && !tutorialIsActive()) {
             static unsigned long lastCountdownTick = 0;
