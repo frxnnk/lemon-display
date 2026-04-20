@@ -13,3 +13,7 @@ ApiResult fetchStockChart(const char* symbol, const char* range, const char* int
 // Release the dedicated TLS session and HTTP state so the heap can be
 // reclaimed before OTA. Safe to call at any time.
 void stocksClientStop();
+
+// Diagnostic — last HTTP status code (or negative error) from the fetch.
+int stocksClientLastCode();
+int stocksClientLastBytes();

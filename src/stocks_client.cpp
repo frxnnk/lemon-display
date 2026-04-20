@@ -17,6 +17,11 @@ static WiFiClientSecure _stkClient;
 static HTTPClient       _stkHttp;
 static char*            _stkBuf = nullptr;
 static const size_t     STK_BUF_SIZE = 64 * 1024;
+static int              _stkLastCode = 0;     // last HTTP status (or error code)
+static int              _stkLastBytes = 0;    // bytes read from last response
+
+int stocksClientLastCode()  { return _stkLastCode; }
+int stocksClientLastBytes() { return _stkLastBytes; }
 
 // Stream adapter that drains http.writeToStream() into _stkBuf. Needed
 // because Yahoo returns Transfer-Encoding: chunked with no Content-Length
@@ -51,10 +56,13 @@ public:
 
 static const char* stocksHttpGet(const char* url, ApiResult& result, int timeoutMs) {
     result = API_NETWORK_ERROR;
+    _stkLastCode = 0;
+    _stkLastBytes = 0;
     if (!_stkBuf) {
         _stkBuf = (char*)ps_malloc(STK_BUF_SIZE);
         if (!_stkBuf) {
             Serial.println("[Stocks] FATAL: cannot allocate response buffer");
+            _stkLastCode = -9001;  // marker: buffer alloc failed
             return "";
         }
     }
@@ -65,6 +73,7 @@ static const char* stocksHttpGet(const char* url, ApiResult& result, int timeout
     _stkHttp.setTimeout(timeoutMs);
     if (!_stkHttp.begin(_stkClient, url)) {
         _stkClient.stop();
+        _stkLastCode = -9002;  // marker: begin() failed
         return "";
     }
     _stkHttp.addHeader("Accept", "application/json");
@@ -73,6 +82,7 @@ static const char* stocksHttpGet(const char* url, ApiResult& result, int timeout
     esp_task_wdt_reset();
     int code = _stkHttp.GET();
     esp_task_wdt_reset();
+    _stkLastCode = code;
     if (code != 200) {
         Serial.printf("[Stocks] HTTP %d %s\n", code, url);
         _stkHttp.end();
@@ -120,6 +130,7 @@ static const char* stocksHttpGet(const char* url, ApiResult& result, int timeout
         }
     }
     _stkBuf[bytesRead] = '\0';
+    _stkLastBytes = bytesRead;
 
     _stkHttp.end();
     _stkClient.stop();
