@@ -1303,14 +1303,15 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
 
     // ── Z2: Dollar / Markets / Stocks ──
     if (zoneId == 2) {
-        // Vertical swipes on Z2 cycle between the three Z2 modes
-        // (USD / Markets / Stocks). Horizontal swipes stay with the mode-
-        // specific handlers below (period / market / ticker nav).
-        if (evt.gesture == TOUCH_SWIPE_UP) {
+        // Vertical gestures on Z2 cycle between the three Z2 modes
+        // (USD / Markets / Stocks). Slower swipes come through as
+        // TOUCH_SWIPE_UP/DOWN; flicks are reclassified by the touch
+        // manager as TOUCH_FLING_UP/DOWN — handle both.
+        if (evt.gesture == TOUCH_SWIPE_UP || evt.gesture == TOUCH_FLING_UP) {
             cycleZ2Mode(+1);
             return;
         }
-        if (evt.gesture == TOUCH_SWIPE_DOWN) {
+        if (evt.gesture == TOUCH_SWIPE_DOWN || evt.gesture == TOUCH_FLING_DOWN) {
             cycleZ2Mode(-1);
             return;
         }
