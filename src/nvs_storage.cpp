@@ -321,6 +321,52 @@ void nvsSaveWatchlist(const StockWatchlist& wl) {
     Serial.printf("[NVS] Watchlist saved (%u): %s\n", (unsigned)wl.count, csv.c_str());
 }
 
+// ── Stocks quote cache ──
+// Blob of up to STOCK_MAX_SYMBOLS quotes. Keyed by "sq_data" + "sq_cnt".
+// Version byte ("sq_ver") guards against struct layout changes.
+static const uint8_t STOCK_QUOTES_VER = 1;
+
+void nvsLoadStockQuotes(StockQuote* out, uint8_t& count) {
+    count = 0;
+    uint8_t ver = prefs.getUChar("sq_ver", 0);
+    if (ver != STOCK_QUOTES_VER) {
+        memset(out, 0, sizeof(StockQuote) * STOCK_MAX_SYMBOLS);
+        return;
+    }
+    uint8_t cnt = prefs.getUChar("sq_cnt", 0);
+    if (cnt > STOCK_MAX_SYMBOLS) cnt = STOCK_MAX_SYMBOLS;
+    size_t sz = sizeof(StockQuote) * STOCK_MAX_SYMBOLS;
+    size_t read = prefs.getBytes("sq_data", out, sz);
+    if (read != sz) {
+        memset(out, 0, sz);
+        return;
+    }
+    count = cnt;
+    // Fetch timestamps are millis() — meaningless across reboots. Zero them
+    // so the UI renders the data as "stale" (very old) until a fresh fetch.
+    for (uint8_t i = 0; i < count; i++) out[i].lastUpdate = 0;
+}
+
+void nvsSaveStockQuotes(const StockQuote* quotes, uint8_t count) {
+    if (count > STOCK_MAX_SYMBOLS) count = STOCK_MAX_SYMBOLS;
+    prefs.putUChar("sq_ver", STOCK_QUOTES_VER);
+    prefs.putUChar("sq_cnt", count);
+    size_t sz = sizeof(StockQuote) * STOCK_MAX_SYMBOLS;
+    prefs.putBytes("sq_data", quotes, sz);
+}
+
+// ── Z2 slot mode ──
+
+uint8_t nvsGetZ2Mode() {
+    uint8_t m = prefs.getUChar("z2_mode", 0);
+    return (m < 3) ? m : 0;
+}
+
+void nvsSetZ2Mode(uint8_t mode) {
+    if (mode > 2) mode = 0;
+    prefs.putUChar("z2_mode", mode);
+}
+
 // ── Factory Reset ──
 
 void nvsFactoryReset() {
