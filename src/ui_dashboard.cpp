@@ -234,8 +234,15 @@ void dashboardSetup() {
     resetDollarFilterToAll();
     pairSelectorEnabled = true;
 
-    // Restore Z2 slot mode from NVS (USD / Markets / Stocks).
-    s_z2Mode = (Z2Mode)nvsGetZ2Mode();
+    // Restore Z2 slot mode from NVS (USD / Markets / Stocks). Markets is
+    // only reachable when Pro mode is active — if NVS persisted Markets
+    // from a prior session and Pro is off, fall back to USD so Z2 is
+    // never blank at boot.
+    {
+        uint8_t raw = nvsGetZ2Mode();
+        if (raw >= Z2_COUNT) raw = Z2_USD;
+        s_z2Mode = (Z2Mode)raw;
+    }
 
     // Allocate persistent zone sprites in PSRAM (once, never freed)
     sprZ0.setPsram(true);
@@ -1009,9 +1016,10 @@ void dashboardDrawLemonDollar(const LemonPrice& lemon, const SparklineData* lemo
                               float dollarChange) {
     if (s_muted) return;
     if (z2H <= 0) return;  // BTC-only layout — no Z2
-    // Only paint if the Z2 slot is in USD mode — background lemon WS updates
-    // shouldn't overwrite Stocks or Markets cards.
-    if (s_z2Mode != Z2_USD && !predictionModeActive) return;
+    // Stocks owns its own render path — skip background lemon WS updates.
+    // Everything else (USD or MARKETS without active prediction) falls back
+    // to USD content so the slot never goes blank.
+    if (s_z2Mode == Z2_STOCKS) return;
     sprZ2.clearClipRect();
     sprZ2.fillSprite(Colors::BG_BASE);
     bool simpleMode = !pairSelectorEnabled;
@@ -1386,14 +1394,13 @@ void dashboardDrawAll(const char* timeStr,
     dashboardDrawHeader(timeStr, offline, wsConnected);
     dashboardDrawBtcHero(btc, spark, selectedPeriod, periodChanges, chartStyle, ohlc, selectedPair);
     if (z2H > 0) {
-        // Prediction (Markets) has its own draw path invoked externally; when
-        // predictionModeActive is true it owns the slot. Otherwise dispatch
-        // by user-selected Z2 mode.
         if (predictionModeActive) {
-            // Caller (main.cpp) invokes dashboardDrawPrediction separately.
+            // Prediction is drawn by main.cpp's own path.
         } else if (s_z2Mode == Z2_STOCKS) {
             dashboardDrawStocksZ2();
         } else {
+            // Z2_USD or Z2_MARKETS-without-active-prediction → draw USD so
+            // the slot never goes blank.
             dashboardDrawLemonDollar(lemon, lemonSpark, dollarPeriod, dollarChartStyle, dollarChange);
         }
     }
