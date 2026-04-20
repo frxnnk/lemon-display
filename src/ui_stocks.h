@@ -31,3 +31,8 @@ bool stocksIsFetching();
 // Tear down the async worker + its TLS session. Used before OTA so the
 // flash TLS handshake can claim the DRAM that the stocks session holds.
 void stocksStop();
+
+// Last-fetch diagnostic line (empty when no fetch happened yet). Exposed
+// for the stocks card to print on the "chart loading" placeholder so we
+// can diagnose parse failures without a serial monitor.
+const char* stocksLastDebug();

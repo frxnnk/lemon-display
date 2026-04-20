@@ -1240,7 +1240,9 @@ void dashboardDrawStocksZ2() {
     } else {
         sprZ2.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
         sprZ2.setTextDatum(lgfx::middle_center);
-        sprZ2.drawString("chart loading", chartX + chartW / 2, chartY + chartH / 2, &Satoshi9);
+        const char* dbg = stocksLastDebug();
+        const char* msg = (dbg && dbg[0]) ? dbg : "chart loading";
+        sprZ2.drawString(msg, chartX + chartW / 2, chartY + chartH / 2, &Satoshi9);
     }
 
     // Footer: H / L left, page idx center, timestamp right
