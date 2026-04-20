@@ -9,6 +9,7 @@
 #include "data/satoshi_fonts.h"
 #include "api_client.h"
 #include "nvs_storage.h"
+#include "ui_stocks.h"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -39,6 +40,7 @@ static int z2H = 120;
 static int z2Y = 354;  // Z1_Y + z1H + GAP
 static uint8_t currentLayout = 0;
 static Z2Mode  s_z2Mode = Z2_USD;      // Which card occupies Z2 slot
+static bool    predictionModeActive = false;   // defined here; used across the file
 
 // When true, all public draw functions no-op. Set by ui_views when the
 // carousel is showing a different view (Stocks, Polymarket) so background
@@ -1007,6 +1009,9 @@ void dashboardDrawLemonDollar(const LemonPrice& lemon, const SparklineData* lemo
                               float dollarChange) {
     if (s_muted) return;
     if (z2H <= 0) return;  // BTC-only layout — no Z2
+    // Only paint if the Z2 slot is in USD mode — background lemon WS updates
+    // shouldn't overwrite Stocks or Markets cards.
+    if (s_z2Mode != Z2_USD && !predictionModeActive) return;
     sprZ2.clearClipRect();
     sprZ2.fillSprite(Colors::BG_BASE);
     bool simpleMode = !pairSelectorEnabled;
@@ -1126,6 +1131,128 @@ void dashboardDrawLemonDollar(const LemonPrice& lemon, const SparklineData* lemo
 
     // Flash border (drawn last, on top of everything)
     drawFlashBorderIfActive(sprZ2, 2, z2H);
+
+    if (!_batchMode) {
+        displayWaitVSync();
+        sprZ2.pushSprite(0, z2Y);
+    }
+    dirtyZones |= (1 << 2);
+}
+
+// ══════════════════════════════════════════
+//  Z2: STOCKS card (compact layout for ~213px)
+// ══════════════════════════════════════════
+
+static const lgfx::IFont* priceFontForZ2(float price) {
+    return (price >= 10000.0f) ? &SatoshiMedium18 : &SatoshiBold24;
+}
+
+static void drawStocksZ2ModeDots(LGFX_Sprite& spr, int xRight, int y) {
+    // 3 small pills at top-right indicating active Z2 mode (USD / Markets / Stocks).
+    // Filled = active, outline = inactive.
+    const int pillW = 10;
+    const int pillH = 4;
+    const int gap   = 4;
+    for (int i = 0; i < (int)Z2_COUNT; i++) {
+        int px = xRight - (int)Z2_COUNT * (pillW + gap) + i * (pillW + gap);
+        uint16_t color = (i == (int)s_z2Mode) ? Colors::LEMON_GREEN : Colors::CARD_BORDER;
+        spr.fillSmoothRoundRect(px, y, pillW, pillH, 2, color);
+    }
+}
+
+void dashboardDrawStocksZ2() {
+    if (s_muted) return;
+    if (z2H <= 0) return;
+    if (s_z2Mode != Z2_STOCKS) return;
+
+    sprZ2.clearClipRect();
+    sprZ2.fillSprite(Colors::BG_BASE);
+
+    const int cardT = 4;
+    const int cardH = z2H - cardT;
+    drawGlassCard(sprZ2, MARGIN, cardT, CARD_W, cardH, CARD_R);
+
+    // Mode dots top-right inside the card
+    drawStocksZ2ModeDots(sprZ2, MARGIN + CARD_W - 12, cardT + 8);
+
+    uint8_t wlCount = stocksGetWatchlistCount();
+    if (wlCount == 0) {
+        drawCentered(sprZ2, "Add tickers from /config",
+                     cardT + cardH / 2 - 6, &Satoshi12, Colors::TEXT_SECONDARY);
+        if (!_batchMode) { displayWaitVSync(); sprZ2.pushSprite(0, z2Y); }
+        dirtyZones |= (1 << 2);
+        return;
+    }
+
+    const StockQuote* q = stocksGetFocusedQuote();
+    const char* sym = stocksGetFocusedSymbol();
+
+    // Row 1: symbol + name (left), price (right)
+    const int rowY1 = cardT + 18;
+    sprZ2.setTextDatum(lgfx::top_left);
+    sprZ2.setTextColor(Colors::LEMON_GREEN, Colors::BG_CARD);
+    sprZ2.drawString(sym ? sym : "--", MARGIN + CARD_PAD, rowY1 - 8, &SatoshiBold24);
+
+    if (q && q->valid && q->name[0]) {
+        sprZ2.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
+        sprZ2.drawString(q->name, MARGIN + CARD_PAD, rowY1 + 22, &Satoshi9);
+    }
+
+    if (q && q->valid) {
+        char priceStr[24];
+        if (q->price < 1.0f)       snprintf(priceStr, sizeof(priceStr), "$%.4f", q->price);
+        else                       snprintf(priceStr, sizeof(priceStr), "$%.2f", q->price);
+        sprZ2.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_CARD);
+        sprZ2.setTextDatum(lgfx::top_right);
+        sprZ2.drawString(priceStr, MARGIN + CARD_W - CARD_PAD, rowY1 - 8, priceFontForZ2(q->price));
+
+        bool up = q->change >= 0.0f;
+        char changeStr[40];
+        snprintf(changeStr, sizeof(changeStr), "%s%.2f  %s%.2f%%",
+                 up ? "+" : "", q->change, up ? "+" : "", q->changePct);
+        sprZ2.setTextColor(up ? Colors::POSITIVE : Colors::NEGATIVE, Colors::BG_CARD);
+        sprZ2.drawString(changeStr, MARGIN + CARD_W - CARD_PAD, rowY1 + 22, &Satoshi12);
+    } else {
+        sprZ2.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
+        sprZ2.setTextDatum(lgfx::top_right);
+        sprZ2.drawString("Loading...", MARGIN + CARD_W - CARD_PAD, rowY1 - 2, &Satoshi12);
+    }
+
+    // Sparkline (middle band)
+    const int chartX = MARGIN + CARD_PAD;
+    const int chartY = cardT + 70;
+    const int chartW = CARD_W - 2 * CARD_PAD;
+    const int chartH = cardH - 70 - 26;  // leave footer
+    const SparklineData* sp = stocksGetFocusedSpark();
+    if (sp && sp->count >= 2) {
+        bool up = (q && q->valid) ? (q->change >= 0.0f) : true;
+        drawSparkline(sprZ2, chartX, chartY, chartW, chartH, *sp,
+                      up ? Colors::POSITIVE : Colors::NEGATIVE,
+                      up ? Colors::CHART_FILL : Colors::BADGE_BG_NEG);
+    } else {
+        sprZ2.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+        sprZ2.setTextDatum(lgfx::middle_center);
+        sprZ2.drawString("chart loading", chartX + chartW / 2, chartY + chartH / 2, &Satoshi9);
+    }
+
+    // Footer: H / L left, page idx center, timestamp right
+    const int footerY = cardT + cardH - 16;
+    sprZ2.setTextDatum(lgfx::middle_left);
+    if (q && q->valid && isfinite(q->dayHigh) && isfinite(q->dayLow)) {
+        char hl[48];
+        snprintf(hl, sizeof(hl), "H $%.2f   L $%.2f", q->dayHigh, q->dayLow);
+        sprZ2.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
+        sprZ2.drawString(hl, MARGIN + CARD_PAD, footerY, &Satoshi9);
+    }
+
+    char pageLabel[12];
+    snprintf(pageLabel, sizeof(pageLabel), "%u/%u",
+             (unsigned)(stocksGetFocusedIdx() + 1), (unsigned)wlCount);
+    sprZ2.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+    sprZ2.setTextDatum(lgfx::middle_right);
+    sprZ2.drawString(pageLabel, MARGIN + CARD_W - CARD_PAD, footerY, &Satoshi9);
+
+    sprZ2.setTextDatum(lgfx::top_left);
 
     if (!_batchMode) {
         displayWaitVSync();
@@ -1259,7 +1386,16 @@ void dashboardDrawAll(const char* timeStr,
     dashboardDrawHeader(timeStr, offline, wsConnected);
     dashboardDrawBtcHero(btc, spark, selectedPeriod, periodChanges, chartStyle, ohlc, selectedPair);
     if (z2H > 0) {
-        dashboardDrawLemonDollar(lemon, lemonSpark, dollarPeriod, dollarChartStyle, dollarChange);
+        // Prediction (Markets) has its own draw path invoked externally; when
+        // predictionModeActive is true it owns the slot. Otherwise dispatch
+        // by user-selected Z2 mode.
+        if (predictionModeActive) {
+            // Caller (main.cpp) invokes dashboardDrawPrediction separately.
+        } else if (s_z2Mode == Z2_STOCKS) {
+            dashboardDrawStocksZ2();
+        } else {
+            dashboardDrawLemonDollar(lemon, lemonSpark, dollarPeriod, dollarChartStyle, dollarChange);
+        }
     }
     _batchMode = false;
 
@@ -1573,7 +1709,6 @@ void dashboardHandleTouch(const TouchEvent& evt) {
 
 #include "data_models.h"
 
-static bool predictionModeActive = false;
 static uint32_t predEndEpoch = 0;      // Cached end-of-market epoch (UTC seconds)
 static uint32_t lastPredStepSec = 300; // Cached period step for direct countdown updates
 

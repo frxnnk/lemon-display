@@ -308,6 +308,36 @@ void stocksHandleTouch(const TouchEvent& evt) {
     stocksDrawAll();                            // paint from cache immediately
 }
 
+uint8_t stocksGetFocusedIdx() { return s_focusedIdx; }
+uint8_t stocksGetWatchlistCount() { return s_watchlist.count; }
+
+const char* stocksGetFocusedSymbol() {
+    if (s_watchlist.count == 0 || s_focusedIdx >= s_watchlist.count) return nullptr;
+    return s_watchlist.symbols[s_focusedIdx];
+}
+
+const StockQuote* stocksGetFocusedQuote() {
+    const char* sym = stocksGetFocusedSymbol();
+    if (!sym) return nullptr;
+    uint8_t slot = findQuoteSlot(sym);
+    if (slot == 0xFF) return nullptr;
+    return &s_quotes[slot];
+}
+
+const SparklineData* stocksGetFocusedSpark() {
+    if (s_watchlist.count == 0 || s_focusedIdx >= s_watchlist.count) return nullptr;
+    const SparklineData* sp = &s_sparks[s_focusedIdx];
+    return sp->valid ? sp : nullptr;
+}
+
+void stocksAdvanceFocused() {
+    if (s_watchlist.count <= 1) return;
+    s_focusedIdx = (s_focusedIdx + 1) % s_watchlist.count;
+    s_priorityIdx = s_focusedIdx;
+    scheduler.requestRun(taskStocks);
+    s_dirty = true;
+}
+
 void stocksTick() {
     if (s_dirty) stocksDrawAll();
 }

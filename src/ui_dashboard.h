@@ -56,6 +56,9 @@ void dashboardDrawBtcHero(const BtcPrice& btc, const SparklineData& spark, uint8
 void dashboardDrawLemonDollar(const LemonPrice& lemon, const SparklineData* lemonSpark = nullptr,
                               uint8_t dollarPeriod = 1, ChartStyle dollarChartStyle = CHART_LINE,
                               float dollarChange = NAN);
+
+// Compact stocks card rendered into Z2 (pulls data from ui_stocks accessors).
+void dashboardDrawStocksZ2();
 void dashboardDrawPriceOnly(const BtcPrice& btc, uint8_t selectedPair = 0);  // Partial update — price strip only
 void dashboardRedrawChartOnly(const SparklineData& spark, ChartStyle chartStyle, const OhlcData* ohlc = nullptr, float ath = NAN);  // Partial update — chart area only
 

@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdint>
 #include "touch_manager.h"
+#include "data_models.h"
 
 // One-time init: loads the watchlist from NVS.
 void stocksInit();
@@ -13,7 +15,17 @@ void stocksFetchTask();
 // edit via captive portal).
 void stocksMarkDirty();
 
-// Wired through ui_views.
+// Legacy fullscreen path — kept until Phase 4 removes it.
 void stocksDrawAll();
 void stocksHandleTouch(const TouchEvent& evt);
 void stocksTick();
+
+// ── Accessors used by ui_dashboard to render the compact Z2 card ──
+uint8_t             stocksGetFocusedIdx();
+uint8_t             stocksGetWatchlistCount();
+const char*         stocksGetFocusedSymbol();     // nullptr if watchlist empty
+const StockQuote*   stocksGetFocusedQuote();      // nullptr if no cache for focused symbol
+const SparklineData* stocksGetFocusedSpark();     // nullptr if no sparkline cached
+
+// Advance focused ticker (wraps). Triggers a priority refresh.
+void stocksAdvanceFocused();
