@@ -33,10 +33,14 @@ static bool            s_cacheDirty     = false;            // quotes changed si
 static TaskHandle_t   s_workerHandle  = nullptr;
 static volatile bool  s_fetching      = false;
 static char           s_lastDbg[64]   = "";
-// Burst mode: after an initial kick, worker self-notifies N-1 more times
-// to fetch every watchlist symbol back-to-back. Used when the user first
-// enters Stocks mode so all charts fill within ~15s instead of N × 60s.
-static volatile uint8_t s_burstRemaining = 0;
+// Burst mode — bitmask of watchlist slots still to fetch in the current
+// burst. The worker drains this one slot at a time (focused first, then
+// lowest-numbered bit). Failed fetches stay set until retries exhaust,
+// so MSTR (which flakes on fragmented heap) gets re-tried AFTER other
+// symbols free their TLS buffers instead of dying silently.
+#define STOCKS_MAX_BURST_RETRIES 2
+static volatile uint8_t s_burstPending = 0;
+static uint8_t          s_burstRetryCount[STOCK_MAX_SYMBOLS] = {0};
 
 static void stocksWorkerTask(void*);
 
@@ -86,15 +90,36 @@ void stocksMarkDirty() { s_dirty = true; }
 static void stocksFetchBody() {
     if (s_watchlist.count == 0) return;
 
-    // Pick target: priority (user-tapped ticker) wins over round-robin cursor.
-    uint8_t target;
+    // Pick target: priority (user tap) wins, then the burst pending mask
+    // (preferring focused if still queued, otherwise lowest-numbered slot),
+    // finally the regular RR cursor. Tracked source flags so we only
+    // advance the RR cursor when we're actually on the RR path.
+    uint8_t target = 0xFF;
+    bool fromBurst = false;
+    bool burstWasActive = (s_burstPending != 0);
+
     if (s_priorityIdx != 0xFF && s_priorityIdx < s_watchlist.count) {
         target = s_priorityIdx;
         s_priorityIdx = 0xFF;
+        if (burstWasActive && (s_burstPending & (uint8_t)(1u << target))) {
+            fromBurst = true;
+        }
+    } else if (burstWasActive) {
+        if ((s_burstPending & (uint8_t)(1u << s_focusedIdx)) &&
+            s_focusedIdx < s_watchlist.count) {
+            target = s_focusedIdx;
+        } else {
+            for (uint8_t i = 0; i < STOCK_MAX_SYMBOLS; i++) {
+                if (s_burstPending & (uint8_t)(1u << i)) { target = i; break; }
+            }
+        }
+        fromBurst = true;
     } else {
         if (s_rrIdx >= s_watchlist.count) s_rrIdx = 0;
         target = s_rrIdx;
     }
+
+    if (target >= s_watchlist.count) return;
     const char* sym = s_watchlist.symbols[target];
 
     StockQuote   tmpQuote = {};
@@ -116,23 +141,46 @@ static void stocksFetchBody() {
         uint8_t wIdx = watchlistIndexOf(tmpQuote.symbol);
         if (wIdx != 0xFF) s_sparks[wIdx] = tmpSpark;
 
+        s_burstRetryCount[target] = 0;
+        s_burstPending &= (uint8_t)~(1u << target);
         s_everFetched = true;
         s_cacheDirty  = true;
-        Serial.printf("[Stocks] updated %s (rr=%u, prio=%u)\n", sym, (unsigned)s_rrIdx, (unsigned)target);
+        Serial.printf("[Stocks] updated %s (target=%u pending=0x%02X)\n",
+                      sym, (unsigned)target, (unsigned)s_burstPending);
     } else {
-        Serial.printf("[Stocks] fetch failed for %s: %d\n", sym, (int)r);
-    }
-
-    if (target == s_rrIdx) {
-        s_rrIdx = (s_rrIdx + 1) % s_watchlist.count;
-        if (s_rrIdx == 0 && s_cacheDirty) {
-            nvsSaveStockQuotes(s_quotes, s_quoteCount);
-            nvsSaveStockSparks(s_sparks, s_watchlist);
-            s_cacheDirty = false;
-            Serial.printf("[Stocks] quote+spark cache flushed to NVS (%u symbols)\n",
-                          (unsigned)s_quoteCount);
+        Serial.printf("[Stocks] fetch failed for %s: %d (retry %u/%u)\n",
+                      sym, (int)r,
+                      (unsigned)s_burstRetryCount[target],
+                      (unsigned)STOCKS_MAX_BURST_RETRIES);
+        // Keep the slot pending for another attempt — worker will cycle
+        // through other pending slots first so mbedtls can free buffers
+        // between MSTR retries. Budget capped to avoid runaway loops.
+        if (s_burstRetryCount[target] < STOCKS_MAX_BURST_RETRIES) {
+            s_burstRetryCount[target]++;
+            s_burstPending |= (uint8_t)(1u << target);
+        } else {
+            s_burstPending &= (uint8_t)~(1u << target);
         }
     }
+
+    // Regular RR cursor advance — only when this fetch came from the RR
+    // path (burst pending mask drives its own ordering). NVS flush happens
+    // on RR wrap OR on burst drain, below.
+    bool rrCycleComplete = false;
+    if (!fromBurst && target == s_rrIdx) {
+        s_rrIdx = (s_rrIdx + 1) % s_watchlist.count;
+        if (s_rrIdx == 0) rrCycleComplete = true;
+    }
+
+    bool burstJustDrained = (burstWasActive && s_burstPending == 0);
+    if (s_cacheDirty && (rrCycleComplete || burstJustDrained)) {
+        nvsSaveStockQuotes(s_quotes, s_quoteCount);
+        nvsSaveStockSparks(s_sparks, s_watchlist);
+        s_cacheDirty = false;
+        Serial.printf("[Stocks] quote+spark cache flushed to NVS (%u symbols)\n",
+                      (unsigned)s_quoteCount);
+    }
+
     s_dirty = true;
 }
 
@@ -143,12 +191,11 @@ static void stocksWorkerTask(void*) {
         stocksFetchBody();
         s_fetching = false;
 
-        // Burst chain: if more symbols pending from a burst request, kick
-        // the next fetch immediately (after a short breather so the UI can
-        // repaint the just-fetched symbol and the TCP/TLS session has time
-        // to tear down before the next handshake).
-        if (s_burstRemaining > 0) {
-            s_burstRemaining--;
+        // Chain as long as the burst pending mask has slots to serve (a
+        // mix of unfetched and retry-queued slots). Brief pause lets the
+        // UI repaint the just-finished symbol and gives the TCP/TLS
+        // session time to tear down before the next handshake.
+        if (s_burstPending != 0) {
             vTaskDelay(pdMS_TO_TICKS(400));
             xTaskNotifyGive(s_workerHandle);
         }
@@ -170,10 +217,18 @@ void stocksFetchTask() {
 void stocksRequestBurst() {
     if (!s_workerHandle) return;
     if (s_watchlist.count == 0) return;
-    s_priorityIdx = s_focusedIdx;
-    s_burstRemaining = (s_watchlist.count > 1) ? (s_watchlist.count - 1) : 0;
-    Serial.printf("[Stocks] burst refresh requested (%u symbols, focus=%u)\n",
-                  (unsigned)s_watchlist.count, (unsigned)s_focusedIdx);
+    // Queue every watchlist slot; the fetch body will prefer focused first,
+    // then lowest-numbered pending slot. Retries are handled transparently
+    // by the same mask (failed slots stay set until budget exhausts).
+    uint8_t mask = 0;
+    for (uint8_t i = 0; i < s_watchlist.count && i < STOCK_MAX_SYMBOLS; i++) {
+        mask |= (uint8_t)(1u << i);
+    }
+    s_burstPending = mask;
+    s_priorityIdx = 0xFF;
+    memset(s_burstRetryCount, 0, sizeof(s_burstRetryCount));
+    Serial.printf("[Stocks] burst refresh requested (pending=0x%02X focus=%u)\n",
+                  (unsigned)mask, (unsigned)s_focusedIdx);
     xTaskNotifyGive(s_workerHandle);
 }
 
@@ -195,7 +250,7 @@ void stocksStop() {
         Serial.println("[Stocks] worker stopped");
     }
     s_fetching = false;
-    s_burstRemaining = 0;
+    s_burstPending = 0;
     // Release the worker's dedicated TLS session too — frees ~30KB DRAM.
     stocksClientStop();
 }
