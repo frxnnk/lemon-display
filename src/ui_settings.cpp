@@ -16,6 +16,7 @@
 #include "config_server.h"
 #include "data/satoshi_fonts.h"
 #include <Arduino.h>
+#include <WiFi.h>
 
 #define MARGIN     16
 #define CARD_W    448
@@ -230,9 +231,13 @@ void settingsDraw() {
             settScr.setTextDatum(lgfx::middle_center);
             settScr.drawString(buf, MARGIN + CARD_W / 2, by + BTN_H / 2, &SatoshiMedium18);
         } else if (otaChecked && !otaResult.available) {
-            char statusBuf[48];
+            char statusBuf[64];
             if (otaResult.httpCode != 200) {
-                snprintf(statusBuf, sizeof(statusBuf), "Error HTTP %d", otaResult.httpCode);
+                snprintf(statusBuf, sizeof(statusBuf),
+                         "HTTP %d h=%uk w=%d",
+                         otaResult.httpCode,
+                         (unsigned)(ESP.getFreeHeap() / 1024),
+                         (int)WiFi.status());
                 settScr.setTextColor(Colors::NEGATIVE, Colors::BG_SURFACE);
             } else {
                 snprintf(statusBuf, sizeof(statusBuf), "Estas al dia");
