@@ -84,6 +84,11 @@ static const char* stocksHttpGet(const char* url, ApiResult& result, int timeout
     return _stkBuf;
 }
 
+void stocksClientStop() {
+    _stkHttp.end();
+    _stkClient.stop();
+}
+
 // ── Yahoo Finance v8 chart: /v8/finance/chart/SYM?range=...&interval=... ──
 // Single request returns both quote-like meta + the close[] array we
 // downsample into a SparklineData. Avoids the /v7/finance/quote endpoint

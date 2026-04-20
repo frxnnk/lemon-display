@@ -195,22 +195,43 @@ bool otaFlash(const char* binUrl, void(*progressCB)(int pct), const char* md5) {
     // ── Step 1: Resolve redirect (GitHub always 302s to CDN) ──
     otaScreen("Step 1: GitHub API redirect...");
     static WiFiClientSecure client;
-    client.setInsecure();  // Step 1 only resolves redirect — no cert needed
-
     static HTTPClient http;
-    http.begin(client, binUrl);
-#ifdef GITHUB_PAT
-    http.addHeader("Authorization", "Bearer " GITHUB_PAT);
-    otaScreen("  Auth: PAT set");
-#else
-    otaScreen("  Auth: none", 0xFBE0);
-#endif
-    http.addHeader("Accept", "application/octet-stream");
-    http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
-    http.setTimeout(30000);
 
-    esp_task_wdt_reset();
-    int code = http.GET();
+    // Retry on HTTPC_ERROR_CONNECTION_FAILED (-1) — on devices with fragmented
+    // DRAM the first TLS handshake can fail even when total free heap says
+    // there's plenty available. Give it a few shots with a delay in between.
+    int code = -1;
+    for (int attempt = 0; attempt < 3 && code < 0; attempt++) {
+        if (attempt > 0) {
+            snprintf(dbg, sizeof(dbg), "  Retry %d (h=%u m=%u)",
+                     attempt,
+                     (unsigned)(ESP.getFreeHeap() / 1024),
+                     (unsigned)(ESP.getMaxAllocHeap() / 1024));
+            otaScreen(dbg, 0xFBE0);
+            http.end();
+            client.stop();
+            esp_task_wdt_reset();
+            delay(500);
+            esp_task_wdt_reset();
+        }
+
+        client.setInsecure();
+        http.begin(client, binUrl);
+#ifdef GITHUB_PAT
+        http.addHeader("Authorization", "Bearer " GITHUB_PAT);
+        if (attempt == 0) otaScreen("  Auth: PAT set");
+#else
+        if (attempt == 0) otaScreen("  Auth: none", 0xFBE0);
+#endif
+        http.addHeader("Accept", "application/octet-stream");
+        http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+        http.setTimeout(30000);
+
+        esp_task_wdt_reset();
+        code = http.GET();
+        esp_task_wdt_reset();
+    }
+
     snprintf(dbg, sizeof(dbg), "  Response: %d", code);
     otaScreen(dbg, (code == 302 || code == 301) ? 0x07E0 : 0xF800);
 
