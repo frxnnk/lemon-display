@@ -361,11 +361,12 @@ void nvsSaveStockQuotes(const StockQuote* quotes, uint8_t count) {
 // reorders — on load we map each saved spark back into the current
 // watchlist slot by symbol match. Full SparklineData (~1480B × 8 = ~12KB)
 // is written only on full-rotation flush, same cadence as the quote cache.
+// Scratch buffers go through ps_malloc (PSRAM) — keeping 12KB of DRAM
+// permanently reserved for this fragments the heap enough to break TLS
+// handshakes (OTA check, Yahoo fetch) on this board.
 static const uint8_t STOCK_SPARKS_VER = 1;
-
-// File-scope scratch to keep the 12KB blob off the task stack.
-static char           _spSymScratch[STOCK_MAX_SYMBOLS][STOCK_SYMBOL_LEN];
-static SparklineData  _spDataScratch[STOCK_MAX_SYMBOLS];
+static const size_t  SP_SYMS_BYTES  = (size_t)STOCK_MAX_SYMBOLS * STOCK_SYMBOL_LEN;
+static const size_t  SP_DATA_BYTES  = sizeof(SparklineData) * STOCK_MAX_SYMBOLS;
 
 void nvsLoadStockSparks(SparklineData* out, const StockWatchlist& wl) {
     for (uint8_t i = 0; i < STOCK_MAX_SYMBOLS; i++) out[i].valid = false;
@@ -373,42 +374,64 @@ void nvsLoadStockSparks(SparklineData* out, const StockWatchlist& wl) {
     uint8_t ver = prefs.getUChar("sp_ver", 0);
     if (ver != STOCK_SPARKS_VER) return;
 
-    size_t symsSz  = sizeof(_spSymScratch);
-    size_t sparksSz = sizeof(_spDataScratch);
-    if (prefs.getBytes("sp_syms", _spSymScratch, symsSz) != symsSz) return;
-    if (prefs.getBytes("sp_data", _spDataScratch, sparksSz) != sparksSz) return;
+    char* syms = (char*)ps_malloc(SP_SYMS_BYTES);
+    SparklineData* sparks = (SparklineData*)ps_malloc(SP_DATA_BYTES);
+    if (!syms || !sparks) {
+        Serial.println("[NVS] sparks load: ps_malloc failed");
+        if (syms) free(syms);
+        if (sparks) free(sparks);
+        return;
+    }
+
+    if (prefs.getBytes("sp_syms", syms, SP_SYMS_BYTES) != SP_SYMS_BYTES ||
+        prefs.getBytes("sp_data", sparks, SP_DATA_BYTES) != SP_DATA_BYTES) {
+        free(syms); free(sparks);
+        return;
+    }
 
     uint8_t placed = 0;
     for (uint8_t s = 0; s < STOCK_MAX_SYMBOLS; s++) {
-        if (!_spDataScratch[s].valid) continue;
-        if (_spSymScratch[s][0] == '\0') continue;
+        if (!sparks[s].valid) continue;
+        const char* sSym = syms + (size_t)s * STOCK_SYMBOL_LEN;
+        if (sSym[0] == '\0') continue;
         for (uint8_t w = 0; w < wl.count; w++) {
-            if (strncmp(_spSymScratch[s], wl.symbols[w], STOCK_SYMBOL_LEN) == 0) {
-                out[w] = _spDataScratch[s];
-                out[w].lastUpdate = 0;   // millis() doesn't survive reboot
+            if (strncmp(sSym, wl.symbols[w], STOCK_SYMBOL_LEN) == 0) {
+                out[w] = sparks[s];
+                out[w].lastUpdate = 0;
                 placed++;
                 break;
             }
         }
     }
+    free(syms); free(sparks);
     Serial.printf("[NVS] Stock sparks loaded: %u/%u\n",
                   (unsigned)placed, (unsigned)wl.count);
 }
 
 void nvsSaveStockSparks(const SparklineData* sparks, const StockWatchlist& wl) {
-    memset(_spSymScratch, 0, sizeof(_spSymScratch));
-    memset(_spDataScratch, 0, sizeof(_spDataScratch));
+    char* symBuf = (char*)ps_malloc(SP_SYMS_BYTES);
+    SparklineData* dataBuf = (SparklineData*)ps_malloc(SP_DATA_BYTES);
+    if (!symBuf || !dataBuf) {
+        Serial.println("[NVS] sparks save: ps_malloc failed, skipping");
+        if (symBuf) free(symBuf);
+        if (dataBuf) free(dataBuf);
+        return;
+    }
+    memset(symBuf, 0, SP_SYMS_BYTES);
+    memset(dataBuf, 0, SP_DATA_BYTES);
 
     for (uint8_t i = 0; i < wl.count && i < STOCK_MAX_SYMBOLS; i++) {
         if (!sparks[i].valid) continue;
-        strncpy(_spSymScratch[i], wl.symbols[i], STOCK_SYMBOL_LEN - 1);
-        _spSymScratch[i][STOCK_SYMBOL_LEN - 1] = '\0';
-        _spDataScratch[i] = sparks[i];
+        char* slot = symBuf + (size_t)i * STOCK_SYMBOL_LEN;
+        strncpy(slot, wl.symbols[i], STOCK_SYMBOL_LEN - 1);
+        slot[STOCK_SYMBOL_LEN - 1] = '\0';
+        dataBuf[i] = sparks[i];
     }
 
     prefs.putUChar("sp_ver", STOCK_SPARKS_VER);
-    prefs.putBytes("sp_syms", _spSymScratch, sizeof(_spSymScratch));
-    prefs.putBytes("sp_data", _spDataScratch, sizeof(_spDataScratch));
+    prefs.putBytes("sp_syms", symBuf,  SP_SYMS_BYTES);
+    prefs.putBytes("sp_data", dataBuf, SP_DATA_BYTES);
+    free(symBuf); free(dataBuf);
 }
 
 // ── Z2 slot mode ──
