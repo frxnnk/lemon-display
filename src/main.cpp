@@ -296,6 +296,9 @@ static void startProvisioning();
 static void exitPredictionMode();
 static void switchPair(uint8_t newPair);
 static void refreshPredictionForCurrentPeriod(bool showLoading);
+static void redrawDashboard();
+static void cycleZ2Mode(int8_t dir);
+static void applyZ2Mode(Z2Mode target);
 
 // ── Carousel item height for velocity conversion ──
 #define CAROUSEL_ITEM_H_PX 34
@@ -936,6 +939,44 @@ static void exitPredictionMode() {
     Serial.println("[Poly] Prediction mode exited");
 }
 
+// ── Z2 mode cycling (USD ↔ Markets ↔ Stocks) ──
+// Driven by vertical swipes on Z2. Handles the side-effects of entering /
+// leaving Markets (prediction mode has a different layout and activates
+// its own scheduler task).
+static void applyZ2Mode(Z2Mode target) {
+    bool wasPrediction = dashboardIsPredictionMode();
+    Z2Mode prev = dashboardGetZ2Mode();
+    if (target == prev && wasPrediction == (target == Z2_MARKETS)) return;
+
+    // If we're leaving MARKETS, tear down prediction mode first.
+    if (wasPrediction && target != Z2_MARKETS) {
+        exitPredictionMode();
+    }
+
+    if (target == Z2_MARKETS) {
+        // Prediction mode has guards (Pro-mode, z2H>0). If they fail, it
+        // shows a toast and returns — we stay on the previous mode.
+        if (!isProModeEnabled() || dashboardGetZ2H() <= 0) {
+            enterPredictionMode();     // shows toast, returns without flipping
+            return;                     // keep previous Z2 mode
+        }
+        dashboardSetZ2Mode(Z2_MARKETS);
+        enterPredictionMode();
+        return;
+    }
+
+    dashboardSetZ2Mode(target);
+    redrawDashboard();
+}
+
+static void cycleZ2Mode(int8_t dir) {
+    Z2Mode cur = dashboardGetZ2Mode();
+    int8_t n = (int8_t)cur + dir;
+    while (n < 0) n += (int8_t)Z2_COUNT;
+    n %= (int8_t)Z2_COUNT;
+    applyZ2Mode((Z2Mode)n);
+}
+
 // ── Place prediction ──
 static void placePrediction(bool chooseYes) {
     if (!polyDataLoaded || polyMarketCount == 0) return;
@@ -1261,8 +1302,32 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
         return;
     }
 
-    // ── Z2: Dollar / Prediction mode ──
+    // ── Z2: Dollar / Markets / Stocks ──
     if (zoneId == 2) {
+        // Vertical swipes on Z2 cycle between the three Z2 modes
+        // (USD / Markets / Stocks). Horizontal swipes stay with the mode-
+        // specific handlers below (period / market / ticker nav).
+        if (evt.gesture == TOUCH_SWIPE_UP) {
+            cycleZ2Mode(+1);
+            return;
+        }
+        if (evt.gesture == TOUCH_SWIPE_DOWN) {
+            cycleZ2Mode(-1);
+            return;
+        }
+
+        // ── Stocks mode: tap or horizontal swipe advances focused ticker ──
+        if (!dashboardIsPredictionMode() && dashboardGetZ2Mode() == Z2_STOCKS) {
+            if (evt.gesture == TOUCH_TAP ||
+                evt.gesture == TOUCH_SWIPE_LEFT ||
+                evt.gesture == TOUCH_SWIPE_RIGHT) {
+                stocksAdvanceFocused();
+                dashboardDrawStocksZ2();
+                frameDirty = true;
+            }
+            return;
+        }
+
         // ── Prediction mode: handle all Z2 touches differently ──
         if (dashboardIsPredictionMode()) {
             if (evt.gesture == TOUCH_DOUBLE_TAP) {
@@ -1323,6 +1388,8 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
         }
 
         // ── Normal dollar mode ──
+        // Vertical swipes were handled above (Z2 mode cycle). Horizontal
+        // swipes and the carousel tap still move through dollar periods.
         int8_t dir = 0;
 
         if (evt.gesture == TOUCH_TAP) {
@@ -1330,10 +1397,6 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
         } else if (evt.gesture == TOUCH_SWIPE_LEFT) {
             dir = +1;
         } else if (evt.gesture == TOUCH_SWIPE_RIGHT) {
-            dir = -1;
-        } else if (evt.gesture == TOUCH_SWIPE_UP) {
-            dir = +1;
-        } else if (evt.gesture == TOUCH_SWIPE_DOWN) {
             dir = -1;
         }
 
