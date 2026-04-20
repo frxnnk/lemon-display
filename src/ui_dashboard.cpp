@@ -1281,6 +1281,12 @@ void dashboardDrawStocksZ2() {
     sprZ2.setTextDatum(lgfx::middle_right);
     sprZ2.drawString(rightLabel, MARGIN + CARD_W - CARD_PAD, footerY, &Satoshi9);
 
+    // Fetching indicator: small yellow dot above the footer while the worker
+    // has a Yahoo request in flight — so the user knows "cargando" vs stale.
+    if (stocksIsFetching()) {
+        sprZ2.fillCircle(MARGIN + CARD_W - CARD_PAD - 4, footerY - 14, 3, Colors::SOLAR);
+    }
+
     sprZ2.setTextDatum(lgfx::top_left);
 
     if (!_batchMode) {

@@ -3,8 +3,86 @@
 #include "config.h"
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <esp_task_wdt.h>
 #include <cstring>
 #include <cmath>
+
+// ── Dedicated HTTP pipeline (off api_client's shared one) ──
+// Stocks fetch runs on a FreeRTOS worker on core 0; api_client's statics
+// are used concurrently by scheduler tasks on core 1, so we need our own
+// set of statics. Buffer lives in PSRAM (Yahoo chart is ~30KB typical).
+static WiFiClientSecure _stkClient;
+static HTTPClient       _stkHttp;
+static char*            _stkBuf = nullptr;
+static const size_t     STK_BUF_SIZE = 64 * 1024;
+
+static const char* stocksHttpGet(const char* url, ApiResult& result, int timeoutMs) {
+    result = API_NETWORK_ERROR;
+    if (!_stkBuf) {
+        _stkBuf = (char*)ps_malloc(STK_BUF_SIZE);
+        if (!_stkBuf) {
+            Serial.println("[Stocks] FATAL: cannot allocate response buffer");
+            return "";
+        }
+    }
+    _stkBuf[0] = '\0';
+
+    _stkClient.setInsecure();
+    _stkHttp.setConnectTimeout(5000);
+    _stkHttp.setTimeout(timeoutMs);
+    if (!_stkHttp.begin(_stkClient, url)) {
+        _stkClient.stop();
+        return "";
+    }
+    _stkHttp.addHeader("Accept", "application/json");
+    _stkHttp.setUserAgent("Mozilla/5.0 (compatible; Lemon-Box/5.0)");
+
+    esp_task_wdt_reset();
+    int code = _stkHttp.GET();
+    esp_task_wdt_reset();
+    if (code != 200) {
+        Serial.printf("[Stocks] HTTP %d %s\n", code, url);
+        _stkHttp.end();
+        _stkClient.stop();
+        return "";
+    }
+
+    int contentLen = _stkHttp.getSize();
+    int bytesRead = 0;
+    if (contentLen > 0 && contentLen < (int)(STK_BUF_SIZE - 1)) {
+        WiFiClient* stream = _stkHttp.getStreamPtr();
+        unsigned long readStart = millis();
+        while (bytesRead < contentLen) {
+            if ((int)(millis() - readStart) > timeoutMs) {
+                Serial.printf("[Stocks] body read timeout (%d/%d)\n", bytesRead, contentLen);
+                break;
+            }
+            int avail = stream->available();
+            if (avail > 0) {
+                int toRead = avail;
+                if (toRead > contentLen - bytesRead) toRead = contentLen - bytesRead;
+                int n = stream->readBytes(_stkBuf + bytesRead, toRead);
+                if (n <= 0) break;
+                bytesRead += n;
+                esp_task_wdt_reset();
+            } else if (!stream->connected()) {
+                break;
+            } else {
+                vTaskDelay(pdMS_TO_TICKS(10));
+                esp_task_wdt_reset();
+            }
+        }
+    }
+    _stkBuf[bytesRead] = '\0';
+
+    _stkHttp.end();
+    _stkClient.stop();
+
+    if (bytesRead > 0) result = API_OK;
+    return _stkBuf;
+}
 
 // ── Yahoo Finance v8 chart: /v8/finance/chart/SYM?range=...&interval=... ──
 // Single request returns both quote-like meta + the close[] array we
@@ -24,8 +102,10 @@ ApiResult fetchStockChart(const char* symbol, const char* range, const char* int
     if (n <= 0 || n >= (int)sizeof(urlBuf)) return API_NETWORK_ERROR;
 
     ApiResult result;
-    // 5s cap on Yahoo so a slow symbol can't freeze the UI for the full 8s.
-    const char* json = apiHttpGet(urlBuf, false, result, 5000);
+    // Uses the stocks-dedicated HTTP pipeline (see stocksHttpGet above) so
+    // the FreeRTOS worker can fetch without racing api_client's shared
+    // secureClient that runs on the main-loop scheduler.
+    const char* json = stocksHttpGet(urlBuf, result, 5000);
     if (result != API_OK) return result;
     if (!json || !json[0]) return API_NETWORK_ERROR;
 
