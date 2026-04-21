@@ -156,6 +156,7 @@ bool dashboardIsPredictionMode();
 void dashboardSetPredictionMode(bool active);
 bool dashboardHitTestPredYes(int16_t x, int16_t y);
 bool dashboardHitTestPredNo(int16_t x, int16_t y);
+bool dashboardHitTestPredStats(int16_t x, int16_t y);
 
 // Prediction countdown epoch cache
 uint32_t dashboardGetPredEndEpoch();

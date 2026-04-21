@@ -2064,7 +2064,29 @@ void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t s
         }
         sprZ2.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
         sprZ2.setTextDatum(lgfx::middle_center);
-        sprZ2.drawString(statsBuf, SCREEN_W / 2, sy + sh / 2, &Satoshi9);
+        sprZ2.drawString(statsBuf, SCREEN_W / 2, sy + 9, &Satoshi9);
+
+        // ── History dots (last 10, most recent on right) ──
+        if (history && histCount > 0) {
+            const uint8_t DOT_SIZE = 5;
+            const uint8_t DOT_GAP  = 3;
+            const uint8_t MAX_DOTS = 10;
+            uint8_t n = histCount < MAX_DOTS ? histCount : MAX_DOTS;
+            int totalW = n * DOT_SIZE + (n - 1) * DOT_GAP;
+            int startX = (SCREEN_W - totalW) / 2;
+            int dotY   = sy + sh - DOT_SIZE - 4;
+
+            for (uint8_t i = 0; i < n; i++) {
+                // Oldest-first on the left: walk backwards from head, then reverse order
+                int idx = ((int)histHead - (int)n + (int)i + (int)PRED_HISTORY_MAX) % (int)PRED_HISTORY_MAX;
+                uint8_t r = history[idx].result;
+                uint16_t col = (r == 1) ? Colors::POSITIVE
+                             : (r == 2) ? Colors::NEGATIVE
+                             :            Colors::SOLAR;   // pending
+                int x = startX + i * (DOT_SIZE + DOT_GAP);
+                sprZ2.fillRect(x, dotY, DOT_SIZE, DOT_SIZE, col);
+            }
+        }
     }
 
     // ── Active prediction / last resolution status (Y=176) ──
@@ -2143,6 +2165,12 @@ bool dashboardHitTestPredNo(int16_t x, int16_t y) {
     int sprY = y - z2Y;
     return (x >= PRED_BTN_NO_X && x < PRED_BTN_NO_X + PRED_BTN_W &&
             sprY >= PRED_BTN_Y && sprY < PRED_BTN_Y + PRED_BTN_H);
+}
+
+bool dashboardHitTestPredStats(int16_t x, int16_t y) {
+    int sprY = y - z2Y;
+    return (x >= MARGIN + CARD_PAD && x < SCREEN_W - MARGIN - CARD_PAD &&
+            sprY >= 146 && sprY < 174);
 }
 
 

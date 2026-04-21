@@ -239,6 +239,67 @@ static void resolveActivePredictionIfClosed() {
                   (unsigned)statsPeriod);
 }
 
+// Debug helper: force-resolve the active prediction as a WIN or LOSS without
+// waiting for Polymarket to settle. Triggered by a double-tap on the stats card.
+static void debugForceResolve(bool userWon) {
+    if (!refreshActivePredictionFromNvs(true)) {
+        showToast("Sin apuesta activa");
+        return;
+    }
+
+    bool yesWon = userWon ? activePred.chosenYes : !activePred.chosenYes;
+    uint8_t statsPeriod = (activePred.periodIdx < BTC_PERIOD_COUNT)
+        ? activePred.periodIdx
+        : selectedPeriod;
+
+    PolyStats resolvedStats = {};
+    nvsLoadPolyStats(statsPeriod, resolvedStats);
+    if (userWon) {
+        resolvedStats.wins++;
+        resolvedStats.streak++;
+        if (resolvedStats.streak > resolvedStats.bestStreak) {
+            resolvedStats.bestStreak = resolvedStats.streak;
+        }
+    } else {
+        resolvedStats.losses++;
+        resolvedStats.streak = 0;
+    }
+    nvsSavePolyStats(statsPeriod, resolvedStats);
+
+    if (statsPeriod == selectedPeriod) {
+        polyStats = resolvedStats;
+    }
+
+    snprintf(polyOutcomeMsg[statsPeriod], sizeof(polyOutcomeMsg[statsPeriod]),
+             "%s (%s gano) [SIM]",
+             userWon ? "Ganaste!" : "Perdiste",
+             yesWon ? "SUBE" : "BAJA");
+
+    for (uint8_t i = 0; i < predHistCount; i++) {
+        int idx = ((int)predHistHead - 1 - i + PRED_HISTORY_MAX) % PRED_HISTORY_MAX;
+        if (predHistory[idx].result == 0 &&
+            predHistory[idx].timestamp == activePred.timestamp) {
+            predHistory[idx].result = userWon ? 1 : 2;
+            break;
+        }
+    }
+    nvsSavePredHistory(predHistory, predHistHead, predHistCount);
+
+    if (audioIsEnabled()) {
+        userWon ? playAlertUp() : playAlertDown();
+    }
+
+    char toastBuf[48];
+    snprintf(toastBuf, sizeof(toastBuf), "[SIM] %s",
+             userWon ? "Ganaste" : "Perdiste");
+    showToast(toastBuf);
+
+    nvsClearPolyPrediction();
+    memset(&activePred, 0, sizeof(activePred));
+    Serial.printf("[Poly] SIM resolved user=%s period=%u\n",
+                  userWon ? "WIN" : "LOSE", (unsigned)statsPeriod);
+}
+
 // ── Animators ──
 static ValueAnimator btcPriceAnim;
 static ValueAnimator lemonBidAnim;
@@ -997,11 +1058,15 @@ static void placePrediction(bool chooseYes) {
 
     const PolyMarket& mkt = polyMarkets[polySelectedIdx];
 
-    // Allow replacing an active prediction when switching markets/timeframes.
+    // Refuse to overwrite a pending bet — previously the old prediction was
+    // silently cleared from NVS, losing the W/L entirely.
     if (refreshActivePredictionFromNvs(true)) {
-        if (strcmp(activePred.conditionId, mkt.conditionId) == 0) return;
-        nvsClearPolyPrediction();
-        memset(&activePred, 0, sizeof(activePred));
+        if (strcmp(activePred.conditionId, mkt.conditionId) == 0) {
+            showToast("Ya apostaste en este mercado");
+            return;
+        }
+        showToast("Ya tenes apuesta activa");
+        return;
     }
 
     memset(&activePred, 0, sizeof(activePred));
@@ -1367,6 +1432,16 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
                     placePrediction(false);
                     return;
                 }
+            }
+            // Debug: double-tap stats card to simulate a win (no Polymarket wait)
+            if (evt.gesture == TOUCH_DOUBLE_TAP &&
+                dashboardHitTestPredStats(evt.x, evt.y)) {
+                debugForceResolve(true);
+                drawPredictionUI(false);
+                z2DrawnThisFrame = true;
+                z2Dirty = false;
+                frameDirty = true;
+                return;
             }
             // Swipe left/right: browse markets with slide animation
             if (evt.gesture == TOUCH_SWIPE_LEFT && polyMarketCount > 1) {
