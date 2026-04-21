@@ -155,16 +155,16 @@ static bool refreshActivePredictionFromNvs(bool clearLegacyTimestamp) {
 }
 
 static bool inferYesWinner(const PolyMarket& mkt, bool& yesWon) {
-    if (mkt.yesPrice >= 0.95f || mkt.noPrice <= 0.05f) {
+    // Only trust settled markets: a closed market pays 1.0 to the winning side
+    // and 0.0 to the loser. Anything in between means Polymarket hasn't settled
+    // yet — return false so the caller retries on the next tick instead of
+    // locking in a premature winner.
+    if (mkt.yesPrice >= 0.98f && mkt.noPrice <= 0.02f) {
         yesWon = true;
         return true;
     }
-    if (mkt.noPrice >= 0.95f || mkt.yesPrice <= 0.05f) {
+    if (mkt.noPrice >= 0.98f && mkt.yesPrice <= 0.02f) {
         yesWon = false;
-        return true;
-    }
-    if (mkt.yesPrice > 0.0f || mkt.noPrice > 0.0f) {
-        yesWon = (mkt.yesPrice >= mkt.noPrice);
         return true;
     }
     return false;
@@ -804,17 +804,20 @@ static void updateCrossRate() {
 
 // ── Polymarket update callback ──
 static void updatePolymarket() {
-    if (!state.online || !dashboardIsPredictionMode()) return;
+    if (!state.online) return;
+
+    // Resolve any pending prediction first — runs regardless of current screen so
+    // wins/losses register as soon as the underlying Polymarket settles.
+    esp_task_wdt_reset();
+    resolveActivePredictionIfClosed();
+
+    if (!dashboardIsPredictionMode()) return;
 
     uint8_t cnt = 0;
     Serial.printf("[Poly] Fetch for period idx=%d (%s)\n",
                   selectedPeriod, BTC_PERIODS[selectedPeriod].label);
     esp_task_wdt_reset();
     ApiResult res = fetchPolyMarkets(polyMarkets, cnt, PM_MAX_MARKETS, selectedPeriod);
-
-    // Resolve against Polymarket by conditionId, independent from currently shown market/timeframe.
-    esp_task_wdt_reset();
-    resolveActivePredictionIfClosed();
 
     if (res == API_OK && cnt > 0) {
         polyMarketCount = cnt;
@@ -920,7 +923,9 @@ static void enterPredictionMode() {
 
 static void exitPredictionMode() {
     dashboardSetPredictionMode(false);
-    scheduler.enable(taskPolymarket, false);
+    // Keep taskPolymarket enabled so pending predictions can resolve off-screen.
+    // Interval is restored to default; updatePolymarket() will skip the market fetch
+    // when not in prediction mode but still call resolveActivePredictionIfClosed().
     scheduler.setInterval(taskPolymarket, POLYMARKET_REFRESH_MS);  // Restore default interval
 
     // Restore pair selector and full period list
@@ -1015,7 +1020,6 @@ static void placePrediction(bool chooseYes) {
 
     polyOutcomeMsg[selectedPeriod][0] = '\0';
     nvsSavePolyPrediction(activePred);
-    polyStats.pending = 1;
 
     // Push to prediction history
     PredHistoryEntry histEntry = {};
@@ -1689,7 +1693,8 @@ void setup() {
     taskDollarSpark = scheduler.add("dolarSpark", UPDATE_SPARKLINE_MS, updateDollarSparkline);
     taskCrossRate   = scheduler.add("crossRate", 60000, updateCrossRate);  // 60s for XAU/ARS rates
     taskPolymarket  = scheduler.add("polymarket", POLYMARKET_REFRESH_MS, updatePolymarket);
-    scheduler.enable(taskPolymarket, false);  // Disabled by default, enabled in prediction mode
+    // Task stays enabled at the default interval so pending predictions resolve
+    // in the background; the callback gates the market fetch on prediction mode.
     taskStocks      = scheduler.add("stocks",    UPDATE_STOCKS_MS,     stocksFetchTask);
     // Stocks stays idle until the user swaps into Stocks mode — otherwise the
     // first-boot burst of HTTPS fetches blocks the main loop and the UI feels
