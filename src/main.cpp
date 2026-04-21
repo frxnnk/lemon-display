@@ -239,6 +239,33 @@ static void resolveActivePredictionIfClosed() {
                   (unsigned)statsPeriod);
 }
 
+// Cancel the active prediction without counting it. Used when a stuck pending
+// bet blocks new bets (e.g. a market that closed with indecisive prices so
+// inferYesWinner never accepted settlement). Marks the history entry as 3
+// (cancelled) so the user can see it was discarded.
+static void cancelPendingPrediction() {
+    if (!refreshActivePredictionFromNvs(true)) {
+        showToast("Sin apuesta activa");
+        return;
+    }
+
+    for (uint8_t i = 0; i < predHistCount; i++) {
+        int idx = ((int)predHistHead - 1 - i + PRED_HISTORY_MAX) % PRED_HISTORY_MAX;
+        if (predHistory[idx].result == 0 &&
+            predHistory[idx].timestamp == activePred.timestamp) {
+            predHistory[idx].result = 3;  // cancelled
+            break;
+        }
+    }
+    nvsSavePredHistory(predHistory, predHistHead, predHistCount);
+
+    nvsClearPolyPrediction();
+    memset(&activePred, 0, sizeof(activePred));
+    polyOutcomeMsg[selectedPeriod][0] = '\0';
+    showToast("Apuesta cancelada");
+    Serial.println("[Poly] Pending prediction cancelled by user");
+}
+
 // Debug helper: force-resolve the active prediction as a WIN or LOSS without
 // waiting for Polymarket to settle. Triggered by a double-tap on the stats card.
 static void debugForceResolve(bool userWon) {
@@ -1468,7 +1495,17 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
                 frameDirty = true;
                 return;
             }
-            // Long press: exit prediction mode
+            // Long press on stats card: cancel a stuck pending bet without counting
+            if (evt.gesture == TOUCH_LONG_PRESS &&
+                dashboardHitTestPredStats(evt.x, evt.y)) {
+                cancelPendingPrediction();
+                drawPredictionUI(false);
+                z2DrawnThisFrame = true;
+                z2Dirty = false;
+                frameDirty = true;
+                return;
+            }
+            // Long press elsewhere: exit prediction mode
             if (evt.gesture == TOUCH_LONG_PRESS) {
                 exitPredictionMode();
                 return;
