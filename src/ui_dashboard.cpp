@@ -2082,6 +2082,7 @@ void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t s
                 uint8_t r = history[idx].result;
                 uint16_t col = (r == 1) ? Colors::POSITIVE
                              : (r == 2) ? Colors::NEGATIVE
+                             : (r == 3) ? Colors::TEXT_SECONDARY  // cancelled
                              :            Colors::SOLAR;   // pending
                 int x = startX + i * (DOT_SIZE + DOT_GAP);
                 sprZ2.fillRect(x, dotY, DOT_SIZE, DOT_SIZE, col);
