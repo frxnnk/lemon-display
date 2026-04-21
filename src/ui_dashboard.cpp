@@ -2039,6 +2039,8 @@ void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t s
     drawProbabilityBar(sprZ2, MARGIN + CARD_PAD, PRED_BAR_Y,
                        CARD_W - 2 * CARD_PAD, PRED_BAR_H, mkt.yesPrice);
 
+    bool hasAnyPending = (activePred && activePred->conditionId[0] != '\0' &&
+                          activePred->resolved == 0);
     bool hasActive = (activePred && activePred->conditionId[0] != '\0' &&
                       strcmp(activePred->conditionId, mkt.conditionId) == 0);
     drawPredictionButton(sprZ2, PRED_BTN_YES_X, PRED_BTN_Y, PRED_BTN_W, PRED_BTN_H,
@@ -2052,20 +2054,31 @@ void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t s
         int sh = 28;
         drawGlassCard(sprZ2, MARGIN + CARD_PAD, sy, CARD_W - 2 * CARD_PAD, sh, 8);
 
-        char statsBuf[64];
-        snprintf(statsBuf, sizeof(statsBuf), "W %d   L %d   Racha %d",
-                 stats.wins, stats.losses, stats.streak);
+        char statsBuf[72];
+        if (hasAnyPending) {
+            snprintf(statsBuf, sizeof(statsBuf), "W %d   L %d   Racha %d   \xE2\x97\x8F",
+                     stats.wins, stats.losses, stats.streak);
+        } else {
+            snprintf(statsBuf, sizeof(statsBuf), "W %d   L %d   Racha %d",
+                     stats.wins, stats.losses, stats.streak);
+        }
         sprZ2.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
         sprZ2.setTextDatum(lgfx::middle_center);
         sprZ2.drawString(statsBuf, SCREEN_W / 2, sy + sh / 2, &Satoshi9);
     }
 
     // ── Active prediction / last resolution status (Y=176) ──
-    if (hasActive || (statusMsg && statusMsg[0])) {
+    if (hasAnyPending || (statusMsg && statusMsg[0])) {
         char predBuf[64];
         if (hasActive && activePred->resolved == 0) {
             snprintf(predBuf, sizeof(predBuf), "Pendiente: %s (%.0f%%)",
                      activePred->chosenYes ? "SUBE" : "BAJA", activePred->probAtBet * 100);
+            sprZ2.setTextColor(Colors::SOLAR, Colors::BG_CARD);
+        } else if (hasAnyPending) {
+            // Active bet exists but on a different market/TF — keep the user informed
+            // so they don't think the bet was lost.
+            snprintf(predBuf, sizeof(predBuf), "Apuesta activa en otro mercado: %s",
+                     activePred->chosenYes ? "SUBE" : "BAJA");
             sprZ2.setTextColor(Colors::SOLAR, Colors::BG_CARD);
         } else if (hasActive && activePred->resolved == 1) {
             snprintf(predBuf, sizeof(predBuf), "Ganaste!");
