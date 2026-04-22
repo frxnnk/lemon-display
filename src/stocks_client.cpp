@@ -98,6 +98,13 @@ static const char* stocksHttpGet(const char* url, ApiResult& result, int timeout
         esp_task_wdt_reset();
     }
     _stkLastCode = code;
+    if (code == 429) {
+        Serial.printf("[Stocks] HTTP 429 %s\n", url);
+        _stkHttp.end();
+        _stkClient.stop();
+        result = API_RATE_LIMITED;
+        return "";
+    }
     if (code != 200) {
         Serial.printf("[Stocks] HTTP %d %s\n", code, url);
         _stkHttp.end();

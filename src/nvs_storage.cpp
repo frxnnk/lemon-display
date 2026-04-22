@@ -199,42 +199,124 @@ void nvsSavePolyStats(uint8_t periodIdx, const PolyStats& stats) {
     prefs.putUShort(kBest, stats.bestStreak);
 }
 
-bool nvsHasPolyPrediction() {
-    return prefs.getUChar("pm_active", 0) != 0;
+static void polyPredKeys(uint8_t periodIdx,
+                         char* kActive, size_t kActiveLen,
+                         char* kCond, size_t kCondLen,
+                         char* kYes, size_t kYesLen,
+                         char* kProb, size_t kProbLen,
+                         char* kRef, size_t kRefLen,
+                         char* kEnd, size_t kEndLen,
+                         char* kTs, size_t kTsLen,
+                         char* kPidx, size_t kPidxLen) {
+    snprintf(kActive, kActiveLen, "pa%u", (unsigned)periodIdx);
+    snprintf(kCond,   kCondLen,   "pc%u", (unsigned)periodIdx);
+    snprintf(kYes,    kYesLen,    "py%u", (unsigned)periodIdx);
+    snprintf(kProb,   kProbLen,   "pp%u", (unsigned)periodIdx);
+    snprintf(kRef,    kRefLen,    "pr%u", (unsigned)periodIdx);
+    snprintf(kEnd,    kEndLen,    "pe%u", (unsigned)periodIdx);
+    snprintf(kTs,     kTsLen,     "pt%u", (unsigned)periodIdx);
+    snprintf(kPidx,   kPidxLen,   "pi%u", (unsigned)periodIdx);
 }
 
-void nvsLoadPolyPrediction(PolyPrediction& pred) {
-    memset(&pred, 0, sizeof(pred));
-    if (!nvsHasPolyPrediction()) return;
+static void migrateLegacyPolyPrediction() {
+    if (prefs.getUChar("pm_active", 0) == 0) return;
 
-    String condId = prefs.getString("pm_cond", "");
+    uint8_t periodIdx = prefs.getUChar("pm_pidx", 255);
+    if (periodIdx < BTC_PERIOD_COUNT) {
+        char kActive[8], kCond[8], kYes[8], kProb[8], kRef[8], kEnd[8], kTs[8], kPidx[8];
+        polyPredKeys(periodIdx, kActive, sizeof(kActive), kCond, sizeof(kCond),
+                     kYes, sizeof(kYes), kProb, sizeof(kProb), kRef, sizeof(kRef),
+                     kEnd, sizeof(kEnd), kTs, sizeof(kTs), kPidx, sizeof(kPidx));
+        if (prefs.getUChar(kActive, 0) == 0) {
+            prefs.putUChar(kActive, 1);
+            prefs.putString(kCond, prefs.getString("pm_cond", ""));
+            prefs.putUChar(kYes, prefs.getUChar("pm_yes", 1));
+            prefs.putFloat(kProb, prefs.getFloat("pm_prob", 0.5f));
+            prefs.putFloat(kRef, prefs.getFloat("pm_ref", 0.0f));
+            prefs.putULong(kEnd, prefs.getULong("pm_end", 0));
+            prefs.putULong(kTs, prefs.getULong("pm_ts", 0));
+            prefs.putUChar(kPidx, periodIdx);
+        }
+    }
+
+    prefs.remove("pm_active");
+    prefs.remove("pm_cond");
+    prefs.remove("pm_yes");
+    prefs.remove("pm_prob");
+    prefs.remove("pm_ref");
+    prefs.remove("pm_end");
+    prefs.remove("pm_ts");
+    prefs.remove("pm_pidx");
+}
+
+bool nvsHasPolyPrediction(uint8_t periodIdx) {
+    migrateLegacyPolyPrediction();
+    if (periodIdx >= BTC_PERIOD_COUNT) return false;
+
+    char kActive[8], kCond[8], kYes[8], kProb[8], kRef[8], kEnd[8], kTs[8], kPidx[8];
+    polyPredKeys(periodIdx, kActive, sizeof(kActive), kCond, sizeof(kCond),
+                 kYes, sizeof(kYes), kProb, sizeof(kProb), kRef, sizeof(kRef),
+                 kEnd, sizeof(kEnd), kTs, sizeof(kTs), kPidx, sizeof(kPidx));
+    return prefs.getUChar(kActive, 0) != 0;
+}
+
+void nvsLoadPolyPrediction(uint8_t periodIdx, PolyPrediction& pred) {
+    memset(&pred, 0, sizeof(pred));
+    if (!nvsHasPolyPrediction(periodIdx)) return;
+
+    char kActive[8], kCond[8], kYes[8], kProb[8], kRef[8], kEnd[8], kTs[8], kPidx[8];
+    polyPredKeys(periodIdx, kActive, sizeof(kActive), kCond, sizeof(kCond),
+                 kYes, sizeof(kYes), kProb, sizeof(kProb), kRef, sizeof(kRef),
+                 kEnd, sizeof(kEnd), kTs, sizeof(kTs), kPidx, sizeof(kPidx));
+
+    String condId = prefs.getString(kCond, "");
     strncpy(pred.conditionId, condId.c_str(), PM_COND_ID_LEN - 1);
     pred.conditionId[PM_COND_ID_LEN - 1] = '\0';
-    pred.chosenYes = prefs.getUChar("pm_yes", 1) != 0;
-    pred.probAtBet = prefs.getFloat("pm_prob", 0.5f);
-    pred.timestamp = prefs.getULong("pm_ts", 0);
-    pred.periodIdx = prefs.getUChar("pm_pidx", 255);
+    pred.chosenYes = prefs.getUChar(kYes, 1) != 0;
+    pred.probAtBet = prefs.getFloat(kProb, 0.5f);
+    pred.refPrice  = prefs.getFloat(kRef, 0.0f);
+    pred.endEpoch  = prefs.getULong(kEnd, 0);
+    pred.timestamp = prefs.getULong(kTs, 0);
+    pred.periodIdx = prefs.getUChar(kPidx, periodIdx);
     pred.resolved  = 0;  // Active = pending
 }
 
-void nvsSavePolyPrediction(const PolyPrediction& pred) {
-    prefs.putUChar("pm_active", 1);
-    prefs.putString("pm_cond", pred.conditionId);
-    prefs.putUChar("pm_yes", pred.chosenYes ? 1 : 0);
-    prefs.putFloat("pm_prob", pred.probAtBet);
-    prefs.putULong("pm_ts", pred.timestamp);
-    prefs.putUChar("pm_pidx", pred.periodIdx);
+void nvsSavePolyPrediction(uint8_t periodIdx, const PolyPrediction& pred) {
+    if (periodIdx >= BTC_PERIOD_COUNT) return;
+
+    char kActive[8], kCond[8], kYes[8], kProb[8], kRef[8], kEnd[8], kTs[8], kPidx[8];
+    polyPredKeys(periodIdx, kActive, sizeof(kActive), kCond, sizeof(kCond),
+                 kYes, sizeof(kYes), kProb, sizeof(kProb), kRef, sizeof(kRef),
+                 kEnd, sizeof(kEnd), kTs, sizeof(kTs), kPidx, sizeof(kPidx));
+
+    prefs.putUChar(kActive, 1);
+    prefs.putString(kCond, pred.conditionId);
+    prefs.putUChar(kYes, pred.chosenYes ? 1 : 0);
+    prefs.putFloat(kProb, pred.probAtBet);
+    prefs.putFloat(kRef, pred.refPrice);
+    prefs.putULong(kEnd, pred.endEpoch);
+    prefs.putULong(kTs, pred.timestamp);
+    prefs.putUChar(kPidx, pred.periodIdx);
     Serial.printf("[NVS] Poly prediction saved: %s @ %.0f%%\n",
                   pred.chosenYes ? "YES" : "NO", pred.probAtBet * 100);
 }
 
-void nvsClearPolyPrediction() {
-    prefs.putUChar("pm_active", 0);
-    prefs.remove("pm_cond");
-    prefs.remove("pm_yes");
-    prefs.remove("pm_prob");
-    prefs.remove("pm_ts");
-    prefs.remove("pm_pidx");
+void nvsClearPolyPrediction(uint8_t periodIdx) {
+    if (periodIdx >= BTC_PERIOD_COUNT) return;
+
+    char kActive[8], kCond[8], kYes[8], kProb[8], kRef[8], kEnd[8], kTs[8], kPidx[8];
+    polyPredKeys(periodIdx, kActive, sizeof(kActive), kCond, sizeof(kCond),
+                 kYes, sizeof(kYes), kProb, sizeof(kProb), kRef, sizeof(kRef),
+                 kEnd, sizeof(kEnd), kTs, sizeof(kTs), kPidx, sizeof(kPidx));
+
+    prefs.remove(kActive);
+    prefs.remove(kCond);
+    prefs.remove(kYes);
+    prefs.remove(kProb);
+    prefs.remove(kRef);
+    prefs.remove(kEnd);
+    prefs.remove(kTs);
+    prefs.remove(kPidx);
     Serial.println("[NVS] Poly prediction cleared");
 }
 
@@ -298,7 +380,7 @@ void nvsLoadWatchlist(StockWatchlist& out) {
             int w = 0;
             for (int r = 0; s[r]; r++) {
                 char c = s[r];
-                if (c == ' ' || c == '\t') continue;
+                if (c == ' ' || c == '\t' || c == '\r' || c == '\n') continue;
                 if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
                 s[w++] = c;
             }
