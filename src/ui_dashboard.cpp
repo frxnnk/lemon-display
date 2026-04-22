@@ -1475,7 +1475,9 @@ void dashboardDrawAll(const char* timeStr,
 
     // Fill gaps between zones (prevents background flash on layout transitions)
     tft.fillRect(0, Z0_Y + Z0_H, SCREEN_W, Z1_Y - (Z0_Y + Z0_H), Colors::BG_BASE);
-    tft.fillRect(0, Z1_Y + z1H, SCREEN_W, SCREEN_H - (Z1_Y + z1H), Colors::BG_BASE);
+    tft.fillRect(0, Z1_Y + z1H, SCREEN_W, z2Y - (Z1_Y + z1H), Colors::BG_BASE);
+    if (z2H > 0 && z2Y + z2H < SCREEN_H)
+        tft.fillRect(0, z2Y + z2H, SCREEN_W, SCREEN_H - (z2Y + z2H), Colors::BG_BASE);
 }
 
 // ══════════════════════════════════════════
@@ -1513,7 +1515,9 @@ void dashboardCommitBatch() {
     sprZ1.pushSprite(0, Z1_Y);
     if (z2H > 0) sprZ2.pushSprite(0, z2Y);
     tft.fillRect(0, Z0_Y + Z0_H, SCREEN_W, Z1_Y - (Z0_Y + Z0_H), Colors::BG_BASE);
-    tft.fillRect(0, Z1_Y + z1H, SCREEN_W, SCREEN_H - (Z1_Y + z1H), Colors::BG_BASE);
+    tft.fillRect(0, Z1_Y + z1H, SCREEN_W, z2Y - (Z1_Y + z1H), Colors::BG_BASE);
+    if (z2H > 0 && z2Y + z2H < SCREEN_H)
+        tft.fillRect(0, z2Y + z2H, SCREEN_W, SCREEN_H - (z2Y + z2H), Colors::BG_BASE);
 }
 
 void dashboardSetDeferred(bool defer) {
