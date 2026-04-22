@@ -80,6 +80,14 @@ void dashboardDrawAll(const char* timeStr,
                       ChartStyle dollarChartStyle = CHART_LINE,
                       float dollarChange = NAN);
 
+// Batch control for atomic transitions (no intermediate vsync/push)
+void dashboardBeginBatch();
+void dashboardCommitBatch();
+
+// Deferred push: direct-update functions track dirty clips, single vsync on flush
+void dashboardSetDeferred(bool defer);
+void dashboardFlushDeferred();
+
 // Loading screen with progress phases
 enum LoadPhase : uint8_t {
     LOAD_LOGO = 0,

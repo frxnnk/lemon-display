@@ -1111,15 +1111,16 @@ static void enterPredictionMode() {
     // Resize zones: Z1 shrinks, Z2 expands
     dashboardSetPredictionLayout(true);
 
-    // Load stats, prediction history, and active prediction from NVS
     loadPolyStatsForSelectedPeriod();
     nvsLoadPredHistory(predHistory, predHistHead, predHistCount);
     refreshAllActivePredictionsFromNvs(true);
     countdownBeepFired = false;
 
-    // Redraw Z1 (shrunken BTC hero) + Z2 (prediction loading)
+    dashboardBeginBatch();
     redrawHero();
     drawPredictionUI(true);
+    dashboardCommitBatch();
+
     z2DrawnThisFrame = true;
     z2Dirty = false;
     frameDirty = true;
@@ -1133,22 +1134,14 @@ static void enterPredictionMode() {
 
 static void exitPredictionMode() {
     dashboardSetPredictionMode(false);
-    // Keep taskPolymarket enabled so pending predictions can resolve off-screen.
-    // Interval is restored to default; updatePolymarket() will skip the market fetch
-    // when not in prediction mode but still call resolveActivePredictionIfClosed().
-    scheduler.setInterval(taskPolymarket, POLYMARKET_REFRESH_MS);  // Restore default interval
+    scheduler.setInterval(taskPolymarket, POLYMARKET_REFRESH_MS);
 
-    // Restore pair selector and full period list
     dashboardSetPairSelectorEnabled(isProModeEnabled());
     syncDashboardFilters();
 
-    // Restore layout
     dashboardSetPredictionLayout(false);
 
-    // Mark both zones dirty for redraw
-    z1Dirty = true;
-    z2Dirty = true;
-    frameDirty = true;
+    redrawDashboard();
 
     Serial.println("[Poly] Prediction mode exited");
 }
@@ -1849,7 +1842,6 @@ static void enterDashboard() {
     lastRenderedPrice = state.btc.usd;
 
     dashboardDrawLoading(LOAD_DONE);
-    delay(300);
 
     applyModePolicyNow(false);
     const char* timeStr = getTimeStr(nvsGet24hFormat());
@@ -2039,6 +2031,7 @@ void loop() {
     if (screen == SCREEN_DASHBOARD) {
         wifiLoop();
         state.online = wifiConnected();
+        dashboardSetDeferred(true);
 
         if (!state.online && !state.wasOffline) {
             wsBinanceStop();
@@ -2207,15 +2200,22 @@ void loop() {
         }
 
         // Drive morph animation (~30fps during 800ms transition)
-        // Full redraw every frame to avoid ghost artifacts from partial updates.
+        // Chart-only push for intermediate frames (~40% less data than full Z1).
+        // Morph needs immediate push (not deferred) for smooth 30fps animation.
         {
             static bool wasMorphing = false;
             if (morphActive && chartStyle != CHART_CANDLE && !tutorialIsActive()) {
                 static unsigned long lastMorphFrame = 0;
                 unsigned long now = millis();
-                if (now - lastMorphFrame >= 33) {  // 30fps
+                if (now - lastMorphFrame >= 33) {
                     lastMorphFrame = now;
-                    redrawHero();  // full sprite rebuild (uses morphed data internally)
+                    dashboardFlushDeferred();
+                    dashboardSetDeferred(false);
+                    SparklineData& morphed = getMorphedSparkline();
+                    dashboardRedrawChartOnly(morphed, chartStyle, &state.ohlc, state.btc.ath);
+                    dashboardSetDeferred(true);
+                    z1DrawnThisFrame = true;
+                    z1Dirty = false;
                     frameDirty = true;
                     if (!morphActive) {
                         z1Dirty = true;
@@ -2340,14 +2340,12 @@ void loop() {
     }
 
     // ── Frame pacing ──
-    // Double buffering disabled (was causing bounce/repeat artifacts).
-    // Single-buffer mode: sprites write directly to the framebuffer.
-    // VSync wait reduces tearing by aligning draws to blanking period.
     if (screen == SCREEN_DASHBOARD) {
+        dashboardFlushDeferred();
         if (frameDirty) {
             frameDirty = false;
         }
-        delay(4);              // Yield to RTOS when idle
+        delay(4);
     } else {
         delay(20);
     }

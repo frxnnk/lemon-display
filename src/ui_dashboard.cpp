@@ -87,10 +87,29 @@ static LGFX_Sprite sprZ2(&tft);   // Lemon    480×120
 static bool spritesReady = false;
 
 // ── Dirty zone bitmask (bit 0=Z0, bit 1=Z1, bit 2=Z2) ──
-static uint8_t dirtyZones = 0x07;  // All dirty initially
+static uint8_t dirtyZones = 0x07;
 
 // ── Batch mode: draw functions skip push, dashboardDrawAll pushes once ──
 static bool _batchMode = false;
+
+// ── Deferred push mode: direct-update functions track dirty clips instead of pushing ──
+static bool _deferPush = false;
+struct DeferredClip { int16_t x, y, w, h; bool active; };
+static DeferredClip _defClips[3] = {};  // Z0, Z1, Z2
+static void unionClip(DeferredClip& dc, int16_t x, int16_t y, int16_t w, int16_t h) {
+    if (!dc.active) {
+        dc = {x, y, w, h, true};
+    } else {
+        int16_t x2 = min(dc.x, x);
+        int16_t y2 = min(dc.y, y);
+        int16_t r1 = dc.x + dc.w, r2 = x + w;
+        int16_t b1 = dc.y + dc.h, b2 = y + h;
+        dc.x = x2;
+        dc.y = y2;
+        dc.w = max(r1, r2) - x2;
+        dc.h = max(b1, b2) - y2;
+    }
+}
 
 // ── Carousel momentum state (global, accessible from main.cpp) ──
 CarouselState btcCarousel     = { 0.0f, 0.0f, false, -1 };
@@ -346,10 +365,6 @@ void dashboardSetLayout(uint8_t idx) {
             Serial.println("[Dashboard] ERROR: sprite re-allocation failed!");
         }
 
-        // Refill gaps (VSync-protected to avoid visible tear)
-        displayWaitVSync();
-        tft.fillRect(0, Z1_Y + z1H, SCREEN_W, SCREEN_H - (Z1_Y + z1H), Colors::BG_BASE);
-
         Serial.printf("[Dashboard] Layout %d: Z1=%d Z2=%d\n", idx, z1H, z2H);
     }
 }
@@ -564,11 +579,14 @@ void dashboardUpdateTimeDirect(const char* timeStr) {
         sx += cellW;
     }
 
-    // Atomic clipped push from sprZ0 (no intermediate blank frame)
-    displayWaitVSync();
-    tft.setClipRect(clearStartX, Z0_Y + cellY_spr, maxTotalW, cellH);
-    sprZ0.pushSprite(0, Z0_Y);
-    tft.clearClipRect();
+    if (_deferPush) {
+        unionClip(_defClips[0], clearStartX, Z0_Y + cellY_spr, maxTotalW, cellH);
+    } else {
+        displayWaitVSync();
+        tft.setClipRect(clearStartX, Z0_Y + cellY_spr, maxTotalW, cellH);
+        sprZ0.pushSprite(0, Z0_Y);
+        tft.clearClipRect();
+    }
 }
 
 // ── Direct-to-framebuffer price update (stable-width, single strip clear) ──
@@ -613,11 +631,14 @@ void dashboardUpdatePriceDirect(const BtcPrice& btc, uint8_t selectedPair) {
     sprZ1.fillRect(110, STRIP_Y, STRIP_W + 4 - (110 - (STRIP_X - 2)), 6, Colors::BG_CARD);
     drawFixedWidthPrice(sprZ1, priceBuf, PRICE_CX, PRICE_CY, priceFont, priceColor, Colors::BG_CARD);
 
-    // Atomic clipped push from sprZ1 (no intermediate blank frame)
-    displayWaitVSync();
-    tft.setClipRect(STRIP_X - 2, Z1_Y + STRIP_Y, STRIP_W + 4, STRIP_H);
-    sprZ1.pushSprite(0, Z1_Y);
-    tft.clearClipRect();
+    if (_deferPush) {
+        unionClip(_defClips[1], STRIP_X - 2, Z1_Y + STRIP_Y, STRIP_W + 4, STRIP_H);
+    } else {
+        displayWaitVSync();
+        tft.setClipRect(STRIP_X - 2, Z1_Y + STRIP_Y, STRIP_W + 4, STRIP_H);
+        sprZ1.pushSprite(0, Z1_Y);
+        tft.clearClipRect();
+    }
 }
 
 // ══════════════════════════════════════════
@@ -938,13 +959,14 @@ void dashboardRedrawChartOnly(const SparklineData& spark, ChartStyle chartStyle,
 
     sprZ1.clearClipRect();
 
-    // Clipped push — only transfer the chart region (~40% less data than full Z1)
-    // Glow dots / thick lines are contained by the sprite clip rect above,
-    // so the clear rect fully covers all changed pixels.
-    displayWaitVSync();
-    tft.setClipRect(chartX, Z1_Y + clearY, chartW, clearH);
-    sprZ1.pushSprite(0, Z1_Y);
-    tft.clearClipRect();
+    if (_deferPush) {
+        unionClip(_defClips[1], chartX, Z1_Y + clearY, chartW, clearH);
+    } else {
+        displayWaitVSync();
+        tft.setClipRect(chartX, Z1_Y + clearY, chartW, clearH);
+        sprZ1.pushSprite(0, Z1_Y);
+        tft.clearClipRect();
+    }
     dirtyZones |= (1 << 1);
 }
 
@@ -1450,6 +1472,10 @@ void dashboardDrawAll(const char* timeStr,
     sprZ0.pushSprite(0, Z0_Y);
     sprZ1.pushSprite(0, Z1_Y);
     if (z2H > 0) sprZ2.pushSprite(0, z2Y);
+
+    // Fill gaps between zones (prevents background flash on layout transitions)
+    tft.fillRect(0, Z0_Y + Z0_H, SCREEN_W, Z1_Y - (Z0_Y + Z0_H), Colors::BG_BASE);
+    tft.fillRect(0, Z1_Y + z1H, SCREEN_W, SCREEN_H - (Z1_Y + z1H), Colors::BG_BASE);
 }
 
 // ══════════════════════════════════════════
@@ -1461,10 +1487,8 @@ void dashboardSyncDrawBuffer() {
     if (!spritesReady) return;
 
     uint8_t dz = dirtyZones;
-    dirtyZones = 0;  // Reset for next frame
+    dirtyZones = 0;
 
-    // Only push zones that were actually modified this frame.
-    // Gaps are filled once in dashboardSetup() — no need to refill here.
     if (dz) displayWaitVSync();
     if (dz & (1 << 0)) {
         sprZ0.pushSprite(0, Z0_Y);
@@ -1475,6 +1499,53 @@ void dashboardSyncDrawBuffer() {
     if ((dz & (1 << 2)) && z2H > 0) {
         sprZ2.pushSprite(0, z2Y);
     }
+}
+
+void dashboardBeginBatch() {
+    _batchMode = true;
+}
+
+void dashboardCommitBatch() {
+    _batchMode = false;
+    if (!spritesReady) return;
+    displayWaitVSync();
+    sprZ0.pushSprite(0, Z0_Y);
+    sprZ1.pushSprite(0, Z1_Y);
+    if (z2H > 0) sprZ2.pushSprite(0, z2Y);
+    tft.fillRect(0, Z0_Y + Z0_H, SCREEN_W, Z1_Y - (Z0_Y + Z0_H), Colors::BG_BASE);
+    tft.fillRect(0, Z1_Y + z1H, SCREEN_W, SCREEN_H - (Z1_Y + z1H), Colors::BG_BASE);
+}
+
+void dashboardSetDeferred(bool defer) {
+    if (defer) {
+        for (auto& c : _defClips) c.active = false;
+    }
+    _deferPush = defer;
+}
+
+void dashboardFlushDeferred() {
+    if (!_deferPush) return;
+    _deferPush = false;
+    bool any = false;
+    for (auto& c : _defClips) if (c.active) { any = true; break; }
+    if (!any) return;
+    displayWaitVSync();
+    if (_defClips[0].active) {
+        tft.setClipRect(_defClips[0].x, _defClips[0].y, _defClips[0].w, _defClips[0].h);
+        sprZ0.pushSprite(0, Z0_Y);
+        _defClips[0].active = false;
+    }
+    if (_defClips[1].active) {
+        tft.setClipRect(_defClips[1].x, _defClips[1].y, _defClips[1].w, _defClips[1].h);
+        sprZ1.pushSprite(0, Z1_Y);
+        _defClips[1].active = false;
+    }
+    if (_defClips[2].active) {
+        tft.setClipRect(_defClips[2].x, _defClips[2].y, _defClips[2].w, _defClips[2].h);
+        sprZ2.pushSprite(0, z2Y);
+        _defClips[2].active = false;
+    }
+    tft.clearClipRect();
 }
 
 void dashboardPushSpotlight(int16_t sx, int16_t sy, int16_t sw, int16_t sh) {
@@ -1959,9 +2030,6 @@ void dashboardSetPredictionLayout(bool active) {
             Serial.println("[Dashboard] ERROR: sprite re-allocation failed!");
         }
 
-        // Refill gaps
-        dashboardFillGaps();
-
         Serial.printf("[Dashboard] Prediction layout: Z1=%d Z2=%d z2Y=%d\n", z1H, z2H, z2Y);
     }
 }
@@ -1997,8 +2065,10 @@ void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t s
             drawCentered(sprZ2, "Cambia de temporalidad para ver otra", z2H / 2 + 2, &Satoshi9, Colors::TEXT_TERTIARY);
         }
         predEndEpoch = 0;
-        displayWaitVSync();
-        sprZ2.pushSprite(0, z2Y);
+        if (!_batchMode) {
+            displayWaitVSync();
+            sprZ2.pushSprite(0, z2Y);
+        }
         dirtyZones |= (1 << 2);
         return;
     }
@@ -2138,8 +2208,10 @@ void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t s
     // ── Countdown progress bar (Y=186, H=6) + time text (Y=198) ──
     drawPredCountdown(periodStepSec);
 
-    displayWaitVSync();
-    sprZ2.pushSprite(0, z2Y);
+    if (!_batchMode) {
+        displayWaitVSync();
+        sprZ2.pushSprite(0, z2Y);
+    }
     dirtyZones |= (1 << 2);
 }
 
@@ -2157,14 +2229,16 @@ void dashboardUpdateCountdownDirect() {
     const int STRIP_H = z2H - STRIP_Y;  // to card bottom
     sprZ2.fillRect(MARGIN + 1, STRIP_Y, CARD_W - 2, STRIP_H, Colors::BG_CARD);
 
-    // Redraw bar + text into the sprite
     drawPredCountdown(lastPredStepSec);
 
-    // Push only the changed strip to screen
-    displayWaitVSync();
-    tft.setClipRect(0, z2Y + STRIP_Y, SCREEN_W, STRIP_H);
-    sprZ2.pushSprite(0, z2Y);
-    tft.clearClipRect();
+    if (_deferPush) {
+        unionClip(_defClips[2], 0, z2Y + STRIP_Y, SCREEN_W, STRIP_H);
+    } else {
+        displayWaitVSync();
+        tft.setClipRect(0, z2Y + STRIP_Y, SCREEN_W, STRIP_H);
+        sprZ2.pushSprite(0, z2Y);
+        tft.clearClipRect();
+    }
 }
 
 bool dashboardHitTestPredYes(int16_t x, int16_t y) {
