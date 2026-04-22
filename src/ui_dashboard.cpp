@@ -1194,6 +1194,7 @@ void dashboardDrawStocksZ2() {
 
     const StockQuote* q = stocksGetFocusedQuote();
     const char* sym = stocksGetFocusedSymbol();
+    const char* status = stocksGetFocusedStatusText();
 
     // Row 1: symbol + name (left), price (right)
     const int rowY1 = cardT + 18;
@@ -1223,7 +1224,7 @@ void dashboardDrawStocksZ2() {
     } else {
         sprZ2.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
         sprZ2.setTextDatum(lgfx::top_right);
-        sprZ2.drawString("Loading...", MARGIN + CARD_W - CARD_PAD, rowY1 - 2, &Satoshi12);
+        sprZ2.drawString(status ? status : "Loading...", MARGIN + CARD_W - CARD_PAD, rowY1 - 2, &Satoshi12);
     }
 
     // Sparkline (middle band)
@@ -1238,14 +1239,17 @@ void dashboardDrawStocksZ2() {
                       up ? Colors::POSITIVE : Colors::NEGATIVE,
                       up ? Colors::CHART_FILL : Colors::BADGE_BG_NEG);
     } else {
-        // Animated "Cargando" with a trailing-dot counter so the card feels
-        // alive while the async worker pulls data from Yahoo.
-        int dots = (int)((millis() / 400) % 4);
-        char load[16];
-        snprintf(load, sizeof(load), "Cargando%s",
-                 dots == 0 ? ""    :
-                 dots == 1 ? "."   :
-                 dots == 2 ? ".."  : "...");
+        int dots = (status && strcmp(status, "Cargando...") == 0) ? (int)((millis() / 400) % 4) : 0;
+        char load[24];
+        if (status && strcmp(status, "Cargando...") != 0) {
+            strncpy(load, status, sizeof(load) - 1);
+            load[sizeof(load) - 1] = '\0';
+        } else {
+            snprintf(load, sizeof(load), "Cargando%s",
+                     dots == 0 ? ""    :
+                     dots == 1 ? "."   :
+                     dots == 2 ? ".."  : "...");
+        }
         sprZ2.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
         sprZ2.setTextDatum(lgfx::middle_center);
         sprZ2.drawString(load, chartX + chartW / 2, chartY + chartH / 2, &Satoshi12);
@@ -1965,9 +1969,10 @@ void dashboardSetPredictionLayout(bool active) {
 void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t selected,
                              const PolyPrediction* activePred, const PolyStats& stats,
                              bool loading, const char* statusMsg, float refPriceUsd,
-                             uint32_t periodStepSec,
+                             uint32_t periodStepSec, uint8_t activePeriodIdx,
                              const PredHistoryEntry* history,
-                             uint8_t histHead, uint8_t histCount) {
+                             uint8_t histHead, uint8_t histCount,
+                             const char* debugMsg) {
     if (s_muted) return;
     if (z2H <= 0) return;  // BTC-only layout — no Z2
     sprZ2.clearClipRect();
@@ -2071,14 +2076,19 @@ void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t s
             const uint8_t DOT_SIZE = 5;
             const uint8_t DOT_GAP  = 3;
             const uint8_t MAX_DOTS = 10;
-            uint8_t n = histCount < MAX_DOTS ? histCount : MAX_DOTS;
-            int totalW = n * DOT_SIZE + (n - 1) * DOT_GAP;
+            uint8_t filtered[PRED_HISTORY_MAX] = {};
+            uint8_t n = 0;
+            for (uint8_t i = 0; i < histCount && n < MAX_DOTS; i++) {
+                int idx = ((int)histHead - 1 - i + (int)PRED_HISTORY_MAX) % (int)PRED_HISTORY_MAX;
+                if (history[idx].periodIdx != activePeriodIdx) continue;
+                filtered[n++] = (uint8_t)idx;
+            }
+            int totalW = n * DOT_SIZE + ((n > 0) ? ((n - 1) * DOT_GAP) : 0);
             int startX = (SCREEN_W - totalW) / 2;
             int dotY   = sy + sh - DOT_SIZE - 4;
 
             for (uint8_t i = 0; i < n; i++) {
-                // Oldest-first on the left: walk backwards from head, then reverse order
-                int idx = ((int)histHead - (int)n + (int)i + (int)PRED_HISTORY_MAX) % (int)PRED_HISTORY_MAX;
+                int idx = filtered[n - 1 - i];
                 uint8_t r = history[idx].result;
                 uint16_t col = (r == 1) ? Colors::POSITIVE
                              : (r == 2) ? Colors::NEGATIVE
@@ -2094,14 +2104,15 @@ void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t s
     if (hasAnyPending || (statusMsg && statusMsg[0])) {
         char predBuf[64];
         if (hasActive && activePred->resolved == 0) {
-            snprintf(predBuf, sizeof(predBuf), "Pendiente: %s (%.0f%%)",
+            snprintf(predBuf, sizeof(predBuf), "Pendiente: %s (%.0f%%) | mantener stats = cancelar",
                      activePred->chosenYes ? "SUBE" : "BAJA", activePred->probAtBet * 100);
             sprZ2.setTextColor(Colors::SOLAR, Colors::BG_CARD);
         } else if (hasAnyPending) {
-            // Active bet exists but on a different market/TF — keep the user informed
-            // so they don't think the bet was lost.
-            snprintf(predBuf, sizeof(predBuf), "Apuesta activa en otro mercado: %s",
-                     activePred->chosenYes ? "SUBE" : "BAJA");
+            const char* tf = (activePred->periodIdx < BTC_PERIOD_COUNT)
+                ? BTC_PERIODS[activePred->periodIdx].label
+                : "otro";
+            snprintf(predBuf, sizeof(predBuf), "Apuesta activa en %s: %s",
+                     tf, activePred->chosenYes ? "SUBE" : "BAJA");
             sprZ2.setTextColor(Colors::SOLAR, Colors::BG_CARD);
         } else if (hasActive && activePred->resolved == 1) {
             snprintf(predBuf, sizeof(predBuf), "Ganaste!");

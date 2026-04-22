@@ -942,6 +942,56 @@ static bool parseOutcomePrices(JsonVariantConst pricesVar, float& yes, float& no
     return false;
 }
 
+static bool equalsYesNo(const char* s, bool& yesValue) {
+    if (!s || !s[0]) return false;
+
+    char buf[8];
+    size_t n = strlen(s);
+    if (n >= sizeof(buf)) n = sizeof(buf) - 1;
+    for (size_t i = 0; i < n; i++) {
+        char c = s[i];
+        if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+        buf[i] = c;
+    }
+    buf[n] = '\0';
+
+    if (strcmp(buf, "yes") == 0) {
+        yesValue = true;
+        return true;
+    }
+    if (strcmp(buf, "no") == 0) {
+        yesValue = false;
+        return true;
+    }
+    return false;
+}
+
+static bool parseResolvedOutcome(JsonObjectConst m, bool& yesWon) {
+    const char* resolvedOutcome = m["resolvedOutcome"] | "";
+    if (equalsYesNo(resolvedOutcome, yesWon)) return true;
+
+    const char* winningOutcome = m["winningOutcome"] | "";
+    if (equalsYesNo(winningOutcome, yesWon)) return true;
+
+    const char* winner = m["winner"] | "";
+    if (equalsYesNo(winner, yesWon)) return true;
+
+    return false;
+}
+
+static bool parseWinnerFromTokens(JsonVariantConst tokensVar, bool& yesWon) {
+    JsonArrayConst tokens = tokensVar.as<JsonArrayConst>();
+    if (tokens.isNull() || tokens.size() == 0) return false;
+
+    for (JsonObjectConst token : tokens) {
+        bool winner = token["winner"] | false;
+        if (!winner) continue;
+        const char* outcome = token["outcome"] | "";
+        if (equalsYesNo(outcome, yesWon)) return true;
+    }
+    return false;
+}
+
 static bool parsePolyMarket(JsonObjectConst m, PolyMarket& pm) {
     memset(&pm, 0, sizeof(PolyMarket));
 
@@ -997,9 +1047,11 @@ static bool parsePolyMarket(JsonObjectConst m, PolyMarket& pm) {
     pm.refPriceValid = false;
 
     pm.closed = m["closed"] | false;
-    pm.valid = (pm.yesPrice >= 0.0f && pm.noPrice >= 0.0f &&
-               (pm.yesPrice > 0.0f || pm.noPrice > 0.0f)) &&
-               pm.conditionId[0] != '\0';
+    pm.winnerKnown = parseResolvedOutcome(m, pm.yesWon) ||
+                     parseWinnerFromTokens(m["tokens"], pm.yesWon);
+    bool hasPrices = (pm.yesPrice >= 0.0f && pm.noPrice >= 0.0f &&
+                     (pm.yesPrice > 0.0f || pm.noPrice > 0.0f));
+    pm.valid = pm.conditionId[0] != '\0' && (hasPrices || pm.winnerKnown || pm.closed);
     return pm.valid;
 }
 
@@ -1067,6 +1119,39 @@ uint32_t isoToEpoch(const char* iso) {
     return days * 86400UL + hr * 3600UL + mn * 60UL + sc;
 }
 
+static ApiResult fetchBinanceOpenPriceAtInternal(uint32_t epochSec, float& outPrice) {
+    outPrice = 0.0f;
+    if (epochSec == 0) return API_PARSE_ERROR;
+
+    static char urlBuf[160];
+    snprintf(urlBuf, sizeof(urlBuf),
+              "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&startTime=%lu000&limit=1",
+              (unsigned long)epochSec);
+
+    ApiResult result;
+    const char* json = apiHttpGet(urlBuf, false, result);
+    if (result != API_OK || !json[0]) return result;
+
+    // Response: [[openTime,"open","high","low","close",...]]
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, json);
+    if (err) return API_PARSE_ERROR;
+
+    JsonArrayConst arr = doc.as<JsonArrayConst>();
+    if (arr.isNull() || arr.size() == 0) return API_PARSE_ERROR;
+
+    JsonArrayConst candle = arr[0].as<JsonArrayConst>();
+    if (candle.isNull() || candle.size() < 5) return API_PARSE_ERROR;
+
+    // Index 1 = open price (string)
+    const char* openStr = candle[1] | "";
+    float openPrice = atof(openStr);
+    if (openPrice <= 0.0f) return API_PARSE_ERROR;
+
+    outPrice = openPrice;
+    return API_OK;
+}
+
 static bool fetchBinanceRefPrice(const char* startTime, float& outPrice) {
     if (!startTime || !startTime[0]) return false;
 
@@ -1079,53 +1164,20 @@ static bool fetchBinanceRefPrice(const char* startTime, float& outPrice) {
         return false;
     }
 
-    // Binance kline API: get 1-minute candle at the exact interval start
-    // Use %lu + "000" suffix to avoid 64-bit printf issues on ESP32
-    static char urlBuf[160];
-    snprintf(urlBuf, sizeof(urlBuf),
-             "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&startTime=%lu000&limit=1",
-             (unsigned long)epochSec);
-
-    ApiResult result;
-    const char* json = apiHttpGet(urlBuf, false, result);
-    if (result != API_OK || !json[0]) {
+    ApiResult result = fetchBinanceOpenPriceAtInternal(epochSec, outPrice);
+    if (result != API_OK) {
         refCacheStore(startTime, 0.0f, false);
         return false;
     }
 
-    // Response: [[openTime,"open","high","low","close",...]]
-    JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, json);
-    if (err) {
-        refCacheStore(startTime, 0.0f, false);
-        return false;
-    }
-
-    JsonArrayConst arr = doc.as<JsonArrayConst>();
-    if (arr.isNull() || arr.size() == 0) {
-        refCacheStore(startTime, 0.0f, false);
-        return false;
-    }
-
-    JsonArrayConst candle = arr[0].as<JsonArrayConst>();
-    if (candle.isNull() || candle.size() < 5) {
-        refCacheStore(startTime, 0.0f, false);
-        return false;
-    }
-
-    // Index 1 = open price (string)
-    const char* openStr = candle[1] | "";
-    float openPrice = atof(openStr);
-    if (openPrice <= 0.0f) {
-        refCacheStore(startTime, 0.0f, false);
-        return false;
-    }
-
-    outPrice = openPrice;
-    refCacheStore(startTime, openPrice, true);
+    refCacheStore(startTime, outPrice, true);
     Serial.printf("[API] Binance ref: start=%s epoch=%lu open=%.2f\n",
-                  startTime, (unsigned long)epochSec, openPrice);
+                  startTime, (unsigned long)epochSec, outPrice);
     return true;
+}
+
+ApiResult fetchBinanceOpenPriceAt(uint32_t epochSec, float& outPrice) {
+    return fetchBinanceOpenPriceAtInternal(epochSec, outPrice);
 }
 
 void enrichPolyReference(PolyMarket& pm) {
@@ -1210,6 +1262,13 @@ static ApiResult fetchPolyFromEventSlug(const char* slug, PolyMarket* out, uint8
     filter[0]["markets"][0]["eventStartTime"] = true;
     filter[0]["markets"][0]["startDate"] = true;
     filter[0]["markets"][0]["closed"] = true;
+    filter[0]["markets"][0]["resolvedOutcome"] = true;
+    filter[0]["markets"][0]["winningOutcome"] = true;
+    filter[0]["markets"][0]["winner"] = true;
+    filter[0]["markets"][0]["tokens"][0]["winner"] = true;
+    filter[0]["markets"][0]["tokens"][0]["outcome"] = true;
+    filter[0]["markets"][0]["tokens"][1]["winner"] = true;
+    filter[0]["markets"][0]["tokens"][1]["outcome"] = true;
     filter[0]["startTime"] = true;
     filter[0]["startDate"] = true;
 
@@ -1322,6 +1381,13 @@ static ApiResult fetchPolyUpDownRecent(PolyMarket* out, uint8_t& count, uint8_t 
         filter[0]["eventStartTime"] = true;
         filter[0]["startDate"] = true;
         filter[0]["closed"] = true;
+        filter[0]["resolvedOutcome"] = true;
+        filter[0]["winningOutcome"] = true;
+        filter[0]["winner"] = true;
+        filter[0]["tokens"][0]["winner"] = true;
+        filter[0]["tokens"][0]["outcome"] = true;
+        filter[0]["tokens"][1]["winner"] = true;
+        filter[0]["tokens"][1]["outcome"] = true;
 
         JsonDocument doc;
         DeserializationError err = deserializeJson(doc, json,
@@ -1391,6 +1457,13 @@ static ApiResult fetchPolyBtcFallback(PolyMarket* out, uint8_t& count, uint8_t l
     filter[0]["eventStartTime"] = true;
     filter[0]["startDate"] = true;
     filter[0]["closed"] = true;
+    filter[0]["resolvedOutcome"] = true;
+    filter[0]["winningOutcome"] = true;
+    filter[0]["winner"] = true;
+    filter[0]["tokens"][0]["winner"] = true;
+    filter[0]["tokens"][0]["outcome"] = true;
+    filter[0]["tokens"][1]["winner"] = true;
+    filter[0]["tokens"][1]["outcome"] = true;
 
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, json,
@@ -1461,7 +1534,9 @@ ApiResult fetchPolyMarkets(PolyMarket* out, uint8_t& count, uint8_t limit, uint8
         if (recentRes == API_OK && count > 0) {
             return API_OK;
         }
-        Serial.printf("[API] Polymarket recent miss too, trying BTC fallback...\n");
+        Serial.printf("[API] Polymarket recent miss too for up/down period idx=%d\n",
+                      btcPeriod);
+        return API_PARSE_ERROR;
     } else {
         Serial.printf("[API] Polymarket period idx=%d has no up/down markets, using BTC fallback\n",
                       btcPeriod);
@@ -1497,6 +1572,13 @@ ApiResult fetchPolyMarketByConditionId(const char* conditionId, PolyMarket& out)
     filter[0]["eventStartTime"] = true;
     filter[0]["startDate"] = true;
     filter[0]["closed"] = true;
+    filter[0]["resolvedOutcome"] = true;
+    filter[0]["winningOutcome"] = true;
+    filter[0]["winner"] = true;
+    filter[0]["tokens"][0]["winner"] = true;
+    filter[0]["tokens"][0]["outcome"] = true;
+    filter[0]["tokens"][1]["winner"] = true;
+    filter[0]["tokens"][1]["outcome"] = true;
 
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, json,

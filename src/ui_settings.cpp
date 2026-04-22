@@ -28,20 +28,20 @@
 
 // ── Content layout: merged settings card + button group ──
 #define SCARD_Y         52
-#define ROW_H           48
-#define SCARD_H        (ROW_H * 5)   // 240px — 5 rows
+#define ROW_H           44
+#define SCARD_H        (ROW_H * 6)
 #define BTN_H           38
 #define BTN_GAP         10
-#define BTN_START_Y    (SCARD_Y + SCARD_H + 20)              // 264
-#define UPDATE_BTN_Y    BTN_START_Y                            // 264
+#define BTN_START_Y    (SCARD_Y + SCARD_H + 16)
+#define UPDATE_BTN_Y    BTN_START_Y
 #define UPDATE_BTN_H    BTN_H
-#define RESET_BTN_Y    (BTN_START_Y + BTN_H + BTN_GAP)        // 312
+#define RESET_BTN_Y    (BTN_START_Y + BTN_H + BTN_GAP)
 #define RESET_BTN_H     BTN_H
-#define TUTORIAL_BTN_Y (BTN_START_Y + 2 * (BTN_H + BTN_GAP))  // 360
+#define TUTORIAL_BTN_Y (BTN_START_Y + 2 * (BTN_H + BTN_GAP))
 #define TUTORIAL_BTN_H  BTN_H
-#define ABOUT_Y        (TUTORIAL_BTN_Y + BTN_H + 16)           // 414
+#define ABOUT_Y        (TUTORIAL_BTN_Y + BTN_H + 14)
 #define ABOUT_H         14
-#define CONTENT_TOTAL  (ABOUT_Y + ABOUT_H)                     // 428
+#define CONTENT_TOTAL  (ABOUT_Y + ABOUT_H)
 #define MAX_SCROLL     ((CONTENT_TOTAL > SCREEN_H) ? (CONTENT_TOTAL - SCREEN_H) : 0)
 
 // ── State ──
@@ -206,6 +206,22 @@ void settingsDraw() {
         settScr.drawString("Sonido", MARGIN + PAD, rcy, &Satoshi12);
 
         drawToggle(settScr, toggleX, rcy - 12, soundOn);
+    }
+
+    // Divider
+    settScr.drawFastHLine(MARGIN + PAD, cy + ROW_H * 5, CARD_W - PAD * 2, Colors::DIVIDER);
+
+    // ── Row 5: Reiniciar (action row) ──
+    {
+        int rcy = cy + ROW_H * 5 + ROW_H / 2;
+
+        settScr.setTextColor(Colors::SOLAR, Colors::BG_CARD);
+        settScr.setTextDatum(lgfx::middle_left);
+        settScr.drawString("Reiniciar", MARGIN + PAD, rcy, &Satoshi12);
+
+        settScr.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+        settScr.setTextDatum(lgfx::middle_right);
+        settScr.drawString(">", MARGIN + CARD_W - PAD, rcy, &SatoshiMedium18);
     }
 
     // ══════════════════════════════════════
@@ -416,6 +432,13 @@ void settingsHandleTouch(const TouchEvent& evt) {
         audioSetEnabled(!cur);
         nvsSetSoundEnabled(!cur);
         settingsDraw();
+        return;
+    }
+
+    // ══════════ ROW 5: Reiniciar (full row tap) ══════════
+    if (touchInRect(tx, cy, MARGIN, SCARD_Y + ROW_H * 5, CARD_W, ROW_H)) {
+        clearResetWifiConfirm();
+        ESP.restart();
         return;
     }
 

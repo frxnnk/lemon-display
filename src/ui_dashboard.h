@@ -147,11 +147,13 @@ struct PolyStats;
 void dashboardSetPredictionLayout(bool active);
 struct PredHistoryEntry;
 void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t selected,
-                             const PolyPrediction* activePred, const PolyStats& stats,
-                             bool loading, const char* statusMsg = nullptr,
-                             float refPriceUsd = NAN, uint32_t periodStepSec = 300,
-                             const PredHistoryEntry* history = nullptr,
-                             uint8_t histHead = 0, uint8_t histCount = 0);
+                              const PolyPrediction* activePred, const PolyStats& stats,
+                              bool loading, const char* statusMsg = nullptr,
+                              float refPriceUsd = NAN, uint32_t periodStepSec = 300,
+                              uint8_t activePeriodIdx = 0,
+                              const PredHistoryEntry* history = nullptr,
+                              uint8_t histHead = 0, uint8_t histCount = 0,
+                              const char* debugMsg = nullptr);
 bool dashboardIsPredictionMode();
 void dashboardSetPredictionMode(bool active);
 bool dashboardHitTestPredYes(int16_t x, int16_t y);

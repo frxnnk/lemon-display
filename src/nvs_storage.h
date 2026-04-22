@@ -51,10 +51,10 @@ struct PolyStats;
 struct PolyPrediction;
 void     nvsLoadPolyStats(uint8_t periodIdx, PolyStats& stats);
 void     nvsSavePolyStats(uint8_t periodIdx, const PolyStats& stats);
-bool     nvsHasPolyPrediction();
-void     nvsLoadPolyPrediction(PolyPrediction& pred);
-void     nvsSavePolyPrediction(const PolyPrediction& pred);
-void     nvsClearPolyPrediction();
+bool     nvsHasPolyPrediction(uint8_t periodIdx);
+void     nvsLoadPolyPrediction(uint8_t periodIdx, PolyPrediction& pred);
+void     nvsSavePolyPrediction(uint8_t periodIdx, const PolyPrediction& pred);
+void     nvsClearPolyPrediction(uint8_t periodIdx);
 
 // Prediction history ring buffer
 struct PredHistoryEntry;

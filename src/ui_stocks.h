@@ -43,6 +43,8 @@ void stocksStop();
 // can diagnose parse failures without a serial monitor.
 const char* stocksLastDebug();
 
+const char* stocksGetFocusedStatusText();
+
 // Returns true exactly once after an async fetch updates the cache. Main
 // loop polls this to trigger a Z2 redraw (the worker runs on core 0 and
 // can't touch the TFT).
