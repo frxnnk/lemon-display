@@ -73,12 +73,12 @@ static const char* stocksHttpGet(const char* url, ApiResult& result, int timeout
     // intermediate allocations between attempts and the next handshake
     // finds a contiguous block.
     int code = -1;
-    for (int attempt = 0; attempt < 3 && code < 0; attempt++) {
+    for (int attempt = 0; attempt < 5 && code < 0; attempt++) {
         if (attempt > 0) {
             _stkHttp.end();
             _stkClient.stop();
             esp_task_wdt_reset();
-            vTaskDelay(pdMS_TO_TICKS(300));
+            vTaskDelay(pdMS_TO_TICKS(500));
             esp_task_wdt_reset();
         }
 
