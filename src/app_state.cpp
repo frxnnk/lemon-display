@@ -72,9 +72,6 @@ void appDrawCurrent() {
             settingsDraw();
             break;
         case SCREEN_DASHBOARD:
-            if (previousScreen == SCREEN_SETTINGS) {
-                dashboardFillGaps();
-            }
             if (dashRedrawCB) dashRedrawCB();
             break;
         default:
