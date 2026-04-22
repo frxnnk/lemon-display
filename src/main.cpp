@@ -2063,6 +2063,20 @@ void loop() {
             frameDirty = true;
         }
 
+        if (state.online && settingsConsumeServiceRecovery()) {
+            const PairDef& pair = BTC_PAIRS[selectedPair];
+            if (pair.source == PAIR_BINANCE_DIRECT || pair.source == PAIR_BINANCE_INVERT) {
+                wsBinanceReconnect(pair.wsPath, pair.inverted);
+            } else {
+                wsBinanceReconnect(BTC_PAIRS[0].wsPath, false);
+            }
+            if (dashboardGetZ2Mode() == Z2_STOCKS) {
+                stocksInit();
+                scheduler.enable(taskStocks, true);
+                stocksRequestBurst();
+            }
+        }
+
         // WebSocket loop — must run every iteration
         wsBinanceLoop();
 
