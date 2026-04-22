@@ -54,6 +54,7 @@ static bool otaAvailableOnBoot = false;
 static bool resetWifiConfirmArmed = false;
 static uint32_t resetWifiConfirmUntilMs = 0;
 static const uint32_t RESET_WIFI_CONFIRM_TIMEOUT_MS = 5000;
+static bool servicesNeedRecovery = false;
 
 // ── Persistent full-screen sprite (allocated once, no fillScreen flash) ──
 static LGFX_Sprite settScr(&tft);
@@ -469,12 +470,10 @@ void settingsHandleTouch(const TouchEvent& evt) {
             otaFlashing = false;
             settingsDraw();
         } else if (!otaChecked) {
-            // First tap: check (use boot result if available)
-            if (otaAvailableOnBoot) {
-                otaResult = otaCheck(OTA_GITHUB_REPO);
-            } else {
-                otaResult = otaCheck(OTA_GITHUB_REPO);
-            }
+            wsBinanceStop();
+            stocksStop();
+            servicesNeedRecovery = true;
+            otaResult = otaCheck(OTA_GITHUB_REPO);
             otaChecked = true;
             settingsDraw();
         }
@@ -515,4 +514,10 @@ void settingsTick() {
 
 void settingsSetOtaAvailable(bool available) {
     otaAvailableOnBoot = available;
+}
+
+bool settingsConsumeServiceRecovery() {
+    if (!servicesNeedRecovery) return false;
+    servicesNeedRecovery = false;
+    return true;
 }
