@@ -87,9 +87,9 @@ static const TutStep STEPS_TEMPLATE[TUT_STEP_COUNT] = {
 
     // ── End pro-only ──
 
-    // 7: Dollar section (z2 — resolved at runtime)
-    { "Dolar digital",
-      "Cotizacion USDT/ARS en vivo.\nToca para cambiar el estilo.",
+    // 7: Z2 zone — 3 modes: Dollar, Markets, Stocks
+    { "Zona inferior",
+      "Desliza arriba o abajo para\nalternar entre dolar, mercados\ny acciones de tu watchlist.",
       {16, 0, 448, 0}, TIP_ABOVE, TUT_TAP, false },
 
     // 8: Settings header
