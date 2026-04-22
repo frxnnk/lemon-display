@@ -1863,7 +1863,12 @@ static void enterDashboard() {
     // session), kick the burst refresh now that WiFi is up. Otherwise the
     // cached NVS sparks render immediately and the scheduler tick would
     // only refresh the first symbol 60s later.
-    if (dashboardGetZ2Mode() == Z2_STOCKS) stocksRequestBurst();
+    if (dashboardGetZ2Mode() == Z2_STOCKS) {
+        extern void apiStop();
+        apiStop();
+        delay(100);
+        stocksRequestBurst();
+    }
 }
 
 void setup() {
