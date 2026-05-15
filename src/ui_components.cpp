@@ -900,7 +900,8 @@ void drawSlider(LGFX_Sprite& spr, int x, int y, int w, int h, float value) {
     int knobX = x + fillW;
     if (knobX < x + r) knobX = x + r;
     if (knobX > x + w - r) knobX = x + w - r;
-    spr.fillSmoothCircle(knobX, y + h / 2, h / 2 + 4, Colors::TEXT_PRIMARY);
+    uint16_t knobColor = Colors::isLightTheme() ? 0xFFFF : Colors::TEXT_PRIMARY;
+    spr.fillSmoothCircle(knobX, y + h / 2, h / 2 + 4, knobColor);
     spr.fillSmoothCircle(knobX, y + h / 2, h / 2 + 1, Colors::LEMON_GREEN);
 }
 
@@ -910,9 +911,10 @@ void drawSlider(LGFX_Sprite& spr, int x, int y, int w, int h, float value) {
 
 void drawToggle(LGFX_Sprite& spr, int x, int y, bool on) {
     uint16_t trackColor = on ? Colors::GREEN_DIM : Colors::BG_ELEVATED;
+    uint16_t knobColor = Colors::isLightTheme() ? 0xFFFF : Colors::TEXT_PRIMARY;
     spr.fillSmoothRoundRect(x, y, 44, 24, 12, trackColor);
     int knobX = on ? (x + 32) : (x + 12);
-    spr.fillSmoothCircle(knobX, y + 12, 9, Colors::TEXT_PRIMARY);
+    spr.fillSmoothCircle(knobX, y + 12, 9, knobColor);
 }
 
 // ══════════════════════════════════════════
