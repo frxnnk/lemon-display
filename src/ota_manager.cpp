@@ -87,9 +87,6 @@ OtaInfo otaCheck(const char* repo) {
 
     checkHttp.begin(checkClient, url);
     checkHttp.addHeader("Accept", "application/vnd.github.v3+json");
-#ifdef GITHUB_PAT
-    checkHttp.addHeader("Authorization", "Bearer " GITHUB_PAT);
-#endif
     checkHttp.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     checkHttp.setTimeout(10000);
 
@@ -106,10 +103,10 @@ OtaInfo otaCheck(const char* repo) {
     checkHttp.end();
     checkClient.stop();
 
-    // Parse with ArduinoJson (filter: only tag_name + first asset download URL + body for MD5)
+    // Parse with ArduinoJson (filter: only tag_name + first asset API URL + body for MD5)
     JsonDocument filter;
     filter["tag_name"] = true;
-    filter["assets"][0]["url"] = true;  // API URL (not browser_download_url — 404 on private repos)
+    filter["assets"][0]["url"] = true;
     filter["body"] = true;
 
     JsonDocument doc;
@@ -217,12 +214,7 @@ bool otaFlash(const char* binUrl, void(*progressCB)(int pct), const char* md5) {
 
         client.setInsecure();
         http.begin(client, binUrl);
-#ifdef GITHUB_PAT
-        http.addHeader("Authorization", "Bearer " GITHUB_PAT);
-        if (attempt == 0) otaScreen("  Auth: PAT set");
-#else
         if (attempt == 0) otaScreen("  Auth: none", 0xFBE0);
-#endif
         http.addHeader("Accept", "application/octet-stream");
         http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
         http.setTimeout(30000);
