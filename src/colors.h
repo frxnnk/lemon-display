@@ -2,89 +2,142 @@
 
 #include <cstdint>
 
-// Lemon brand colors (RGB565) — v3.1 palette (crypto-focused)
-// Brand: Black 50%, Greent 25%, Nebula 10%, Solar 5%, Starlight 5%, Moon 5%
 namespace Colors {
-    // ── Backgrounds (dark theme — green tinted) ──
-    constexpr uint16_t BG_BASE       = 0x0000;  // #000000  Pure black (50%)
-    constexpr uint16_t BG_CARD       = 0x0841;  // #080C08  Card fill (green tint)
-    constexpr uint16_t BG_SURFACE    = 0x18C3;  // #1A1A1A  Elevated surface
-    constexpr uint16_t BG_ELEVATED   = 0x2945;  // #2A2A2A  Active states
-    constexpr uint16_t BG_OVERLAY    = 0x18E3;  // #1E1E1E  Header/footer
-    constexpr uint16_t BG_INPUT      = 0x39C7;  // #3E3E3E  Input field bg
+    enum UiTheme : uint8_t {
+        THEME_DARK = 0,
+        THEME_LIGHT = 1,
+    };
 
-    // ── Brand (corrected RGB565 from official PDF p20) ──
-    constexpr uint16_t LEMON_GREEN  = 0x078D;  // #00F068  Greent — primary accent (25%)
-    constexpr uint16_t DARK_GREEN   = 0x0549;  // #00A849  Evergreent — dark bg variant
-    constexpr uint16_t NEBULA       = 0x837E;  // #806CF2  Nebula — secondary accent (10%)
-    constexpr uint16_t SOLAR        = 0xFC20;  // #FF8700  Solar — BTC accent (5%)
-    constexpr uint16_t STARLIGHT    = 0xE73C;  // #E7E7E7  Starlight — light text (5%)
-    constexpr uint16_t MOON         = 0x5ACB;  // #5B5B5B  Moon — muted surfaces (5%)
-    constexpr uint16_t GREEN_DIM    = 0x0360;  // #006030  Muted green for subtle accents
-    constexpr uint16_t NEBULA_FILL  = 0x2018;  // #200830  Nebula gradient fill (purple→BG)
+    struct ThemePalette {
+        uint16_t bgBase;
+        uint16_t bgCard;
+        uint16_t bgSurface;
+        uint16_t bgElevated;
+        uint16_t bgOverlay;
+        uint16_t bgInput;
+        uint16_t lemonGreen;
+        uint16_t darkGreen;
+        uint16_t nebula;
+        uint16_t solar;
+        uint16_t starlight;
+        uint16_t moon;
+        uint16_t greenDim;
+        uint16_t nebulaFill;
+        uint16_t coinBtc;
+        uint16_t coinEth;
+        uint16_t coinSol;
+        uint16_t coinUsdt;
+        uint16_t coinUsdc;
+        uint16_t textPrimary;
+        uint16_t textSecondary;
+        uint16_t textTertiary;
+        uint16_t textDisabled;
+        uint16_t textLight;
+        uint16_t positive;
+        uint16_t negative;
+        uint16_t badgeBgPos;
+        uint16_t badgeBgNeg;
+        uint16_t badgeBg;
+        uint16_t chartLine;
+        uint16_t chartFill;
+        uint16_t chartGrid;
+        uint16_t candleBull;
+        uint16_t candleBear;
+        uint16_t candleWick;
+        uint16_t candleBullGlow;
+        uint16_t candleBearGlow;
+        uint16_t candleBullHl;
+        uint16_t candleBearHl;
+        uint16_t markerHigh;
+        uint16_t markerLow;
+        uint16_t athLine;
+        uint16_t domBtc;
+        uint16_t domEth;
+        uint16_t domOther;
+        uint16_t cardBorder;
+        uint16_t cardBorderAccent;
+        uint16_t cardHighlight;
+        uint16_t divider;
+        uint16_t polyYesBg;
+        uint16_t polyNoBg;
+        uint16_t glow1;
+        uint16_t glow2;
+        uint16_t glow3;
+        uint16_t glow4;
+    };
 
-    // ── Coin accent colors ──
-    constexpr uint16_t COIN_BTC     = 0xFC20;  // #FF8700  Solar (same as SOLAR)
-    constexpr uint16_t COIN_ETH     = 0x4C7F;  // #4A90D9  Ethereum blue
-    constexpr uint16_t COIN_SOL     = 0x837E;  // #806CF2  Nebula (same as NEBULA)
-    constexpr uint16_t COIN_USDT    = 0x0549;  // #00A849  Evergreent (same as DARK_GREEN)
-    constexpr uint16_t COIN_USDC    = 0x2D7F;  // #2775CA  USDC blue
+    extern uint16_t BG_BASE;
+    extern uint16_t BG_CARD;
+    extern uint16_t BG_SURFACE;
+    extern uint16_t BG_ELEVATED;
+    extern uint16_t BG_OVERLAY;
+    extern uint16_t BG_INPUT;
 
-    // ── Text ──
-    constexpr uint16_t TEXT_PRIMARY   = 0xFFFF;  // #FFFFFF
-    constexpr uint16_t TEXT_SECONDARY = 0x8410;  // #868686
-    constexpr uint16_t TEXT_TERTIARY  = 0x5AEB;  // #5B5B5B
-    constexpr uint16_t TEXT_DISABLED  = 0x39C7;  // #3E3E3E
-    constexpr uint16_t TEXT_LIGHT     = 0xE73C;  // #E7E7E7  (same as STARLIGHT)
+    extern uint16_t LEMON_GREEN;
+    extern uint16_t DARK_GREEN;
+    extern uint16_t NEBULA;
+    extern uint16_t SOLAR;
+    extern uint16_t STARLIGHT;
+    extern uint16_t MOON;
+    extern uint16_t GREEN_DIM;
+    extern uint16_t NEBULA_FILL;
 
-    // ── Status ──
-    constexpr uint16_t POSITIVE    = 0x078D;  // Same as LEMON_GREEN
-    constexpr uint16_t NEGATIVE    = 0xF8E6;  // #FF1A3B  Vivid red
-    constexpr uint16_t PRICE_UP    = POSITIVE;
-    constexpr uint16_t PRICE_DOWN  = NEGATIVE;
+    extern uint16_t COIN_BTC;
+    extern uint16_t COIN_ETH;
+    extern uint16_t COIN_SOL;
+    extern uint16_t COIN_USDT;
+    extern uint16_t COIN_USDC;
 
-    // ── Badge backgrounds (tinted) ──
-    constexpr uint16_t BADGE_BG_POS  = 0x0220;  // #003010  Dark green tint
-    constexpr uint16_t BADGE_BG_NEG  = 0x3000;  // #300008  Dark red tint
-    constexpr uint16_t BADGE_BG      = 0x18C3;  // #1A1A1A  Neutral badge
+    extern uint16_t TEXT_PRIMARY;
+    extern uint16_t TEXT_SECONDARY;
+    extern uint16_t TEXT_TERTIARY;
+    extern uint16_t TEXT_DISABLED;
+    extern uint16_t TEXT_LIGHT;
 
-    // ── Chart ──
-    constexpr uint16_t CHART_LINE = 0x078D;  // Green sparkline stroke (LEMON_GREEN)
-    constexpr uint16_t CHART_FILL = 0x01C3;  // #003818  Dark green fill
-    constexpr uint16_t CHART_GRID = 0x18C3;  // Subtle grid
+    extern uint16_t POSITIVE;
+    extern uint16_t NEGATIVE;
+    extern uint16_t PRICE_UP;
+    extern uint16_t PRICE_DOWN;
 
-    // Candlestick colors (glassmorphism style)
-    constexpr uint16_t CANDLE_BULL      = POSITIVE;    // Green for bullish
-    constexpr uint16_t CANDLE_BEAR      = NEGATIVE;    // Red for bearish
-    constexpr uint16_t CANDLE_WICK      = 0x5ACB;      // MOON gray for wicks
-    constexpr uint16_t CANDLE_BULL_GLOW = 0x0220;      // #003010  Dim green outer glow
-    constexpr uint16_t CANDLE_BEAR_GLOW = 0x3000;      // #300008  Dim red outer glow
-    constexpr uint16_t CANDLE_BULL_HL   = 0x5FED;      // #5BFFA8  Bright green center highlight
-    constexpr uint16_t CANDLE_BEAR_HL   = 0xFCB3;      // #FF9898  Bright red center highlight
+    extern uint16_t BADGE_BG_POS;
+    extern uint16_t BADGE_BG_NEG;
+    extern uint16_t BADGE_BG;
 
-    // Marker colors
-    constexpr uint16_t MARKER_HIGH = POSITIVE;     // Green for period high
-    constexpr uint16_t MARKER_LOW  = NEGATIVE;     // Red for period low
-    constexpr uint16_t ATH_LINE    = SOLAR;        // Orange for ATH
+    extern uint16_t CHART_LINE;
+    extern uint16_t CHART_FILL;
+    extern uint16_t CHART_GRID;
 
-    // ── Dominance ──
-    constexpr uint16_t DOM_BTC   = 0xFC20;  // SOLAR orange for BTC
-    constexpr uint16_t DOM_ETH   = 0x837E;  // NEBULA purple for ETH
-    constexpr uint16_t DOM_OTHER = 0x5ACB;  // MOON — muted gray
+    extern uint16_t CANDLE_BULL;
+    extern uint16_t CANDLE_BEAR;
+    extern uint16_t CANDLE_WICK;
+    extern uint16_t CANDLE_BULL_GLOW;
+    extern uint16_t CANDLE_BEAR_GLOW;
+    extern uint16_t CANDLE_BULL_HL;
+    extern uint16_t CANDLE_BEAR_HL;
 
-    // ── UI Elements ──
-    constexpr uint16_t CARD_BORDER       = 0x2965;  // #2A2C2A  Subtle border (green tint)
-    constexpr uint16_t CARD_BORDER_ACCENT = 0x0360; // #006030  Accent border for hero
-    constexpr uint16_t CARD_HIGHLIGHT    = 0x2965;  // Top highlight line (subtle)
-    constexpr uint16_t DIVIDER           = 0x2104;  // #222222 Horizontal dividers
+    extern uint16_t MARKER_HIGH;
+    extern uint16_t MARKER_LOW;
+    extern uint16_t ATH_LINE;
 
-    // ── Polymarket prediction mode ──
-    constexpr uint16_t POLY_YES_BG = BADGE_BG_POS;   // Dark green tint
-    constexpr uint16_t POLY_NO_BG  = BADGE_BG_NEG;   // Dark red tint
+    extern uint16_t DOM_BTC;
+    extern uint16_t DOM_ETH;
+    extern uint16_t DOM_OTHER;
 
-    // ── Price glow (concentric circles behind main price) ──
-    constexpr uint16_t GLOW_1 = 0x0120;  // Darkest green ring
-    constexpr uint16_t GLOW_2 = 0x01A0;  // Mid-dark
-    constexpr uint16_t GLOW_3 = 0x0240;  // Mid
-    constexpr uint16_t GLOW_4 = 0x0360;  // Brightest ring (still subtle)
+    extern uint16_t CARD_BORDER;
+    extern uint16_t CARD_BORDER_ACCENT;
+    extern uint16_t CARD_HIGHLIGHT;
+    extern uint16_t DIVIDER;
+
+    extern uint16_t POLY_YES_BG;
+    extern uint16_t POLY_NO_BG;
+
+    extern uint16_t GLOW_1;
+    extern uint16_t GLOW_2;
+    extern uint16_t GLOW_3;
+    extern uint16_t GLOW_4;
+
+    void setTheme(UiTheme theme);
+    UiTheme getTheme();
+    bool isLightTheme();
+    const char* themeLabel(UiTheme theme);
 }

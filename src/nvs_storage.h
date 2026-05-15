@@ -17,6 +17,8 @@ void     nvsForgetWifi();
 // Display
 uint8_t  nvsGetBrightness();
 void     nvsSetBrightness(uint8_t val);
+uint8_t  nvsGetTheme();
+void     nvsSetTheme(uint8_t theme);
 
 // Sound
 bool     nvsGetSoundEnabled();

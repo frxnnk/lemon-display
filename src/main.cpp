@@ -1892,6 +1892,7 @@ void setup() {
     for (int i = 0; i < BTC_PERIOD_COUNT; i++) periodChanges[i] = NAN;
 
     nvsInit();
+    Colors::setTheme(nvsGetTheme() == 1 ? Colors::THEME_LIGHT : Colors::THEME_DARK);
 
     displaySetup();
     displaySetupVSync();

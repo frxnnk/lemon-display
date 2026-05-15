@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lgfx_matouch_40.h"
+#include "colors.h"
 #include "data_models.h"
 
 // ── Card styles ──
@@ -51,13 +52,13 @@ void drawCryptoCard(LGFX_Sprite& spr, int x, int y, int w, int h,
                     const CoinData& data, CoinId coin);
 
 // ── Layout helpers ──
-void drawCentered(LGFX_Sprite& spr, const char* text, int y, const lgfx::IFont* font, uint16_t color, uint16_t bg = 0x0841);
+void drawCentered(LGFX_Sprite& spr, const char* text, int y, const lgfx::IFont* font, uint16_t color, uint16_t bg = Colors::BG_CARD);
 
 // ── Fixed-width price rendering (eliminates bounce from proportional font) ──
 // Accepts both LGFX_Sprite and tft (LGFX) via common base class
 void drawFixedWidthPrice(LovyanGFX& gfx, const char* text, int cx, int cy,
                          const lgfx::IFont* font, uint16_t color,
-                         uint16_t bgColor = 0);
+                         uint16_t bgColor = Colors::BG_BASE);
 
 // Direct version: per-cell fill+draw for flicker-free framebuffer writes
 void drawFixedWidthPriceDirect(LovyanGFX& gfx, const char* text, int cx, int cy,

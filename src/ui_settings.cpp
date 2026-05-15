@@ -29,7 +29,7 @@
 // ── Content layout: merged settings card + button group ──
 #define SCARD_Y         52
 #define ROW_H           44
-#define SCARD_H        (ROW_H * 6)
+#define SCARD_H        (ROW_H * 7)
 #define BTN_H           38
 #define BTN_GAP         10
 #define BTN_START_Y    (SCARD_Y + SCARD_H + 16)
@@ -62,6 +62,7 @@ static bool settScrReady = false;
 
 // ── Layout preset names (0=BTC only, 1=BTC+USD 50/50) ──
 static const char* layoutNames[] = { "BTC", "BTC + USD" };
+static const char* themeNames[] = { "Oscuro", "Claro" };
 
 // ── Helper: check if Y range is visible ──
 static bool isVisible(int itemY, int itemH) {
@@ -212,9 +213,29 @@ void settingsDraw() {
     // Divider
     settScr.drawFastHLine(MARGIN + PAD, cy + ROW_H * 5, CARD_W - PAD * 2, Colors::DIVIDER);
 
-    // ── Row 5: Reiniciar (action row) ──
+    // Row 5: Tema
     {
         int rcy = cy + ROW_H * 5 + ROW_H / 2;
+        uint8_t theme = nvsGetTheme();
+        bool lightOn = (theme == 1);
+
+        settScr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
+        settScr.setTextDatum(lgfx::middle_left);
+        settScr.drawString("Tema", MARGIN + PAD, rcy, &Satoshi12);
+
+        settScr.setTextColor(Colors::LEMON_GREEN, Colors::BG_CARD);
+        settScr.setTextDatum(lgfx::middle_right);
+        settScr.drawString(themeNames[lightOn ? 1 : 0], toggleX - 8, rcy, &Satoshi9);
+
+        drawToggle(settScr, toggleX, rcy - 12, lightOn);
+    }
+
+    // Divider
+    settScr.drawFastHLine(MARGIN + PAD, cy + ROW_H * 6, CARD_W - PAD * 2, Colors::DIVIDER);
+
+    // Row 6: Reiniciar (action row)
+    {
+        int rcy = cy + ROW_H * 6 + ROW_H / 2;
 
         settScr.setTextColor(Colors::SOLAR, Colors::BG_CARD);
         settScr.setTextDatum(lgfx::middle_left);
@@ -436,8 +457,18 @@ void settingsHandleTouch(const TouchEvent& evt) {
         return;
     }
 
-    // ══════════ ROW 5: Reiniciar (full row tap) ══════════
+    // Row 5: Tema
     if (touchInRect(tx, cy, MARGIN, SCARD_Y + ROW_H * 5, CARD_W, ROW_H)) {
+        uint8_t next = (nvsGetTheme() == 1) ? 0 : 1;
+        nvsSetTheme(next);
+        Colors::setTheme(next == 1 ? Colors::THEME_LIGHT : Colors::THEME_DARK);
+        dashboardMarkAllDirty();
+        settingsDraw();
+        return;
+    }
+
+    // Row 6: Reiniciar
+    if (touchInRect(tx, cy, MARGIN, SCARD_Y + ROW_H * 6, CARD_W, ROW_H)) {
         clearResetWifiConfirm();
         ESP.restart();
         return;

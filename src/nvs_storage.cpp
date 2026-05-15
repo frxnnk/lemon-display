@@ -94,6 +94,16 @@ void nvsSetBrightness(uint8_t val) {
     prefs.putUChar("brightness", val);
 }
 
+uint8_t nvsGetTheme() {
+    uint8_t theme = prefs.getUChar("ui_theme", 0);
+    return (theme > 1) ? 0 : theme;
+}
+
+void nvsSetTheme(uint8_t theme) {
+    if (theme > 1) theme = 0;
+    prefs.putUChar("ui_theme", theme);
+}
+
 // ── Sound ──
 
 bool nvsGetSoundEnabled() {
