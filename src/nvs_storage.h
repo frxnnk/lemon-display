@@ -68,6 +68,11 @@ struct StockWatchlist;
 void     nvsLoadWatchlist(StockWatchlist& out);   // falls back to defaults if empty
 void     nvsSaveWatchlist(const StockWatchlist& wl);
 
+// Local Studio pairing token.
+bool     nvsGetPairingToken(char* out, size_t outLen);
+void     nvsSetPairingToken(const char* token);
+void     nvsClearPairingToken();
+
 // Stocks quote cache (blob — array of StockQuote)
 struct StockQuote;
 void     nvsLoadStockQuotes(StockQuote* out, uint8_t& count);
@@ -86,4 +91,9 @@ uint8_t  nvsGetZ2Mode();
 void     nvsSetZ2Mode(uint8_t mode);
 
 // Factory reset — erases all NVS keys
+uint8_t  nvsGetV2RotationSeconds();
+void     nvsSetV2RotationSeconds(uint8_t seconds);
+uint8_t  nvsGetV2Pair();
+void     nvsSetV2Pair(uint8_t pair);
+
 void     nvsFactoryReset();

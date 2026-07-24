@@ -448,17 +448,58 @@ void nvsSaveStockQuotes(const StockQuote* quotes, uint8_t count) {
 }
 
 // ── Stocks sparkline cache ──
-// Saved as two parallel blobs: "sp_syms" (symbol strings) + "sp_data"
-// (SparklineData array). Symbol keys make the cache robust to watchlist
-// reorders — on load we map each saved spark back into the current
-// watchlist slot by symbol match. Full SparklineData (~1480B × 8 = ~12KB)
-// is written only on full-rotation flush, same cadence as the quote cache.
-// Scratch buffers go through ps_malloc (PSRAM) — keeping 12KB of DRAM
-// permanently reserved for this fragments the heap enough to break TLS
-// handshakes (OTA check, Yahoo fetch) on this board.
-static const uint8_t STOCK_SPARKS_VER = 1;
-static const size_t  SP_SYMS_BYTES  = (size_t)STOCK_MAX_SYMBOLS * STOCK_SYMBOL_LEN;
-static const size_t  SP_DATA_BYTES  = sizeof(SparklineData) * STOCK_MAX_SYMBOLS;
+static const uint8_t STOCK_SPARKS_VER = 2;
+static const uint16_t STOCK_SPARK_CACHE_POINTS = 96;
+
+struct StockSparkCacheEntry {
+    char symbol[STOCK_SYMBOL_LEN];
+    uint16_t count;
+    float minVal;
+    float maxVal;
+    bool valid;
+    float points[STOCK_SPARK_CACHE_POINTS];
+};
+
+static const size_t SP_DATA_BYTES = sizeof(StockSparkCacheEntry) * STOCK_MAX_SYMBOLS;
+
+static void copySparkToCache(const SparklineData& src, const char* symbol, StockSparkCacheEntry& dst) {
+    memset(&dst, 0, sizeof(dst));
+    if (!src.valid || src.count < 2 || !symbol || symbol[0] == '\0') return;
+
+    strncpy(dst.symbol, symbol, STOCK_SYMBOL_LEN - 1);
+    dst.symbol[STOCK_SYMBOL_LEN - 1] = '\0';
+    dst.valid = true;
+    dst.count = (src.count < STOCK_SPARK_CACHE_POINTS) ? src.count : STOCK_SPARK_CACHE_POINTS;
+    dst.minVal = 1e12f;
+    dst.maxVal = -1e12f;
+
+    for (uint16_t i = 0; i < dst.count; i++) {
+        uint16_t srcIdx = (dst.count <= 1)
+            ? 0
+            : (uint16_t)(((uint32_t)i * (uint32_t)(src.count - 1)) / (uint32_t)(dst.count - 1));
+        float v = src.points[srcIdx];
+        dst.points[i] = v;
+        if (v < dst.minVal) dst.minVal = v;
+        if (v > dst.maxVal) dst.maxVal = v;
+    }
+
+    if (dst.maxVal <= dst.minVal) {
+        dst.minVal = src.minVal;
+        dst.maxVal = src.maxVal;
+    }
+}
+
+static void copyCacheToSpark(const StockSparkCacheEntry& src, SparklineData& dst) {
+    memset(&dst, 0, sizeof(dst));
+    if (!src.valid || src.count < 2) return;
+
+    dst.count = (src.count < SPARKLINE_POINTS) ? src.count : SPARKLINE_POINTS;
+    for (uint16_t i = 0; i < dst.count; i++) dst.points[i] = src.points[i];
+    dst.minVal = src.minVal;
+    dst.maxVal = src.maxVal;
+    dst.valid = true;
+    dst.lastUpdate = 0;
+}
 
 void nvsLoadStockSparks(SparklineData* out, const StockWatchlist& wl) {
     for (uint8_t i = 0; i < STOCK_MAX_SYMBOLS; i++) out[i].valid = false;
@@ -466,64 +507,77 @@ void nvsLoadStockSparks(SparklineData* out, const StockWatchlist& wl) {
     uint8_t ver = prefs.getUChar("sp_ver", 0);
     if (ver != STOCK_SPARKS_VER) return;
 
-    char* syms = (char*)ps_malloc(SP_SYMS_BYTES);
-    SparklineData* sparks = (SparklineData*)ps_malloc(SP_DATA_BYTES);
-    if (!syms || !sparks) {
+    StockSparkCacheEntry* cache = (StockSparkCacheEntry*)ps_malloc(SP_DATA_BYTES);
+    if (!cache) {
         Serial.println("[NVS] sparks load: ps_malloc failed");
-        if (syms) free(syms);
-        if (sparks) free(sparks);
         return;
     }
 
-    if (prefs.getBytes("sp_syms", syms, SP_SYMS_BYTES) != SP_SYMS_BYTES ||
-        prefs.getBytes("sp_data", sparks, SP_DATA_BYTES) != SP_DATA_BYTES) {
-        free(syms); free(sparks);
+    if (prefs.getBytes("sp_data", cache, SP_DATA_BYTES) != SP_DATA_BYTES) {
+        free(cache);
         return;
     }
 
     uint8_t placed = 0;
     for (uint8_t s = 0; s < STOCK_MAX_SYMBOLS; s++) {
-        if (!sparks[s].valid) continue;
-        const char* sSym = syms + (size_t)s * STOCK_SYMBOL_LEN;
-        if (sSym[0] == '\0') continue;
+        if (!cache[s].valid || cache[s].symbol[0] == '\0') continue;
         for (uint8_t w = 0; w < wl.count; w++) {
-            if (strncmp(sSym, wl.symbols[w], STOCK_SYMBOL_LEN) == 0) {
-                out[w] = sparks[s];
-                out[w].lastUpdate = 0;
+            if (strncmp(cache[s].symbol, wl.symbols[w], STOCK_SYMBOL_LEN) == 0) {
+                copyCacheToSpark(cache[s], out[w]);
                 placed++;
                 break;
             }
         }
     }
-    free(syms); free(sparks);
+    free(cache);
     Serial.printf("[NVS] Stock sparks loaded: %u/%u\n",
                   (unsigned)placed, (unsigned)wl.count);
 }
 
 void nvsSaveStockSparks(const SparklineData* sparks, const StockWatchlist& wl) {
-    char* symBuf = (char*)ps_malloc(SP_SYMS_BYTES);
-    SparklineData* dataBuf = (SparklineData*)ps_malloc(SP_DATA_BYTES);
-    if (!symBuf || !dataBuf) {
+    StockSparkCacheEntry* cache = (StockSparkCacheEntry*)ps_malloc(SP_DATA_BYTES);
+    if (!cache) {
         Serial.println("[NVS] sparks save: ps_malloc failed, skipping");
-        if (symBuf) free(symBuf);
-        if (dataBuf) free(dataBuf);
         return;
     }
-    memset(symBuf, 0, SP_SYMS_BYTES);
-    memset(dataBuf, 0, SP_DATA_BYTES);
+    memset(cache, 0, SP_DATA_BYTES);
 
     for (uint8_t i = 0; i < wl.count && i < STOCK_MAX_SYMBOLS; i++) {
-        if (!sparks[i].valid) continue;
-        char* slot = symBuf + (size_t)i * STOCK_SYMBOL_LEN;
-        strncpy(slot, wl.symbols[i], STOCK_SYMBOL_LEN - 1);
-        slot[STOCK_SYMBOL_LEN - 1] = '\0';
-        dataBuf[i] = sparks[i];
+        copySparkToCache(sparks[i], wl.symbols[i], cache[i]);
     }
 
+    if (prefs.isKey("sp_syms")) prefs.remove("sp_syms");
+    prefs.remove("sp_data");
     prefs.putUChar("sp_ver", STOCK_SPARKS_VER);
-    prefs.putBytes("sp_syms", symBuf,  SP_SYMS_BYTES);
-    prefs.putBytes("sp_data", dataBuf, SP_DATA_BYTES);
-    free(symBuf); free(dataBuf);
+    size_t written = prefs.putBytes("sp_data", cache, SP_DATA_BYTES);
+    if (written != SP_DATA_BYTES) {
+        Serial.printf("[NVS] Stock sparks cache write failed: %u/%u bytes\n",
+                      (unsigned)written, (unsigned)SP_DATA_BYTES);
+    }
+    free(cache);
+}
+
+// Local Studio pairing token
+
+bool nvsGetPairingToken(char* out, size_t outLen) {
+    if (!out || outLen == 0) return false;
+    String token = prefs.getString("pair_tok", "");
+    if (token.length() == 0) {
+        out[0] = '\0';
+        return false;
+    }
+    strncpy(out, token.c_str(), outLen - 1);
+    out[outLen - 1] = '\0';
+    return true;
+}
+
+void nvsSetPairingToken(const char* token) {
+    if (!token || token[0] == '\0') return;
+    prefs.putString("pair_tok", token);
+}
+
+void nvsClearPairingToken() {
+    prefs.remove("pair_tok");
 }
 
 // ── Z2 slot mode ──
@@ -539,6 +593,26 @@ void nvsSetZ2Mode(uint8_t mode) {
 }
 
 // ── Factory Reset ──
+
+uint8_t nvsGetV2RotationSeconds() {
+    uint8_t seconds = prefs.getUChar("v2_rot", 15);
+    if (seconds == 0 || seconds == 15 || seconds == 30 || seconds == 60) return seconds;
+    return 15;
+}
+
+void nvsSetV2RotationSeconds(uint8_t seconds) {
+    if (seconds != 0 && seconds != 15 && seconds != 30 && seconds != 60) seconds = 15;
+    prefs.putUChar("v2_rot", seconds);
+}
+
+uint8_t nvsGetV2Pair() {
+    uint8_t pair = prefs.getUChar("v2_pair", 0);
+    return pair < BTC_PAIR_COUNT ? pair : 0;
+}
+
+void nvsSetV2Pair(uint8_t pair) {
+    prefs.putUChar("v2_pair", pair < BTC_PAIR_COUNT ? pair : 0);
+}
 
 void nvsFactoryReset() {
     prefs.clear();

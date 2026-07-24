@@ -1,0 +1,4229 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#121212">
+    <meta name="description" content="Lemon Market Desk convierte las Lemon Boxes existentes en una presencia viva de mercado, producto y contexto sobre el escritorio.">
+    <meta property="og:title" content="Lemon Market Desk · Lemon en tu escritorio">
+    <meta property="og:description" content="El hardware ya existe. La próxima versión convierte presencia física en utilidad diaria para Lemon.">
+    <meta property="og:image" content="./assets/v2/ambient-home-product.png">
+    <title>Lemon Market Desk · Lemon en tu escritorio</title>
+    <link rel="icon" type="image/svg+xml" href="./assets/lemon-iso.svg">
+    <link rel="apple-touch-icon" href="./assets/lemon-iso.svg">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <style>
+        @font-face {
+            font-family: 'PP Neue Machina';
+            src: url('./assets/v2/PPNeueMachina-PlainBold.ttf') format('truetype');
+            font-weight: 700;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Satoshi';
+            src: url('./assets/v2/Satoshi-Regular.otf') format('opentype');
+            font-weight: 400;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Satoshi';
+            src: url('./assets/v2/Satoshi-Bold.ttf') format('truetype');
+            font-weight: 700;
+            font-display: swap;
+        }
+
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :root {
+            color-scheme: dark;
+            --black: #121212;
+            --greent: #00DF1A;
+            --lime: #CFFF2E;
+            --leaf: #003D1B;
+            --starlight: #E7E7E7;
+            --moon: rgba(231,231,233,0.62);
+            --surface: rgba(231,231,233,0.04);
+            --border: rgba(231,231,233,0.14);
+        }
+
+        html { scroll-behavior: smooth; }
+
+        /* Skip link — visible only on keyboard focus */
+        .skip-link {
+            position: absolute;
+            top: -100px;
+            left: 1rem;
+            padding: 0.6rem 1rem;
+            background: var(--greent);
+            color: var(--black);
+            font-family: 'Satoshi', sans-serif;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-decoration: none;
+            border-radius: 6px;
+            z-index: 1000;
+            transition: top 0.2s;
+        }
+        .skip-link:focus { top: 1rem; }
+
+        .visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        /* Section anchor offset (nav is fixed) */
+        #hero-scroll, #product, #concepts,
+        #about, #features, #specs {
+            scroll-margin-top: 80px;
+        }
+
+        /* Keyboard focus ring */
+        .nav-links a:focus-visible,
+        .nav-logo:focus-visible,
+        .explorer-tab:focus-visible,
+        .cta-btn:focus-visible,
+        .f-card:focus-visible,
+        .skip-link:focus-visible {
+            outline: 2px solid var(--greent);
+            outline-offset: 3px;
+            border-radius: 4px;
+        }
+
+        body {
+            background: var(--black);
+            color: var(--starlight);
+            font-family: 'Satoshi', sans-serif;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            position: relative;
+        }
+
+        /* ── CRT-style scanlines overlay (basement shader-lab inspired) ── */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                to bottom,
+                transparent 0,
+                transparent 2px,
+                rgba(255, 255, 255, 0.015) 2px,
+                rgba(255, 255, 255, 0.015) 3px
+            );
+            pointer-events: none;
+            z-index: 9998;
+            mix-blend-mode: overlay;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            body::before { display: none; }
+        }
+
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--greent); border-radius: 3px; }
+
+        /* ── NAV ── */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            padding: max(1.25rem, env(safe-area-inset-top)) max(3rem, env(safe-area-inset-right)) 1.25rem max(3rem, env(safe-area-inset-left));
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 2.5rem;
+            transition: background-color 0.4s, border-color 0.4s;
+            border-bottom: 1px solid transparent;
+        }
+
+        nav.scrolled {
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border-bottom-color: var(--border);
+        }
+
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            transition: opacity 0.2s;
+            touch-action: manipulation;
+        }
+        .nav-logo img {
+            display: block;
+            filter: drop-shadow(0 0 8px rgba(0, 240, 104, 0.3));
+        }
+        .nav-logo:hover { opacity: 0.85; }
+
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+            list-style: none;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: var(--moon);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            transition: color 0.3s, background-color 0.3s;
+            touch-action: manipulation;
+        }
+
+        .nav-links a svg {
+            width: 18px;
+            height: 18px;
+            stroke-width: 1.8;
+        }
+
+        .nav-links a:hover { color: var(--greent); background: rgba(0,240,104,0.08); }
+
+        /* ── HERO SCROLL ASSEMBLY ── */
+        .hero-scroll {
+            height: 520vh;
+            position: relative;
+        }
+
+        .hero-sticky {
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            min-height: 600px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            padding: 0 2rem;
+        }
+
+        .hero-sticky::before {
+            content: '';
+            position: absolute;
+            width: 380px;
+            height: 380px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0,240,104,0.07) 0%, transparent 65%);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        .matrix-rain {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            opacity: var(--matrix-opacity, 0.55);
+            pointer-events: none;
+            filter: blur(0.6px) saturate(1.55);
+            transition: opacity 0.15s linear;
+        }
+
+        @keyframes crtFlicker {
+            0%, 100%   { opacity: 0.55; }
+            48%        { opacity: 0.55; }
+            49%        { opacity: 0.42; }
+            50%        { opacity: 0.55; }
+            97%        { opacity: 0.55; }
+            97.5%      { opacity: 0.48; }
+            98%        { opacity: 0.55; }
+        }
+
+        .hero-sticky::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 3;
+            background:
+                repeating-linear-gradient(
+                    to bottom,
+                    transparent 0px,
+                    transparent 2px,
+                    rgba(0, 0, 0, 0.28) 3px,
+                    transparent 4px
+                );
+            mix-blend-mode: multiply;
+            animation: crtFlicker 7s infinite;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .matrix-rain { opacity: 0.18; filter: none; }
+            .hero-sticky::after { animation: none; opacity: 0.4; }
+        }
+
+        .hero-title {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: clamp(3.5rem, 9vw, 8rem);
+            color: var(--greent);
+            letter-spacing: -0.03em;
+            text-align: center;
+            text-wrap: balance;
+            z-index: 2;
+            line-height: 0.95;
+            text-shadow: 0 0 80px rgba(0,240,104,0.25);
+            animation: heroFadeIn 1s ease forwards;
+            margin-top: 3rem;
+            transition: opacity 0.1s, transform 0.1s;
+        }
+
+        .hero-sub {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 300;
+            font-size: clamp(1rem, 2vw, 1.3rem);
+            color: var(--moon);
+            text-align: center;
+            z-index: 2;
+            margin-top: 0.75rem;
+            letter-spacing: 0.02em;
+            animation: heroFadeIn 1s ease 0.2s forwards;
+            opacity: 0;
+            transition: opacity 0.1s, transform 0.1s;
+        }
+
+        .hero-3d {
+            flex: 1 1 0%;
+            min-height: 0;
+            min-width: 0;
+            width: 100%;
+            max-width: 900px;
+            position: relative;
+            z-index: 1;
+            margin-top: -1rem;
+            animation: heroFadeIn 1.5s ease 0.4s forwards;
+            opacity: 0;
+            overflow: hidden;
+        }
+
+        .hero-3d canvas { cursor: default; display: block; touch-action: pan-y !important; }
+
+        .hero-hint {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.65rem;
+            color: var(--moon);
+            opacity: 0.4;
+            text-align: center;
+            z-index: 2;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            animation: heroFadeIn 1s ease 0.8s forwards;
+            opacity: 0;
+            margin-top: -2rem;
+            transition: opacity 0.3s;
+        }
+
+        .hero-bottom {
+            text-align: center;
+            z-index: 4;
+            padding-bottom: 1rem;
+        }
+
+        .hero-version {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.7rem;
+            color: var(--greent);
+            opacity: 0.4;
+            letter-spacing: 0.1em;
+        }
+
+        .scroll-indicator {
+            position: absolute;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 5;
+            animation: bounce 2.5s ease-in-out infinite;
+            transition: opacity 0.3s;
+        }
+
+        .scroll-indicator svg {
+            width: 20px;
+            height: 20px;
+            stroke: var(--greent);
+            opacity: 0.35;
+        }
+
+        #assembly-progress {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 2px;
+            background: var(--greent);
+            z-index: 10;
+            transition: width 0.05s linear;
+            box-shadow: 0 0 8px rgba(0,240,104,0.4);
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateX(-50%) translateY(0); opacity: 0.5; }
+            50% { transform: translateX(-50%) translateY(10px); opacity: 1; }
+        }
+
+        @keyframes heroFadeIn {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── LOADING ── */
+        .loader {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.75rem;
+            color: var(--greent);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            z-index: 10;
+            transition: opacity 0.6s ease;
+        }
+
+        .loader.hidden { opacity: 0; pointer-events: none; }
+
+        .loader-dot {
+            display: inline-block;
+            animation: loaderPulse 1.4s ease-in-out infinite;
+        }
+        .loader-dot:nth-child(2) { animation-delay: 0.2s; }
+        .loader-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes loaderPulse {
+            0%, 80%, 100% { opacity: 0.2; }
+            40% { opacity: 1; }
+        }
+
+        /* ── SECTIONS ── */
+        .section {
+            padding: 7rem 3rem;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .section-label {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.7rem;
+            color: var(--greent);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-bottom: 1.25rem;
+            opacity: 0.7;
+        }
+
+        .section-label::before {
+            content: '// ';
+            opacity: 0.6;
+        }
+
+        .section-label::after {
+            content: '_';
+            display: inline-block;
+            margin-left: 0.25em;
+            animation: crtCursor 1.1s step-end infinite;
+            opacity: 0.8;
+        }
+
+        @keyframes crtCursor {
+            0%, 50% { opacity: 0.9; }
+            51%, 100% { opacity: 0; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .section-label::after { animation: none; opacity: 0.4; }
+        }
+
+        .section-title {
+            font-family: 'Syne', sans-serif;
+            font-weight: 700;
+            font-size: clamp(2rem, 4vw, 3.2rem);
+            color: var(--starlight);
+            line-height: 1.08;
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.025em;
+            text-wrap: balance;
+        }
+
+        .divider {
+            width: 100%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+        }
+
+        /* ── ABOUT ── */
+        .about-text {
+            font-size: 1.2rem;
+            line-height: 1.85;
+            color: var(--moon);
+            max-width: 640px;
+            font-weight: 300;
+        }
+
+        .about-text strong { color: var(--starlight); font-weight: 500; }
+        .about-text .g { color: var(--greent); }
+
+        .about-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+            margin-top: 4rem;
+            padding-top: 3rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .stat-val {
+            font-family: 'Space Grotesk', 'Syne', sans-serif;
+            font-weight: 700;
+            font-size: clamp(2.4rem, 4.5vw, 3.4rem);
+            color: var(--greent);
+            line-height: 1;
+            letter-spacing: -0.02em;
+            font-variant-numeric: tabular-nums;
+            font-feature-settings: "ss01", "tnum";
+        }
+
+        .stat-lbl {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.68rem;
+            font-weight: 500;
+            color: var(--moon);
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            margin-top: 0.65rem;
+        }
+
+        .about-layout {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 4rem;
+            align-items: center;
+        }
+
+        .about-display {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .ad-bezel {
+            position: relative;
+            width: min(360px, 100%);
+            aspect-ratio: 1;
+            border-radius: 32px;
+            background:
+                radial-gradient(ellipse at 30% 20%, rgba(0, 240, 104, 0.06) 0%, transparent 55%),
+                linear-gradient(160deg, #0a0d10 0%, #050709 100%);
+            border: 1px solid rgba(0, 240, 104, 0.22);
+            box-shadow:
+                0 0 0 1px rgba(0, 240, 104, 0.05),
+                0 20px 60px -20px rgba(0, 240, 104, 0.25),
+                inset 0 0 60px rgba(0, 240, 104, 0.03);
+            overflow: hidden;
+            isolation: isolate;
+        }
+
+        .ad-bg {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.22;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .ad-scanlines {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 2;
+            background: repeating-linear-gradient(
+                to bottom,
+                transparent 0px,
+                transparent 2px,
+                rgba(0, 0, 0, 0.22) 3px,
+                transparent 4px
+            );
+            mix-blend-mode: multiply;
+        }
+
+        .ad-content {
+            position: relative;
+            z-index: 3;
+            width: 100%;
+            height: 100%;
+            padding: 2rem 2rem 1.75rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            gap: 0.55rem;
+        }
+
+        .ad-pair {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.7rem;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: var(--moon);
+            margin-bottom: auto;
+        }
+        .ad-pair img { opacity: 0.9; }
+
+        .ad-price {
+            font-family: 'Space Grotesk', 'Syne', sans-serif;
+            font-weight: 700;
+            font-size: clamp(1.7rem, 4vw, 2.3rem);
+            color: var(--starlight);
+            letter-spacing: -0.02em;
+            font-variant-numeric: tabular-nums;
+            text-shadow: 0 0 20px rgba(0, 240, 104, 0.15);
+            transition: color 0.6s;
+            line-height: 1;
+        }
+        .ad-price.flash-up { color: var(--greent); text-shadow: 0 0 24px rgba(0, 240, 104, 0.55); }
+        .ad-price.flash-dn { color: #FF5577; text-shadow: 0 0 24px rgba(255, 85, 119, 0.55); }
+
+        .ad-delta {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.72rem;
+            color: var(--greent);
+            letter-spacing: 0.04em;
+        }
+        .ad-delta.down { color: #FF5577; }
+
+        .ad-spark {
+            width: 100%;
+            height: 56px;
+            display: block;
+            margin-top: 0.25rem;
+            filter: drop-shadow(0 0 8px rgba(0, 240, 104, 0.5));
+        }
+
+        @media (max-width: 900px) {
+            .about-layout {
+                grid-template-columns: 1fr;
+                gap: 2.5rem;
+            }
+            .ad-bezel { width: min(320px, 100%); }
+        }
+
+        /* ── FEATURES ── */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.25rem;
+            margin-top: 3rem;
+        }
+
+        .f-card {
+            padding: 2rem;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            background: var(--surface);
+            transition:
+                background-color 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                border-color 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .f-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--greent), transparent);
+            opacity: 0;
+            transition: opacity 0.4s;
+        }
+
+        .f-card:hover {
+            background: rgba(0,240,104,0.025);
+            border-color: rgba(0,240,104,0.15);
+            transform: translateY(-3px);
+        }
+
+        .f-card:hover::after { opacity: 0.6; }
+
+        .f-num {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.65rem;
+            color: var(--greent);
+            opacity: 0.4;
+            letter-spacing: 0.1em;
+            margin-bottom: 1.25rem;
+        }
+
+        .f-title {
+            font-family: 'Space Grotesk', 'Syne', sans-serif;
+            font-weight: 600;
+            font-size: 1.25rem;
+            color: var(--starlight);
+            margin-bottom: 0.7rem;
+            letter-spacing: -0.01em;
+        }
+
+        .f-desc {
+            font-size: 0.92rem;
+            color: var(--moon);
+            line-height: 1.65;
+            font-weight: 300;
+        }
+
+        .f-viz {
+            margin-top: 1.4rem;
+            padding-top: 1.2rem;
+            border-top: 1px solid var(--border);
+            min-height: 48px;
+        }
+
+        .f-viz-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 0.6rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .f-price {
+            font-family: 'Space Grotesk', 'Syne', sans-serif;
+            font-weight: 600;
+            font-size: 1.35rem;
+            color: var(--starlight);
+            letter-spacing: -0.02em;
+            transition: color 0.6s;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .f-price.flash-up { color: var(--greent); }
+        .f-price.flash-dn { color: #FF5577; }
+
+        /* Skeleton loader — pulses while live data is loading */
+        .skeleton {
+            display: inline-block;
+            color: transparent !important;
+            background: linear-gradient(90deg, rgba(0,240,104,0.08), rgba(0,240,104,0.28), rgba(0,240,104,0.08));
+            background-size: 200% 100%;
+            border-radius: 6px;
+            animation: skPulse 1.3s ease-in-out infinite;
+            min-width: 6ch;
+        }
+
+        @keyframes skPulse {
+            0%   { background-position: 100% 0; }
+            100% { background-position: -100% 0; }
+        }
+
+        .sk-spark {
+            stroke: rgba(0, 240, 104, 0.35);
+            stroke-dasharray: 4 5;
+            animation: skDash 1.6s linear infinite;
+        }
+
+        @keyframes skDash {
+            to { stroke-dashoffset: -20; }
+        }
+
+        .f-delta {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.7rem;
+            padding: 0.18rem 0.45rem;
+            border-radius: 4px;
+            background: rgba(0,240,104,0.1);
+            color: var(--greent);
+            white-space: nowrap;
+        }
+
+        .f-delta.down {
+            background: rgba(255,85,119,0.1);
+            color: #FF5577;
+        }
+
+        .f-spark {
+            width: 100%;
+            height: 36px;
+            display: block;
+            overflow: visible;
+        }
+
+        .f-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+        }
+
+        .f-chip {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.65rem;
+            letter-spacing: 0.06em;
+            padding: 0.3rem 0.55rem;
+            border-radius: 999px;
+            border: 1px solid rgba(0,240,104,0.2);
+            color: var(--starlight);
+            background: rgba(0,240,104,0.04);
+            cursor: pointer;
+            transition: border-color 0.2s, background-color 0.2s, color 0.2s;
+            font-weight: 500;
+        }
+        button.f-chip { font: inherit; font-size: 0.65rem; letter-spacing: 0.06em; }
+
+        .f-chip:hover {
+            border-color: rgba(0,240,104,0.45);
+            background: rgba(0,240,104,0.09);
+        }
+
+        .f-chip.active {
+            border-color: var(--greent);
+            background: rgba(0,240,104,0.15);
+            color: var(--greent);
+        }
+
+        .f-probbar {
+            display: flex;
+            width: 100%;
+            height: 8px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: rgba(255,255,255,0.05);
+            margin-top: 0.5rem;
+        }
+        .f-probbar-fill {
+            background: var(--greent);
+            transition: width 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        .f-timeline {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.7rem;
+            color: var(--moon);
+        }
+        .f-timeline .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--greent);
+            box-shadow: 0 0 8px rgba(0,240,104,0.5);
+        }
+        .f-timeline .dot.old {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: none;
+        }
+        .f-timeline .line {
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, var(--greent), rgba(255,255,255,0.08));
+        }
+
+        .f-bell {
+            position: relative;
+            width: 28px;
+            height: 28px;
+            color: var(--greent);
+            flex-shrink: 0;
+        }
+        .f-bell svg { width: 100%; height: 100%; }
+        .f-bell::before,
+        .f-bell::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            border: 1px solid var(--greent);
+            border-radius: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            opacity: 0;
+            animation: bellRing 2.8s ease-out infinite;
+        }
+        .f-bell::after { animation-delay: 1.4s; }
+
+        @keyframes bellRing {
+            0%   { transform: translate(-50%, -50%) scale(0.6); opacity: 0.6; }
+            80%  { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
+            100% { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
+        }
+
+        .f-alerts {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .f-alerts-labels {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.68rem;
+            color: var(--moon);
+        }
+
+        /* ── EXPLORER ── */
+        .explorer-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin: 2rem 0 1.5rem;
+        }
+
+        .explorer-tab {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.75rem;
+            padding: 0.7rem 1.4rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--moon);
+            cursor: pointer;
+            transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+            letter-spacing: 0.04em;
+            touch-action: manipulation;
+        }
+
+        .explorer-tab:hover {
+            border-color: rgba(0,240,104,0.3);
+            color: var(--starlight);
+        }
+
+        .explorer-tab.active {
+            background: rgba(0,240,104,0.08);
+            border-color: rgba(0,240,104,0.4);
+            color: var(--greent);
+        }
+
+        .explorer-canvas {
+            width: 100%;
+            height: 500px;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            position: relative;
+            background: var(--surface);
+        }
+
+        .explorer-canvas canvas { cursor: grab; }
+        .explorer-canvas canvas:active { cursor: grabbing; }
+
+        .explorer-info {
+            margin-top: 2rem;
+            display: flex;
+            gap: 3rem;
+            align-items: flex-start;
+        }
+
+        .explorer-name {
+            font-family: 'Space Grotesk', 'Syne', sans-serif;
+            font-weight: 600;
+            font-size: 1.45rem;
+            color: var(--starlight);
+            letter-spacing: -0.015em;
+        }
+
+        .explorer-file {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.68rem;
+            color: var(--greent);
+            opacity: 0.55;
+            margin-top: 0.4rem;
+            letter-spacing: -0.01em;
+        }
+
+        .explorer-desc {
+            font-size: 0.92rem;
+            color: var(--moon);
+            line-height: 1.7;
+            max-width: 500px;
+            font-weight: 300;
+        }
+
+        /* ── SPECS ── */
+        .specs-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1px;
+            margin-top: 3rem;
+            background: var(--border);
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        .spec {
+            padding: 1.75rem;
+            background: #060606;
+        }
+
+        .spec-k {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.62rem;
+            font-weight: 500;
+            color: var(--moon);
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            margin-bottom: 0.6rem;
+        }
+
+        .spec-v {
+            font-family: 'Space Grotesk', 'Syne', sans-serif;
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: var(--starlight);
+            letter-spacing: -0.01em;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* ── CTA ── */
+        .cta-section {
+            text-align: center;
+            padding: 8rem 3rem;
+            position: relative;
+        }
+
+        .cta-section::before {
+            content: '';
+            position: absolute;
+            width: 500px;
+            height: 500px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0,240,104,0.04) 0%, transparent 70%);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        .cta-title {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+            color: var(--starlight);
+            margin-bottom: 1rem;
+            letter-spacing: -0.02em;
+            text-wrap: balance;
+            /* Subtle chromatic aberration — basement.studio CRT vibe */
+            text-shadow:
+                -1px 0 0 rgba(255, 0, 128, 0.35),
+                 1px 0 0 rgba(0, 240, 255, 0.3),
+                 0 0 40px rgba(0, 240, 104, 0.15);
+            animation: crtFlicker 7s infinite steps(1, end);
+        }
+
+        @keyframes crtFlicker {
+            0%, 96%, 100% { opacity: 1; }
+            97%  { opacity: 0.88; }
+            97.5% { opacity: 1; }
+            98%  { opacity: 0.93; }
+            98.5% { opacity: 1; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .cta-title { animation: none; }
+        }
+
+        .cta-sub {
+            color: var(--moon);
+            font-weight: 300;
+            font-size: 1.05rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .cta-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.85rem;
+            color: var(--greent);
+            text-decoration: none;
+            padding: 1rem 2.5rem;
+            border: 1px solid var(--greent);
+            border-radius: 10px;
+            transition: background-color 0.35s, color 0.35s, box-shadow 0.35s;
+            letter-spacing: 0.04em;
+            touch-action: manipulation;
+        }
+
+        .cta-btn:hover {
+            background: var(--greent);
+            color: var(--black);
+            box-shadow: 0 0 40px rgba(0,240,104,0.2);
+        }
+
+        .cta-btn svg {
+            width: 16px;
+            height: 16px;
+            transition: transform 0.3s;
+        }
+
+        .cta-btn:hover svg { transform: translateX(3px); }
+
+        /* ── FOOTER ── */
+        footer {
+            padding: 4rem 3rem 2.5rem;
+            border-top: 1px solid var(--border);
+            background: #050505;
+        }
+
+        .footer-center {
+            max-width: 1100px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            text-align: center;
+        }
+
+        .footer-logo {
+            width: 96px;
+            height: auto;
+            opacity: 0.9;
+        }
+
+        .footer-tagline {
+            font-size: 0.9rem;
+            color: var(--moon);
+            line-height: 1.6;
+            font-weight: 300;
+            max-width: 420px;
+        }
+
+        .footer-bottom {
+            max-width: 1100px;
+            margin: 2rem auto 0;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .footer-bottom p {
+            font-size: 0.72rem;
+            color: var(--moon);
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            letter-spacing: 0.05em;
+        }
+
+        .footer-bottom .lemon-icon {
+            color: var(--greent);
+            margin: 0 0.15em;
+        }
+
+        .footer-author {
+            color: var(--starlight);
+            text-decoration: none;
+            border-bottom: 1px dashed var(--border);
+            padding-bottom: 1px;
+            transition: color 0.25s, border-color 0.25s;
+        }
+        .footer-author:hover {
+            color: var(--greent);
+            border-color: var(--greent);
+        }
+
+        @media (max-width: 680px) {
+            footer { padding: 3rem 1.5rem 2rem; }
+            .footer-logo { width: 80px; }
+            .footer-bottom {
+                flex-direction: column;
+                text-align: center;
+            }
+        }
+
+        /* ── SCROLL REVEAL ── */
+        .reveal {
+            opacity: 0;
+            transform: translateY(24px);
+            transition: opacity 0.7s ease, transform 0.7s ease;
+            will-change: opacity, transform;
+        }
+
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .reveal { opacity: 1; transform: none; }
+            .hero-scroll { height: 100vh !important; }
+        }
+
+        .reveal-delay-1 { transition-delay: 0.1s; }
+        .reveal-delay-2 { transition-delay: 0.2s; }
+        .reveal-delay-3 { transition-delay: 0.3s; }
+        .reveal-delay-4 { transition-delay: 0.4s; }
+        .reveal-delay-5 { transition-delay: 0.5s; }
+
+        /* ── RESPONSIVE ── */
+        @media (max-width: 900px) {
+            .features-grid { grid-template-columns: 1fr; }
+            .specs-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 680px) {
+            nav { padding: 1rem 1.25rem; gap: 0.75rem; }
+            .nav-logo img { width: 26px; height: 26px; }
+            .nav-links { gap: 0.35rem; }
+            .nav-links a { width: 38px; height: 38px; }
+            .nav-links a svg { width: 18px; height: 18px; }
+            .section { padding: 5rem 1.5rem; }
+            .about-stats { grid-template-columns: 1fr; gap: 1.5rem; }
+            .specs-grid { grid-template-columns: 1fr; }
+            .explorer-tabs { flex-wrap: wrap; }
+            .explorer-canvas { height: 320px; }
+            .explorer-info { flex-direction: column; gap: 1rem; }
+            .cta-section { padding: 5rem 1.5rem; }
+            .hero-scroll { height: 460vh; }
+        }
+
+        /* Lemon Market Desk — editorial evolution layer */
+        body::before { display: none; }
+
+        nav {
+            padding: 1.35rem clamp(1.25rem, 3vw, 3.5rem);
+            background: rgba(18,18,18,0.86);
+            border-bottom-color: var(--border);
+        }
+
+        nav.scrolled { background: rgba(18,18,18,0.94); }
+
+        .nav-logo img {
+            width: 120px;
+            height: auto;
+            filter: none;
+        }
+
+        .nav-links { gap: clamp(.35rem, 1vw, 1.15rem); }
+
+        .nav-links a {
+            width: auto;
+            height: auto;
+            padding: .5rem .65rem;
+            color: var(--starlight);
+            border-radius: 0;
+            font-size: .78rem;
+            font-weight: 700;
+            letter-spacing: .04em;
+            white-space: nowrap;
+        }
+
+        .nav-links a:hover { color: var(--greent); background: transparent; }
+
+        .hero-scroll { height: 320vh; }
+
+        .hero-sticky {
+            min-height: 100dvh;
+            align-items: stretch;
+            padding: 0 clamp(1.25rem, 3vw, 3.5rem);
+            background: var(--black);
+        }
+
+        .hero-sticky::before,
+        .hero-sticky::after,
+        .matrix-rain { display: none; }
+
+        .hero-3d {
+            width: min(68vw, 980px) !important;
+            max-width: none !important;
+            margin: 4.5rem 0 0 auto;
+            overflow: visible;
+        }
+
+        .hero-copy {
+            position: absolute;
+            top: clamp(7rem, 16vh, 10rem);
+            left: clamp(1.25rem, 3vw, 3.5rem);
+            z-index: 6;
+            width: min(43rem, 52vw);
+            pointer-events: none;
+        }
+
+        .hero-kicker,
+        .case-label,
+        .state-kicker,
+        .figure-index {
+            font-size: .76rem;
+            font-weight: 700;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+        }
+
+        .hero-kicker { color: var(--greent); }
+
+        .hero-copy h1,
+        .case-title,
+        .manifesto-title,
+        .proof-number,
+        .figure-title,
+        .roadmap-phase strong {
+            font-family: 'PP Neue Machina', sans-serif;
+            font-weight: 700;
+        }
+
+        .hero-copy h1 {
+            max-width: 10ch;
+            margin: 1.25rem 0 1rem;
+            color: var(--starlight);
+            font-size: clamp(3.25rem, 7vw, 7.2rem);
+            line-height: .88;
+            letter-spacing: -.055em;
+            text-wrap: balance;
+        }
+
+        .hero-copy p {
+            max-width: 34rem;
+            color: var(--moon);
+            font-size: clamp(1rem, 1.5vw, 1.25rem);
+            line-height: 1.45;
+            text-wrap: pretty;
+        }
+
+        .hero-status {
+            display: flex;
+            gap: 1rem 1.6rem;
+            flex-wrap: wrap;
+            margin-top: 1.8rem;
+            color: var(--starlight);
+            font-size: .78rem;
+            font-weight: 700;
+            letter-spacing: .04em;
+        }
+
+        .hero-status span::before {
+            content: '';
+            display: inline-block;
+            width: .55rem;
+            height: .55rem;
+            margin-right: .55rem;
+            border-radius: 50%;
+            background: var(--greent);
+        }
+
+        .hero-note {
+            position: absolute;
+            right: clamp(1.25rem, 3vw, 3.5rem);
+            bottom: 2rem;
+            z-index: 6;
+            color: var(--moon);
+            font-size: .72rem;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+        }
+
+        .case-section {
+            width: min(100%, 1440px);
+            margin: 0 auto;
+            padding: clamp(6rem, 10vw, 10rem) clamp(1.25rem, 3vw, 3.5rem);
+        }
+
+        .case-label { color: var(--greent); }
+
+        .case-heading {
+            display: grid;
+            grid-template-columns: minmax(0, 1.45fr) minmax(16rem, .55fr);
+            gap: clamp(2rem, 7vw, 8rem);
+            align-items: end;
+            margin-top: 1.15rem;
+        }
+
+        .case-title {
+            color: var(--starlight);
+            font-size: clamp(2.7rem, 6vw, 6.25rem);
+            line-height: .92;
+            letter-spacing: -.05em;
+            text-wrap: balance;
+        }
+
+        .case-lede {
+            max-width: 34rem;
+            color: var(--moon);
+            font-size: clamp(1rem, 1.25vw, 1.18rem);
+            line-height: 1.55;
+            text-wrap: pretty;
+        }
+
+        .proof-grid {
+            display: grid;
+            grid-template-columns: minmax(15rem, .62fr) minmax(0, 1.38fr);
+            gap: clamp(2.5rem, 8vw, 9rem);
+            margin-top: clamp(4rem, 8vw, 8rem);
+            padding-top: 2rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .proof-number {
+            color: var(--greent);
+            font-size: clamp(6rem, 15vw, 13rem);
+            line-height: .75;
+            letter-spacing: -.06em;
+        }
+
+        .proof-number span {
+            display: block;
+            margin-top: 1.5rem;
+            color: var(--starlight);
+            font-family: 'Satoshi', sans-serif;
+            font-size: .82rem;
+            line-height: 1.4;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        .proof-points {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 2.5rem 3rem;
+        }
+
+        .proof-point {
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .proof-point strong {
+            display: block;
+            margin-bottom: .6rem;
+            color: var(--starlight);
+            font-size: 1.08rem;
+        }
+
+        .proof-point p {
+            color: var(--moon);
+            line-height: 1.55;
+            text-wrap: pretty;
+        }
+
+        .manifesto {
+            width: 100%;
+            padding: clamp(5rem, 10vw, 10rem) clamp(1.25rem, 5vw, 6rem);
+            color: var(--black);
+            background: var(--lime);
+        }
+
+        .manifesto-inner {
+            width: min(100%, 1320px);
+            margin: 0 auto;
+        }
+
+        .manifesto .case-label { color: var(--black); }
+
+        .manifesto-title {
+            max-width: 17ch;
+            font-size: clamp(3.1rem, 8vw, 8.2rem);
+            line-height: .9;
+            letter-spacing: -.055em;
+            text-wrap: balance;
+        }
+
+        .manifesto-copy {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem 6rem;
+            margin-top: clamp(3rem, 6vw, 6rem);
+            padding-top: 1.5rem;
+            border-top: 2px solid var(--black);
+            font-size: clamp(1rem, 1.4vw, 1.22rem);
+            line-height: 1.5;
+        }
+
+        .concept-grid {
+            display: grid;
+            grid-template-columns: repeat(12, minmax(0, 1fr));
+            gap: clamp(1rem, 2vw, 2rem);
+            margin-top: clamp(4rem, 7vw, 7rem);
+        }
+
+        .concept-figure { margin: 0; }
+        .concept-figure:nth-child(1) { grid-column: span 7; }
+        .concept-figure:nth-child(2) { grid-column: span 5; margin-top: 16%; }
+        .concept-figure:nth-child(3) { grid-column: 3 / span 9; margin-top: 2rem; }
+
+        .concept-media {
+            overflow: hidden;
+            border-radius: clamp(1rem, 2vw, 2rem);
+            background: var(--surface);
+        }
+
+        .concept-media picture { display: block; }
+
+        .concept-media img {
+            display: block;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 3 / 2;
+            object-fit: cover;
+            transition: transform .7s cubic-bezier(.2,.8,.2,1);
+        }
+
+        .concept-figure:hover img { transform: scale(1.015); }
+
+        .concept-caption {
+            display: grid;
+            grid-template-columns: 3rem 1fr;
+            gap: 1rem;
+            margin-top: 1.1rem;
+        }
+
+        .figure-index { color: var(--greent); }
+
+        .figure-title {
+            margin-bottom: .35rem;
+            color: var(--starlight);
+            font-size: clamp(1.2rem, 2vw, 1.7rem);
+        }
+
+        .concept-caption p {
+            max-width: 40rem;
+            color: var(--moon);
+            line-height: 1.5;
+        }
+
+        .concept-disclaimer {
+            display: inline-block;
+            margin-top: 1.25rem;
+            padding: .45rem .65rem;
+            border: 1px solid var(--border);
+            border-radius: .5rem;
+            color: var(--moon);
+            font-size: .69rem;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        .state-board {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0;
+            margin-top: clamp(4rem, 7vw, 7rem);
+            border: 1px solid var(--border);
+            border-radius: 1.5rem;
+            overflow: hidden;
+        }
+
+        .state-column {
+            min-height: 23rem;
+            padding: clamp(1.5rem, 3vw, 3rem);
+            border-right: 1px solid var(--border);
+        }
+
+        .state-column:last-child { border-right: 0; }
+        .state-column.current { background: var(--leaf); }
+        .state-column.next { color: var(--black); background: var(--lime); }
+        .state-column.next .state-kicker,
+        .state-column.next p,
+        .state-column.next li { color: var(--black); }
+
+        .state-kicker { color: var(--greent); }
+
+        .state-column h3 {
+            margin: clamp(2.25rem, 4vw, 4rem) 0 1.25rem;
+            color: inherit;
+            font-family: 'PP Neue Machina', sans-serif;
+            font-size: clamp(2rem, 4vw, 4rem);
+            line-height: .92;
+        }
+
+        .state-column p,
+        .state-column li { color: var(--moon); line-height: 1.5; }
+        .state-column ul { margin: 1.5rem 0 0 1rem; }
+        .state-column li + li { margin-top: .7rem; }
+
+        .roadmap {
+            margin-top: clamp(4rem, 7vw, 7rem);
+            border-top: 1px solid var(--border);
+        }
+
+        .roadmap-phase {
+            display: grid;
+            grid-template-columns: 8rem minmax(14rem, .7fr) minmax(0, 1.3fr);
+            gap: 2rem;
+            align-items: start;
+            padding: 2rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .roadmap-phase span { color: var(--greent); font-size: .76rem; font-weight: 700; letter-spacing: .08em; }
+        .roadmap-phase strong { color: var(--starlight); font-size: clamp(1.25rem, 2vw, 1.8rem); }
+        .roadmap-phase p { max-width: 48rem; color: var(--moon); line-height: 1.55; }
+
+        .artifact-list {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0 3rem;
+            margin-top: 3rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .artifact-link {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1.2rem 0;
+            border-bottom: 1px solid var(--border);
+            color: var(--starlight);
+            text-decoration: none;
+            transition: color .2s, padding-left .2s;
+        }
+
+        a.artifact-link:hover { color: var(--greent); padding-left: .4rem; }
+        .artifact-link span:last-child {
+            color: var(--moon);
+            overflow-wrap: anywhere;
+            text-align: right;
+        }
+
+        footer {
+            width: min(100% - 2.5rem, 1440px);
+            margin: 0 auto;
+            padding: 3rem 0;
+            border-top: 1px solid var(--border);
+        }
+
+        .footer-center { align-items: flex-start; text-align: left; }
+        .footer-logo { width: 120px; filter: none; }
+        .footer-tagline { max-width: 36rem; color: var(--moon); }
+        .footer-bottom { border-top-color: var(--border); color: var(--moon); }
+
+        @media (max-width: 900px) {
+            .nav-links li:nth-child(2),
+            .nav-links li:nth-child(3) { display: none; }
+            .hero-copy { width: min(75vw, 36rem); }
+            .hero-3d { width: 82vw !important; margin-left: 18vw; }
+            .case-heading,
+            .proof-grid { grid-template-columns: 1fr; }
+            .proof-points { margin-top: 1rem; }
+            .concept-figure:nth-child(1),
+            .concept-figure:nth-child(2),
+            .concept-figure:nth-child(3) { grid-column: 1 / -1; margin-top: 0; }
+            .state-board { grid-template-columns: 1fr; }
+            .state-column { min-height: 0; border-right: 0; border-bottom: 1px solid var(--border); }
+            .state-column:last-child { border-bottom: 0; }
+            .roadmap-phase { grid-template-columns: 5rem 1fr; }
+            .roadmap-phase p { grid-column: 2; }
+        }
+
+        @media (max-width: 680px) {
+            nav { padding: 1rem 1.25rem; }
+            .nav-logo img { width: 108px; }
+            .nav-links a { font-size: .72rem; padding: .45rem; }
+            .hero-scroll { height: 260vh; }
+            .hero-copy { top: 6.2rem; width: calc(100% - 2.5rem); }
+            .hero-copy h1 { max-width: 9ch; font-size: clamp(3rem, 15vw, 5rem); }
+            .hero-copy p { max-width: 27rem; font-size: .95rem; }
+            .hero-status { gap: .55rem 1rem; max-width: 20rem; font-size: .68rem; }
+            .hero-3d { width: 118vw !important; height: 55vh; margin: 37vh 0 0 -10vw; }
+            .hero-note { right: 1.25rem; bottom: 1.25rem; max-width: 12rem; text-align: right; font-size: .6rem; }
+            .case-heading { gap: 1.5rem; }
+            .case-title { font-size: clamp(2.5rem, 13vw, 4.2rem); }
+            .proof-number { font-size: 8rem; }
+            .proof-points,
+            .manifesto-copy,
+            .artifact-list { grid-template-columns: 1fr; }
+            .manifesto-title { font-size: clamp(3rem, 15vw, 5rem); }
+            .case-section { padding: 4rem 1.25rem 4.5rem; }
+            .manifesto { padding: 4rem 1.25rem 4.5rem; }
+            .concept-grid { grid-template-columns: minmax(0, 1fr); gap: 3rem 0; }
+            .concept-figure { min-width: 0; }
+            .concept-caption { grid-template-columns: 2rem minmax(0, 1fr); }
+            .roadmap-phase { grid-template-columns: 1fr; gap: .65rem; }
+            .roadmap-phase p { grid-column: 1; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .concept-media img { transition: none; }
+        }
+
+        .hero-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .7rem 1.1rem;
+            margin-top: 1.5rem;
+            pointer-events: auto;
+        }
+
+        .hero-action {
+            display: inline-flex;
+            align-items: center;
+            min-height: 2.75rem;
+            padding: .72rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: .55rem;
+            color: var(--starlight);
+            font-size: .78rem;
+            font-weight: 700;
+            letter-spacing: .03em;
+            text-decoration: none;
+            transition: color .2s, border-color .2s, background-color .2s, transform .2s;
+        }
+
+        .hero-action.primary {
+            border-color: var(--greent);
+            color: var(--black);
+            background: var(--greent);
+        }
+
+        .hero-action:hover { color: var(--greent); border-color: var(--greent); transform: translateY(-1px); }
+        .hero-action.primary:hover { color: var(--black); background: var(--lime); }
+        .hero-action:active { transform: translateY(1px); }
+
+        .decision-line {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            margin-top: clamp(3rem, 6vw, 5rem);
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .decision-item {
+            min-height: 9rem;
+            padding: 1.5rem clamp(1rem, 2.5vw, 2.25rem) 2rem;
+            border-right: 1px solid var(--border);
+        }
+
+        .decision-item:first-child { padding-left: 0; }
+        .decision-item:last-child { border-right: 0; }
+        .decision-item span { color: var(--greent); font-size: .7rem; font-weight: 700; letter-spacing: .1em; }
+        .decision-item strong {
+            display: block;
+            max-width: 18ch;
+            margin: 1.5rem 0 .4rem;
+            color: var(--starlight);
+            font-family: 'PP Neue Machina', sans-serif;
+            font-size: clamp(1.35rem, 2.4vw, 2.2rem);
+            line-height: 1;
+        }
+        .v1-archive {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 1rem;
+            max-width: 64rem;
+            margin-top: clamp(2.5rem, 5vw, 4.5rem);
+        }
+
+        .v1-archive-card {
+            overflow: hidden;
+            border: 1px solid var(--border);
+            border-radius: 1rem;
+            background: var(--surface);
+        }
+
+        .v1-archive-media {
+            position: relative;
+            overflow: hidden;
+            aspect-ratio: 4 / 3;
+            border-bottom: 1px solid var(--border);
+            background: var(--black);
+        }
+
+        .v1-archive-media img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .v1-archive-card:first-child .v1-archive-media img { object-position: 50% 60%; }
+        .v1-archive-card:last-child .v1-archive-media img { object-position: top center; }
+
+        .v1-archive-badge {
+            position: absolute;
+            top: .85rem;
+            left: .85rem;
+            padding: .42rem .58rem;
+            border: 1px solid rgba(231, 231, 231, .22);
+            border-radius: .4rem;
+            color: var(--starlight);
+            background: rgba(18, 18, 18, .86);
+            font-size: .62rem;
+            font-weight: 700;
+            letter-spacing: .09em;
+            text-transform: uppercase;
+        }
+
+        .v1-archive-card figcaption { padding: 1.15rem 1.25rem 1.3rem; }
+        .v1-archive-card strong {
+            display: block;
+            color: var(--starlight);
+            font-family: 'PP Neue Machina', sans-serif;
+            font-size: clamp(1.15rem, 2vw, 1.65rem);
+            line-height: 1.05;
+        }
+        .v1-archive-card p { max-width: 42rem; margin-top: .55rem; color: var(--moon); line-height: 1.45; }
+
+        .v1-facts {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            margin-top: 1rem;
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .v1-fact { padding: 1.15rem 1.25rem; border-right: 1px solid var(--border); color: var(--moon); font-size: .82rem; }
+        .v1-fact:last-child { border-right: 0; }
+        .v1-fact strong { display: block; margin-bottom: .25rem; color: var(--greent); font-size: 1rem; }
+
+        @media (max-width: 1100px) {
+            .hero-scroll { height: 250vh; }
+            .hero-copy {
+                top: 6.5rem;
+                width: calc(100% - 2.5rem);
+                max-width: 43rem;
+            }
+            .hero-copy h1 { max-width: 10ch; font-size: clamp(3.2rem, 8vw, 5.6rem); }
+            .hero-copy p { max-width: 37rem; }
+            .hero-3d {
+                position: absolute;
+                right: -4vw;
+                bottom: 1.25rem;
+                width: 80vw !important;
+                height: 50dvh;
+                flex: none;
+                margin: 0 !important;
+            }
+            .hero-note { bottom: 1.25rem; }
+        }
+
+        @media (max-width: 900px) {
+            .nav-context,
+            .nav-direction { display: none; }
+            .nav-links .nav-status { display: list-item; }
+            .decision-line { grid-template-columns: 1fr; }
+            .v1-archive { grid-template-columns: 1fr; }
+            .decision-item,
+            .decision-item:first-child {
+                min-height: 0;
+                padding: 1.5rem 0 1.75rem;
+                border-right: 0;
+                border-bottom: 1px solid var(--border);
+            }
+            .decision-item:last-child { border-bottom: 0; }
+            .decision-item strong { margin-top: 1.2rem; }
+        }
+
+        @media (max-width: 680px) {
+            nav { gap: .65rem; }
+            .nav-evidence { display: none; }
+            .nav-links { gap: .15rem; }
+            .nav-links a { min-height: 2.75rem; padding: .45rem .5rem; font-size: .68rem; }
+            .hero-scroll { height: 235svh; }
+            .hero-copy { top: 5.4rem; }
+            .hero-copy h1 { max-width: 10.5ch; margin: .8rem 0 .72rem; font-size: clamp(2.55rem, 12.4vw, 3.55rem); line-height: .9; }
+            .hero-copy p { max-width: 31rem; font-size: .9rem; line-height: 1.42; }
+            .hero-status {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: .55rem .75rem;
+                max-width: 24rem;
+                margin-top: 1.15rem;
+                font-size: .64rem;
+            }
+            .hero-status span:last-child { grid-column: 1 / -1; }
+            .hero-status span::before { margin-right: .35rem; }
+            .hero-actions { margin-top: 1rem; }
+            .hero-action { min-height: 2.75rem; padding: .64rem .78rem; font-size: .7rem; }
+            .hero-3d { right: -10vw; bottom: .35rem; width: 118vw !important; height: 44dvh; }
+            .hero-note { display: none; }
+            .artifact-link { display: grid; justify-content: start; gap: .4rem; }
+            .artifact-link span:last-child { text-align: left; }
+            .v1-archive { margin-top: 2rem; }
+            .v1-archive-media { aspect-ratio: 4 / 3; }
+            .v1-facts { grid-template-columns: 1fr; }
+            .v1-fact { border-right: 0; border-bottom: 1px solid var(--border); }
+            .v1-fact:last-child { border-bottom: 0; }
+        }
+
+        @media (max-width: 420px) {
+            .nav-logo img { width: 96px; }
+            .hero-copy h1 {
+                max-width: 100%;
+                font-size: clamp(2.45rem, 11vw, 2.85rem);
+                line-height: .92;
+            }
+            .hero-copy p { max-width: 21rem; font-size: .84rem; }
+            .hero-3d { height: 36dvh; }
+        }
+
+        @media (max-width: 680px) and (max-height: 720px) {
+            .hero-copy { top: 4.9rem; }
+            .hero-kicker { font-size: .65rem; }
+            .hero-copy h1 { font-size: clamp(2.4rem, 12vw, 3rem); }
+            .hero-copy p { font-size: .82rem; }
+            .hero-status { font-size: .59rem; }
+            .hero-3d { height: 40dvh; }
+        }
+
+        /* Compact product story: persistent inset stages */
+        :root {
+            --page-gutter: clamp(.75rem, 1.5vw, 1.5rem);
+            --stage-radius: clamp(1.25rem, 2.5vw, 2.25rem);
+        }
+
+        html,
+        body,
+        main { background: var(--starlight); }
+
+        body { color: var(--black); }
+
+        nav {
+            top: var(--page-gutter);
+            right: var(--page-gutter);
+            left: var(--page-gutter);
+            padding: .72rem .85rem .72rem 1.1rem;
+            border: 1px solid transparent;
+            border-radius: 999px;
+            background: rgba(18, 18, 18, .96);
+            box-shadow: none;
+            opacity: 0;
+            transform: translateY(-.75rem);
+            transition:
+                opacity .55s ease,
+                transform .55s cubic-bezier(.2,.8,.2,1),
+                background-color .38s ease,
+                border-color .38s ease;
+        }
+
+        body.hero-intro-ready nav { opacity: 1; transform: translateY(0); }
+        nav.scrolled {
+            border-color: rgba(18, 18, 18, .12);
+            background: rgba(231, 231, 231, .96);
+        }
+        .nav-logo img {
+            width: 104px;
+            transition: filter .38s ease;
+        }
+        nav:not(.scrolled) .nav-logo img { filter: invert(1); }
+        .nav-links { gap: .2rem; }
+        nav:not(.scrolled) .nav-links a { color: var(--starlight); }
+        nav.scrolled .nav-links a { color: var(--black); }
+        .nav-links a:hover { color: var(--greent); }
+        .nav-preview a {
+            padding: .58rem .95rem;
+            border-radius: 999px;
+        }
+        .nav-preview {
+            transition:
+                opacity .28s ease,
+                transform .28s ease,
+                visibility .28s;
+        }
+        nav:not(.scrolled) .nav-preview {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transform: translateY(-.35rem);
+        }
+        nav.scrolled .nav-preview {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+            transform: translateY(0);
+        }
+        nav:not(.scrolled) .nav-preview a {
+            color: var(--black);
+            background: var(--starlight);
+        }
+        nav.scrolled .nav-preview a {
+            color: var(--starlight);
+            background: var(--black);
+        }
+        .nav-preview a:hover { color: var(--lime); background: var(--black); }
+
+        .hero-scroll {
+            height: 380vh;
+            padding: var(--page-gutter);
+            background: var(--starlight);
+        }
+
+        .hero-sticky {
+            top: var(--page-gutter);
+            height: calc(100dvh - (var(--page-gutter) * 2));
+            min-height: 38rem;
+            padding: 0 clamp(1.5rem, 3vw, 3.5rem);
+            overflow: hidden;
+            border-radius: var(--stage-radius);
+            background: var(--black);
+        }
+
+        .hero-copy {
+            top: clamp(6.5rem, 14vh, 8.5rem);
+            left: clamp(1.5rem, 3vw, 3.5rem);
+            width: min(38rem, 48vw);
+            opacity: var(--hero-exit-opacity, 1);
+            transition: opacity .18s linear;
+        }
+
+        .hero-copy > * {
+            opacity: 0;
+            transform: translateY(1.25rem);
+            transition:
+                opacity .7s ease,
+                transform .7s cubic-bezier(.2,.8,.2,1);
+        }
+        body.hero-intro-ready .hero-copy > * { opacity: 1; transform: translateY(0); }
+        body.hero-intro-ready .hero-copy h1 { transition-delay: .08s; }
+        body.hero-intro-ready .hero-copy p { transition-delay: .16s; }
+        body.hero-intro-ready .hero-actions { transition-delay: .24s; }
+
+        .hero-3d {
+            animation: none;
+            opacity: 0;
+            transform: translateY(1.5rem) scale(.97);
+            transition:
+                opacity .85s ease .12s,
+                transform .95s cubic-bezier(.2,.8,.2,1) .12s;
+        }
+        body.hero-intro-ready .hero-3d {
+            opacity: var(--hero-exit-opacity, 1);
+            transform: translateY(0) scale(1);
+        }
+
+        .hero-kicker { font-size: .68rem; }
+        .hero-copy h1 {
+            max-width: 12.5ch;
+            margin: .9rem 0 .8rem;
+            font-size: clamp(3rem, 4.6vw, 5rem);
+            line-height: .92;
+            letter-spacing: -.045em;
+        }
+        .hero-copy p { max-width: 28rem; font-size: clamp(.95rem, 1.15vw, 1.08rem); }
+        .hero-status { margin-top: 1.25rem; font-size: .72rem; }
+        .hero-actions { margin-top: 1.25rem; }
+        .hero-action { border-radius: 999px; }
+        .hero-note { right: 1.5rem; bottom: 1.2rem; }
+
+        .manifesto {
+            width: auto;
+            max-width: none;
+            margin: var(--page-gutter);
+            padding: clamp(5rem, 8vw, 8rem) clamp(1.5rem, 6vw, 6rem);
+            overflow: hidden;
+            border-radius: var(--stage-radius);
+        }
+
+        .manifesto-inner { max-width: 1280px; }
+        .manifesto-title {
+            max-width: 12ch;
+            font-size: clamp(2.75rem, 4.2vw, 4rem);
+            line-height: .92;
+        }
+        .manifesto-copy { max-width: 31rem; font-size: clamp(.95rem, 1.2vw, 1.08rem); }
+
+        #concepts {
+            --concept-stage-scale: .9;
+            --concept-stage-radius: var(--stage-radius);
+            position: relative;
+            isolation: isolate;
+            max-width: none;
+            width: auto;
+            margin: 0;
+            padding: clamp(5rem, 8vw, 8rem) clamp(2rem, 7vw, 7rem) clamp(6rem, 10vw, 10rem);
+            overflow: visible;
+            color: var(--starlight);
+            background: transparent;
+        }
+
+        #concepts::before {
+            content: '';
+            position: absolute;
+            z-index: 0;
+            inset: 0;
+            border-radius: var(--concept-stage-radius);
+            background: var(--black);
+            transform: scaleX(var(--concept-stage-scale));
+            transform-origin: center;
+            transition:
+                transform .8s cubic-bezier(.2,.8,.2,1),
+                border-radius .8s cubic-bezier(.2,.8,.2,1);
+            will-change: transform;
+        }
+
+        #concepts > * { position: relative; z-index: 1; }
+
+        #concepts.is-expanded {
+            --concept-stage-radius: .8rem;
+        }
+
+        #concepts .case-label,
+        #concepts .case-heading,
+        #concepts .concept-grid {
+            width: min(100%, 1280px);
+            margin-inline: auto;
+        }
+        #concepts .case-heading { grid-template-columns: minmax(0, 1fr); }
+        #concepts .case-title {
+            max-width: 14ch;
+            font-size: clamp(2.6rem, 4vw, 4rem);
+            line-height: .93;
+        }
+        .concept-grid { margin-top: clamp(3rem, 6vw, 6rem); }
+        #concepts .concept-figure:nth-child(3) { grid-column: 2 / span 10; }
+        .concept-media { border-radius: clamp(.9rem, 1.5vw, 1.35rem); }
+        .concept-caption { margin-top: 1rem; }
+        .figure-title { font-size: clamp(1.15rem, 1.8vw, 1.65rem); }
+        .concept-caption p { font-size: .9rem; }
+        .concept-disclaimer { font-size: .62rem; }
+
+        footer {
+            max-width: none;
+            margin: 0;
+            padding: 4rem clamp(1.25rem, 3vw, 3.5rem) 2rem;
+            color: var(--black);
+            background: var(--starlight);
+        }
+        .footer-center,
+        .footer-bottom { max-width: 1400px; margin-inline: auto; }
+        .footer-tagline,
+        .footer-bottom { color: rgba(18, 18, 18, .62); }
+        .footer-bottom { border-top-color: rgba(18, 18, 18, .14); }
+
+        @media (max-width: 900px) {
+            .nav-links li { display: list-item !important; }
+            .hero-copy { width: min(72vw, 31rem); }
+        }
+
+        @media (max-width: 680px) {
+            :root { --page-gutter: .5rem; --stage-radius: 1.2rem; }
+            nav { padding: .58rem .65rem .58rem .85rem; }
+            .nav-logo img { width: 92px; }
+            .nav-links .nav-product { display: none !important; }
+            .nav-links a { min-height: 2.5rem; padding: .5rem .75rem; }
+            .hero-scroll { height: 340svh; }
+            .hero-sticky {
+                top: var(--page-gutter);
+                height: calc(100dvh - 1rem);
+                min-height: 0;
+                padding: 0 1.25rem;
+            }
+            .hero-copy { top: 5.2rem; left: 1.25rem; width: calc(100% - 2.5rem); }
+            .hero-copy h1 {
+                max-width: 100%;
+                font-size: clamp(2.3rem, 9.7vw, 2.8rem);
+                line-height: .92;
+            }
+            .hero-copy p { max-width: 20rem; font-size: .88rem; }
+            .hero-3d { right: -4vw; bottom: 1.25rem; width: 108vw !important; height: 44dvh; }
+            .manifesto {
+                padding: 4.5rem 1.25rem 5rem;
+            }
+            .manifesto-title {
+                max-width: 10ch;
+                font-size: clamp(2.2rem, 8.8vw, 2.6rem);
+            }
+            .manifesto-copy { font-size: .92rem; }
+            #concepts {
+                --concept-stage-scale: .94;
+                padding: 5.25rem 1.25rem 5rem;
+            }
+            #concepts.is-expanded { --concept-stage-radius: .65rem; }
+            #concepts .case-title {
+                max-width: 11ch;
+                font-size: clamp(2.2rem, 8.5vw, 2.6rem);
+            }
+            #concepts .concept-grid {
+                grid-template-columns: minmax(0, 1fr);
+                gap: 2.75rem 0;
+                margin-top: 3rem;
+            }
+            #concepts .concept-figure:nth-child(1),
+            #concepts .concept-figure:nth-child(2),
+            #concepts .concept-figure:nth-child(3) {
+                grid-column: 1 / -1;
+                margin-top: 0;
+            }
+            footer { padding-top: 3rem; }
+        }
+    </style>
+</head>
+<body>
+
+<a href="#main" class="skip-link">Saltar al contenido</a>
+
+<!-- NAV -->
+<nav id="main-nav" aria-label="Principal">
+    <a href="#hero-scroll" class="nav-logo" aria-label="Inicio">
+        <img src="./assets/v2/lemon-horizontal-black.svg" alt="Lemon" width="120">
+    </a>
+    <ul class="nav-links">
+        <li class="nav-product"><a href="#product">Producto</a></li>
+        <li class="nav-preview"><a href="./studio/?mode=concept">Ver demo ↗</a></li>
+    </ul>
+</nav>
+
+<main id="main">
+
+<!-- HERO — scroll-driven assembly -->
+<section class="hero-scroll" id="hero-scroll">
+    <div class="hero-sticky">
+        <canvas id="matrix-rain" class="matrix-rain" aria-hidden="true"></canvas>
+        <div class="hero-copy">
+            <h1>El mercado de Lemon, en tu escritorio.</h1>
+            <p>Bitcoin, dólar y mercado en tiempo real. Siempre a la vista.</p>
+            <div class="hero-actions" aria-label="Acción principal">
+                <a class="hero-action primary" href="./studio/?mode=concept">Ver demo ↗</a>
+            </div>
+        </div>
+        <div id="hero-viewer" class="hero-3d">
+            <div class="loader" id="hero-loader" role="status" aria-live="polite" aria-label="Cargando modelo 3D">
+                <span aria-hidden="true"><span class="loader-dot">.</span><span class="loader-dot">.</span><span class="loader-dot">.</span></span>
+            </div>
+        </div>
+        <p class="hero-note">Scroll para explorar la Lemon Box</p>
+        <div id="assembly-progress" role="progressbar" aria-label="Progreso de ensamblaje" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+    </div>
+</section>
+
+<section class="manifesto" id="product" aria-labelledby="manifesto-title">
+    <div class="manifesto-inner">
+        <div class="case-label">02 · El producto</div>
+        <h2 class="manifesto-title" id="manifesto-title">Siempre presente. Relevante cuando importa.</h2>
+        <div class="manifesto-copy">
+            <p>Bitcoin queda a la vista. Los movimientos importantes ganan el foco y vuelven a la calma.</p>
+        </div>
+    </div>
+</section>
+
+<section class="case-section" id="concepts">
+    <div class="case-label reveal">03 · Así se vive</div>
+    <div class="case-heading">
+        <h2 class="case-title reveal reveal-delay-1">Tres momentos. Una Lemon Box.</h2>
+    </div>
+
+    <div class="concept-grid">
+        <figure class="concept-figure reveal">
+            <div class="concept-media">
+                <picture>
+                    <source srcset="./assets/v2/ambient-home-product.webp" type="image/webp">
+                    <img src="./assets/v2/ambient-home-product.png" alt="Dirección visual de la Lemon Box física mostrando un home ambiental de Bitcoin" loading="lazy" width="1536" height="1024">
+                </picture>
+            </div>
+            <figcaption class="concept-caption">
+                <span class="figure-index">01</span>
+                <div>
+                    <h3 class="figure-title">Home ambiental</h3>
+                    <p>Bitcoin y hora.</p>
+                    <span class="concept-disclaimer">Dirección visual · datos ilustrativos</span>
+                </div>
+            </figcaption>
+        </figure>
+
+        <figure class="concept-figure reveal reveal-delay-1">
+            <div class="concept-media">
+                <picture>
+                    <source srcset="./assets/v2/market-tape-product.webp" type="image/webp">
+                    <img src="./assets/v2/market-tape-product.png" alt="Dirección visual de Market Tape en la Lemon Box física con índices, acciones y un Pack" loading="lazy" width="1536" height="1024">
+                </picture>
+            </div>
+            <figcaption class="concept-caption">
+                <span class="figure-index">02</span>
+                <div>
+                    <h3 class="figure-title">Market Tape</h3>
+                    <p>Apertura, cierre y movimiento.</p>
+                    <span class="concept-disclaimer">Dirección visual · no es mercado en vivo</span>
+                </div>
+            </figcaption>
+        </figure>
+
+        <figure class="concept-figure reveal">
+            <div class="concept-media">
+                <picture>
+                    <source srcset="./assets/v2/news-takeover-product.webp" type="image/webp">
+                    <img src="./assets/v2/news-takeover-product.png" alt="Dirección visual de una noticia contextual en la Lemon Box física con continuidad en Lemon" loading="lazy" width="1536" height="1024">
+                </picture>
+            </div>
+            <figcaption class="concept-caption">
+                <span class="figure-index">03</span>
+                <div>
+                    <h3 class="figure-title">Contexto</h3>
+                    <p>Qué pasó y por qué importa.</p>
+                    <span class="concept-disclaimer">Dirección visual · contenido de ejemplo</span>
+                </div>
+            </figcaption>
+        </figure>
+    </div>
+</section>
+
+<section class="section" id="about" hidden aria-hidden="true">
+    <div class="about-layout">
+        <div class="about-copy">
+            <div class="section-label reveal">Qué es</div>
+            <h2 class="section-title reveal reveal-delay-1">Tu cripto,<br>siempre visible</h2>
+            <p class="about-text reveal reveal-delay-2">
+                <strong>Lemon Box</strong> es un objeto de escritorio que muestra
+                el <span class="g">precio de Bitcoin en vivo</span>, tus pares
+                favoritos y el dólar. Siempre encendido. Sin pestañas. Sin distracciones.
+                <br><br>
+                Un recorte del ecosistema <span class="g">Lemon</span> sobre tu mesa.
+            </p>
+        </div>
+        <div class="about-display reveal reveal-delay-3" aria-hidden="true">
+            <div class="ad-bezel">
+                <canvas class="ad-bg" id="ad-matrix"></canvas>
+                <div class="ad-content">
+                    <div class="ad-pair">
+                        <img src="./assets/lemon-iso.svg" alt="" width="14" height="14">
+                        <span>Bitcoin</span>
+                    </div>
+                    <div class="ad-price" id="ad-btc-price">$65,260.00</div>
+                    <div class="ad-delta" id="ad-btc-delta">demo - 24h</div>
+                    <svg class="ad-spark" viewBox="0 0 200 48" preserveAspectRatio="none">
+                        <path fill="none" stroke="#00DF1A" stroke-width="1.6" stroke-linejoin="round" id="ad-btc-path" d="M0 34 L22 28 L44 30 L66 20 L88 23 L110 17 L132 21 L154 14 L176 18 L200 10"></path>
+                    </svg>
+                </div>
+                <div class="ad-scanlines"></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="divider" hidden></div>
+
+<!-- FEATURES -->
+<section class="section" id="features" hidden aria-hidden="true">
+    <div class="section-label reveal">Features</div>
+    <h2 class="section-title reveal reveal-delay-1">Todo lo que necesitás,<br>en una pantalla</h2>
+
+    <div class="features-grid">
+        <div class="f-card reveal">
+            <div class="f-num">01</div>
+            <div class="f-title">Bitcoin en vivo</div>
+            <div class="f-desc">El precio de BTC actualizado al instante, con gráfico y variación.</div>
+            <div class="f-viz">
+                <div class="f-viz-row">
+                    <span class="f-price" id="fv-btc-price">$65,260.00</span>
+                    <span class="f-delta" id="fv-btc-delta">demo - 24h</span>
+                </div>
+                <svg class="f-spark" id="fv-btc-spark" viewBox="0 0 200 36" preserveAspectRatio="none" aria-hidden="true">
+                    <path fill="none" stroke="#00DF1A" stroke-width="1.5" stroke-linejoin="round" id="fv-btc-path" d="M0 34 L22 28 L44 30 L66 20 L88 23 L110 17 L132 21 L154 14 L176 18 L200 10"></path>
+                </svg>
+            </div>
+        </div>
+        <div class="f-card reveal reveal-delay-1">
+            <div class="f-num">02</div>
+            <div class="f-title">Tus pares</div>
+            <div class="f-desc">BTC en dólares, ETH, SOL, pesos y oro. Cambiás con un toque.</div>
+            <div class="f-viz">
+                <div class="f-viz-row" style="margin-bottom: 0.7rem;">
+                    <span class="f-price" id="fv-pairs-price" style="font-size: 1.05rem;">$65,260.00</span>
+                    <span class="f-delta" id="fv-pairs-unit">1 BTC - demo</span>
+                </div>
+                <div class="f-chips" id="fv-pairs-chips" role="tablist">
+                    <button class="f-chip active" data-pair="USD" type="button">BTC·USD</button>
+                    <button class="f-chip" data-pair="ETH" type="button">BTC·ETH</button>
+                    <button class="f-chip" data-pair="SOL" type="button">BTC·SOL</button>
+                    <button class="f-chip" data-pair="ARS" type="button">BTC·ARS</button>
+                    <button class="f-chip" data-pair="ORO" type="button">BTC·ORO</button>
+                </div>
+            </div>
+        </div>
+        <div class="f-card reveal reveal-delay-2">
+            <div class="f-num">03</div>
+            <div class="f-title">Polymarket</div>
+            <div class="f-desc">Probabilidades en vivo sobre elecciones, cripto y deportes.</div>
+            <div class="f-viz">
+                <div class="f-viz-row">
+                    <span style="font-size:0.8rem;color:var(--starlight);font-weight:500;">¿BTC arriba de $100k este año?</span>
+                </div>
+                <div class="f-viz-row" style="margin-bottom:0;">
+                    <span class="f-price" style="font-size:1.1rem;" id="fv-poly-pct">62<span style="font-size:0.7rem;opacity:0.6;">%</span></span>
+                    <span class="f-delta" id="fv-poly-delta">YES</span>
+                </div>
+                <div class="f-probbar"><div class="f-probbar-fill" id="fv-poly-bar" style="width:62%"></div></div>
+            </div>
+        </div>
+        <div class="f-card reveal reveal-delay-3">
+            <div class="f-num">04</div>
+            <div class="f-title">Dólar</div>
+            <div class="f-desc">La cotización del día con su sparkline — desde las últimas 24hs hasta un año atrás.</div>
+            <div class="f-viz">
+                <div class="f-viz-row">
+                    <span class="f-price skeleton" id="fv-usd-price">$—————</span>
+                    <span class="f-delta" id="fv-usd-delta">USD·ARS</span>
+                </div>
+                <svg class="f-spark" id="fv-usd-spark" viewBox="0 0 200 36" preserveAspectRatio="none" aria-hidden="true">
+                    <path fill="none" stroke="#00DF1A" stroke-width="1.5" stroke-linejoin="round" class="sk-spark" id="fv-usd-path" d="M0 18 L200 18"></path>
+                </svg>
+            </div>
+        </div>
+        <div class="f-card reveal reveal-delay-4">
+            <div class="f-num">05</div>
+            <div class="f-title">Siempre al día</div>
+            <div class="f-desc">Se mantiene actualizado solo, sin que lo toques.</div>
+            <div class="f-viz">
+                <div class="f-timeline">
+                    <span class="dot"></span>
+                    <span>v4.9.7</span>
+                    <span class="line"></span>
+                    <span class="dot old"></span>
+                    <span style="opacity:0.5;">v4.9.6</span>
+                    <span class="line" style="opacity:0.5;"></span>
+                    <span class="dot old"></span>
+                    <span style="opacity:0.3;">v4.9.5</span>
+                </div>
+            </div>
+        </div>
+        <div class="f-card reveal reveal-delay-5">
+            <div class="f-num">06</div>
+            <div class="f-title">Alertas</div>
+            <div class="f-desc">Un beep discreto cuando BTC se mueve fuerte o cuando una apuesta está por cerrar.</div>
+            <div class="f-viz">
+                <div class="f-alerts">
+                    <div class="f-bell">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+                            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+                        </svg>
+                    </div>
+                    <div class="f-alerts-labels">
+                        <span>BTC ±5%</span>
+                        <span>countdown cierre</span>
+                        <span>precio objetivo</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="divider" hidden></div>
+
+</main>
+
+<!-- FOOTER -->
+<footer>
+    <div class="footer-center">
+        <img src="./assets/v2/lemon-horizontal-black.svg" alt="Lemon" class="footer-logo">
+        <p class="footer-tagline">Market Desk · evolución de Lemon Box.</p>
+    </div>
+    <div class="footer-bottom">
+        <p>Documento de evolución interna · 22.07.2026 · Exclusivamente Lemon</p>
+    </div>
+</footer>
+
+<script>
+requestAnimationFrame(() => {
+    requestAnimationFrame(() => document.body.classList.add('hero-intro-ready'));
+});
+</script>
+
+<!-- THREE.JS -->
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/"
+    }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ── Scroll reveal ──
+const _prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (_prefersReduced) {
+    // Skip observer entirely, show everything up front
+    requestAnimationFrame(() => {
+        document.querySelectorAll('.reveal').forEach(el => el.classList.add('visible'));
+    });
+} else {
+    const revealObserver = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+            e.target.classList.toggle('visible', e.isIntersecting);
+        });
+    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+
+    requestAnimationFrame(() => {
+        document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+    });
+}
+
+// ── Nav scroll effect ──
+const nav = document.getElementById('main-nav');
+const updateNav = () => {
+    nav.classList.toggle('scrolled', window.scrollY > 60);
+};
+updateNav();
+window.addEventListener('scroll', updateNav, { passive: true });
+
+const conceptStage = document.getElementById('concepts');
+let conceptStageFrame = 0;
+
+function updateConceptStage() {
+    conceptStageFrame = 0;
+    const rect = conceptStage.getBoundingClientRect();
+    const viewport = window.innerHeight;
+    const restingScale = window.innerWidth < 680 ? 0.94 : 0.90;
+    const enterProgress = clamp((viewport * 0.88 - rect.top) / (viewport * 0.38), 0, 1);
+    const exitProgress = clamp((rect.bottom - viewport * 0.65) / (viewport * 0.35), 0, 1);
+    const focus = Math.min(enterProgress, exitProgress);
+    const scale = restingScale + (0.995 - restingScale) * focus;
+    conceptStage.style.setProperty('--concept-stage-scale', scale.toFixed(4));
+    conceptStage.classList.toggle('is-expanded', focus > 0.94);
+}
+
+function queueConceptStageUpdate() {
+    if (!conceptStageFrame) conceptStageFrame = requestAnimationFrame(updateConceptStage);
+}
+
+const conceptStageObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        conceptStage.classList.toggle('is-in-view', entry.isIntersecting);
+        queueConceptStageUpdate();
+    });
+}, { threshold: 0, rootMargin: '20% 0px' });
+conceptStageObserver.observe(conceptStage);
+window.addEventListener('scroll', queueConceptStageUpdate, { passive: true });
+window.addEventListener('resize', queueConceptStageUpdate, { passive: true });
+updateConceptStage();
+
+// ── STL paths & data ──
+const BASE = './modelo3d/';
+const PARTS = {
+    case: {
+        file: 'Lemon-box-with-screen.stl',
+        name: 'Case',
+        desc: 'El cuerpo principal aloja la pantalla cuadrada de 4 pulgadas y la electrónica ESP32-S3 de las unidades existentes.',
+        rotation: [-Math.PI / 2, Math.PI / 6, 0],
+        camDist: 145
+    },
+    lid: {
+        file: 'Lemon-box-lid-new.stl',
+        name: 'Tapa',
+        desc: 'La tapa trasera completa la carcasa y permite acceder al interior para mantenimiento.',
+        rotation: [-Math.PI / 2.4, Math.PI / 6, 0],
+        camDist: 120
+    },
+    logo: {
+        file: 'Lemon-box-lid-logo-new.stl',
+        name: 'Logo',
+        desc: 'El isologo de Lemon está integrado en relieve como parte de la identidad física del objeto.',
+        rotation: [-Math.PI / 2, 0, 0],
+        camDist: 95
+    },
+    feet: {
+        file: 'Lemon-box-feet.stl',
+        name: 'Patas',
+        desc: 'Las patas elevan la base y estabilizan la Lemon Box sobre el escritorio.',
+        rotation: [-Math.PI / 3, Math.PI / 5, 0],
+        camDist: 75
+    }
+};
+
+// ── Utility ──
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+function easeInOutCubic(t) { return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; }
+function phaseProgress(t, start, end) { return clamp((t - start) / (end - start), 0, 1); }
+
+// ══════════════════════════════════════════════
+// ── HERO: Scroll-driven Assembly Viewer ──
+// ══════════════════════════════════════════════
+
+const heroSection = document.getElementById('hero-scroll');
+const heroEl = document.getElementById('hero-viewer');
+const heroLoaderEl = document.getElementById('hero-loader');
+const progressBar = document.getElementById('assembly-progress');
+
+function getHeroCameraFov() {
+    return window.innerWidth < 680 ? 44 : 38;
+}
+
+// Reduced motion: skip animation
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ── Scene setup ──
+const heroScene = new THREE.Scene();
+const heroCamera = new THREE.PerspectiveCamera(
+    getHeroCameraFov(),
+    heroEl.clientWidth / heroEl.clientHeight,
+    0.1, 5000
+);
+
+const heroRenderer = new THREE.WebGLRenderer({
+    antialias: true,
+    alpha: true,
+    powerPreference: 'high-performance'
+});
+heroRenderer.setSize(heroEl.clientWidth, heroEl.clientHeight);
+heroRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+heroRenderer.toneMapping = THREE.LinearToneMapping;
+heroRenderer.toneMappingExposure = 1.0;
+heroEl.appendChild(heroRenderer.domElement);
+
+// Lights
+heroScene.add(new THREE.AmbientLight(0xffffff, 0.9));
+
+const heroKeyLight = new THREE.DirectionalLight(0xffffff, 2.2);
+heroKeyLight.position.set(60, 100, 60);
+heroScene.add(heroKeyLight);
+
+const heroRimLight = new THREE.DirectionalLight(0x00DF1A, 0.55);
+heroRimLight.position.set(-70, 30, -50);
+heroScene.add(heroRimLight);
+
+const heroFillLight = new THREE.DirectionalLight(0xdde5ff, 0.9);
+heroFillLight.position.set(-40, -30, 60);
+heroScene.add(heroFillLight);
+
+const heroTopLight = new THREE.DirectionalLight(0xffffff, 1.1);
+heroTopLight.position.set(0, 100, 0);
+heroScene.add(heroTopLight);
+
+const heroUnderLight = new THREE.PointLight(0x00DF1A, 0.18, 200);
+heroUnderLight.position.set(0, -60, 0);
+heroScene.add(heroUnderLight);
+
+// OrbitControls (disabled during scroll animation)
+const heroControls = new OrbitControls(heroCamera, heroRenderer.domElement);
+heroControls.enableDamping = true;
+heroControls.dampingFactor = 0.06;
+heroControls.autoRotate = false;
+heroControls.autoRotateSpeed = 0.8;
+heroControls.enableZoom = false;
+heroControls.enablePan = false;
+heroControls.minDistance = 20;
+heroControls.maxDistance = 250;
+heroControls.maxPolarAngle = Math.PI * 0.85;
+heroControls.enabled = false; // disabled until assembly complete
+
+// Materials
+const darkMetalMat = new THREE.MeshPhysicalMaterial({
+    color: 0x3a3a3a,
+    roughness: 0.42,
+    metalness: 0.55,
+    clearcoat: 0.55,
+    clearcoatRoughness: 0.25,
+    reflectivity: 0.45,
+});
+
+const greenLogoMat = new THREE.MeshPhysicalMaterial({
+    color: 0x00DF1A,
+    roughness: 0.5,
+    metalness: 0.1,
+    emissive: 0x00DF1A,
+    emissiveIntensity: 0.4,
+    clearcoat: 0.3,
+    clearcoatRoughness: 0.2,
+});
+
+
+// Part meshes & animation state
+let caseMesh, lidMesh, logoMesh;
+let assemblyGroup = new THREE.Group();
+heroScene.add(assemblyGroup);
+
+// Exploded offsets (in LOCAL units before group rotation)
+// With rotation.x=-PI/2: local Y → world -Z. So negative local Y = positive world Z (behind case)
+// Lid comes from behind; logo starts centered in front of camera (large -Y in local = large +Z in world)
+const EXPLODED = {
+    case: new THREE.Vector3(0, 0, 0),       // anchor
+    lid:  new THREE.Vector3(0, -75, 0),     // behind case (world +Z)
+    logo: new THREE.Vector3(0, -140, 20),   // between camera and case, slightly up
+};
+
+// Home positions (set after loading)
+const HOME = { case: null, lid: null, logo: null };
+
+// Dashboard screen
+let dashboardMesh = null;
+let dashboardTexture = null;
+
+// Camera path: single continuous spherical orbit around the assembly
+// Start: high isometric view showing exploded parts
+// End: low frontal view looking at the screen
+const CAM_PATH = {
+    startAngle: 0.25,     // ~14° from +Z axis — more frontal
+    endAngle:   Math.PI,  // 180° (straight -Z, facing screen)
+    startRadius: 280,     // farther back so exploded parts don't get cropped
+    endRadius:   130,     // close enough to read the screen, far enough to see the whole case
+    startY: 120,          // higher for isometric feel
+    endY:   0,
+};
+
+function applyCamPathForViewport() {
+    const narrow = window.innerWidth < 680;
+    CAM_PATH.startRadius = narrow ? 205 : 280;
+    CAM_PATH.endRadius   = narrow ? 105 : 130;
+    CAM_PATH.startY      = narrow ? 72 : 120;
+    EXPLODED.lid.set(0, narrow ? -58 : -75, 0);
+    EXPLODED.logo.set(0, narrow ? -88 : -140, narrow ? 12 : 20);
+}
+applyCamPathForViewport();
+// World Z position of the dashboard screen (computed after load)
+let screenWorldZ = -27.6;
+
+// ── Load all STL parts in parallel ──
+const stlLoader = new STLLoader();
+
+function loadSTL(filename) {
+    return new Promise((resolve, reject) => {
+        stlLoader.load(BASE + filename, (geo) => {
+            geo.computeVertexNormals();
+            resolve(geo);
+        }, undefined, reject);
+    });
+}
+
+Promise.all([
+    loadSTL('Lemon-box-with-screen.stl'),
+    loadSTL('Lemon-box-lid-new.stl'),
+    loadSTL('Lemon-box-lid-logo-new.stl'),
+]).then(([caseGeo, lidGeo, logoGeo]) => {
+    // Create meshes — DON'T center individual parts (preserve CAD coordinates)
+    caseMesh = new THREE.Mesh(caseGeo, darkMetalMat);
+    lidMesh  = new THREE.Mesh(lidGeo, darkMetalMat);
+    logoMesh = new THREE.Mesh(logoGeo, greenLogoMat);
+
+    assemblyGroup.add(caseMesh, lidMesh, logoMesh);
+
+    // Compute combined bounding box and center the group
+    const combinedBox = new THREE.Box3().setFromObject(assemblyGroup);
+    const center = new THREE.Vector3();
+    combinedBox.getCenter(center);
+
+    // Shift all children so the group is centered at origin
+    assemblyGroup.children.forEach(child => {
+        child.position.sub(center);
+    });
+
+    // Uniform scale to fit viewport
+    const size = new THREE.Vector3();
+    combinedBox.getSize(size);
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const scale = 55 / maxDim;
+    assemblyGroup.scale.setScalar(scale);
+
+    // Rotate group: STL Z=up → Three.js Y=up (rotate -90° around X)
+    assemblyGroup.rotation.x = -Math.PI / 2;
+
+    // Record home positions (assembled state, in local coords after centering)
+    HOME.case = caseMesh.position.clone();
+    HOME.lid  = lidMesh.position.clone();
+    HOME.logo = logoMesh.position.clone();
+
+    createHeroScreen();
+
+    // Debug: expose key values + geometry bounds
+    caseGeo.computeBoundingBox();
+    lidGeo.computeBoundingBox();
+    logoGeo.computeBoundingBox();
+    const bb = (g) => ({ min: g.boundingBox.min.toArray(), max: g.boundingBox.max.toArray() });
+    window._heroDebug = {
+        scale, maxDim,
+        home: { case: HOME.case.toArray(), lid: HOME.lid.toArray(), logo: HOME.logo.toArray() },
+        combinedSize: size.toArray(),
+        geoBounds: { case: bb(caseGeo), lid: bb(lidGeo), logo: bb(logoGeo) },
+    };
+
+    // If reduced motion, show assembled
+    if (prefersReducedMotion) {
+        heroControls.enabled = true;
+        heroControls.autoRotate = true;
+    }
+
+    heroLoaderEl.classList.add('hidden');
+
+    // Debug exposure — use via window._hero in devtools
+    window._hero = {
+        camera: heroCamera,
+        scene: heroScene,
+        renderer: heroRenderer,
+        controls: heroControls,
+        group: assemblyGroup,
+        meshes: { caseM: caseMesh, lid: lidMesh, logo: logoMesh, dashboard: dashboardMesh },
+        path: CAM_PATH,
+        getScreenZ: () => screenWorldZ,
+        setT: (t) => { window._editGetProgress = () => t; },
+        clearT: () => { window._editGetProgress = null; },
+    };
+    console.log('[hero] debug hook ready', { screenWorldZ });
+});
+
+window.addEventListener('unhandledrejection', e => console.error('[hero] unhandled rejection:', e.reason));
+
+// ── Dashboard canvas texture ──
+function createHeroScreen() {
+    const size = 480;
+    const SCALE = 2; // supersample the texture for crisp text at close range
+
+    // Main (visible) canvas — written via composition from offscreen
+    const canvas = document.createElement('canvas');
+    canvas.width = size * SCALE;
+    canvas.height = size * SCALE;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(SCALE, SCALE);
+
+    // Offscreen canvas holds the raw matrix rain with trails persisting frame-to-frame
+    const matrixCanvas = document.createElement('canvas');
+    matrixCanvas.width = size * SCALE;
+    matrixCanvas.height = size * SCALE;
+    const mctx = matrixCanvas.getContext('2d');
+    mctx.scale(SCALE, SCALE);
+    mctx.fillStyle = '#03040A';
+    mctx.fillRect(0, 0, size, size);
+
+    dashboardTexture = new THREE.CanvasTexture(canvas);
+    dashboardTexture.colorSpace = THREE.SRGBColorSpace;
+    dashboardTexture.anisotropy = 8;
+
+    const logoImg = new Image();
+    logoImg.decoding = 'async';
+    logoImg.src = './assets/lemonlogo.png';
+
+    const productScreenImg = new Image();
+    productScreenImg.decoding = 'async';
+    productScreenImg.src = './assets/v2/home-screen-demo-480.png';
+
+    // Matrix rain on the dashboard texture
+    // Bitcoin symbol weighted heavily so it shows up as a recurring motif on the device screen
+    const M_CHARS = '₿₿₿₿₿₿₿₿₿₿₿₿₿₿アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789Ξ$%△▽';
+    const M_FONT = 16;
+    const M_COL_W = 11;
+    const M_COLS = Math.ceil(size / M_COL_W);
+    const mCols = new Array(M_COLS).fill(0).map((_, i) => ({
+        x: i * M_COL_W,
+        y: -Math.random() * 6,
+        speed: 0.05 + Math.random() * 0.08,
+        bright: Math.random() < 0.38,
+        alpha: 0.78 + Math.random() * 0.22,
+        lastRow: -1,
+        lastChar: ''
+    }));
+    const randChar = () => M_CHARS[(Math.random() * M_CHARS.length) | 0];
+
+    function drawMatrix() {
+        // Solid dark base with slight fade to create trail
+        mctx.fillStyle = 'rgba(3, 4, 7, 0.08)';
+        mctx.fillRect(0, 0, size, size);
+        mctx.font = `${M_FONT}px 'JetBrains Mono', 'Fira Code', 'Segoe UI Symbol', monospace`;
+        mctx.textBaseline = 'top';
+        for (let i = 0; i < M_COLS; i++) {
+            const c = mCols[i];
+            c.y += c.speed;
+            const row = Math.floor(c.y);
+            if (row !== c.lastRow) {
+                if (c.lastRow >= 0 && c.lastChar) {
+                    mctx.globalAlpha = c.alpha * 0.9;
+                    mctx.fillStyle = '#00DF1A';
+                    mctx.fillText(c.lastChar, c.x, c.lastRow * M_FONT);
+                }
+                // Bright heads always render the Bitcoin glyph; non-bright heavily favor it too
+                let ch;
+                if (c.bright) ch = '₿';
+                else if (Math.random() < 0.55) ch = '₿';
+                else ch = randChar();
+                mctx.globalAlpha = c.bright ? 1.0 : c.alpha;
+                // Draw ₿ slightly larger + in brand green so it pops
+                if (ch === '₿') {
+                    const prevFont = mctx.font;
+                    mctx.font = `bold ${M_FONT + 2}px 'JetBrains Mono', 'Fira Code', 'Segoe UI Symbol', monospace`;
+                    mctx.fillStyle = c.bright ? '#FFFFFF' : '#00DF1A';
+                    mctx.fillText(ch, c.x, row * M_FONT);
+                    mctx.font = prevFont;
+                } else {
+                    mctx.fillStyle = '#00DF1A';
+                    mctx.fillText(ch, c.x, row * M_FONT);
+                }
+                c.lastRow = row;
+                c.lastChar = ch;
+            }
+            if (row * M_FONT > size + M_FONT * 4 && Math.random() > 0.975) {
+                c.y = -Math.random() * 8 - 1;
+                c.speed = 0.05 + Math.random() * 0.08;
+                c.bright = Math.random() < 0.38;
+                c.alpha = 0.78 + Math.random() * 0.22;
+                c.lastRow = -1;
+                c.lastChar = '';
+            }
+        }
+        mctx.globalAlpha = 1;
+    }
+
+    function drawLogoOn(alpha) {
+        if (alpha <= 0) return;
+        if (logoImg.complete && logoImg.naturalWidth > 0) {
+            const maxDim = size * 0.5;
+            const scale = Math.min(maxDim / logoImg.naturalWidth, maxDim / logoImg.naturalHeight);
+            const drawWidth = logoImg.naturalWidth * scale;
+            const drawHeight = logoImg.naturalHeight * scale;
+            const drawX = (size - drawWidth) / 2;
+            const drawY = (size - drawHeight) / 2;
+            ctx.globalAlpha = alpha;
+            ctx.drawImage(logoImg, drawX, drawY, drawWidth, drawHeight);
+            ctx.globalAlpha = 1;
+        }
+    }
+
+    let matrixWasVisible = false;
+    function resetMatrix() {
+        // Clear offscreen canvas to solid black so no residual trails
+        mctx.save();
+        mctx.setTransform(1, 0, 0, 1, 0, 0);
+        mctx.fillStyle = '#03040A';
+        mctx.fillRect(0, 0, matrixCanvas.width, matrixCanvas.height);
+        mctx.restore();
+        // Reset all columns to start from just above the top
+        for (let i = 0; i < M_COLS; i++) {
+            const c = mCols[i];
+            c.y = -Math.random() * 6 - 1;
+            c.speed = 0.12 + Math.random() * 0.16;
+            c.bright = Math.random() < 0.28;
+            c.alpha = 0.78 + Math.random() * 0.22;
+            c.lastRow = -1;
+            c.lastChar = '';
+        }
+    }
+
+    function drawScreen() {
+
+        // Clear main canvas to transparent so the case shows through outside the rounded rect
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        // Clip to rounded rect (square display with soft corners)
+        ctx.save();
+        const r = size * 0.08;
+        ctx.beginPath();
+        ctx.moveTo(r, 0);
+        ctx.lineTo(size - r, 0);
+        ctx.quadraticCurveTo(size, 0, size, r);
+        ctx.lineTo(size, size - r);
+        ctx.quadraticCurveTo(size, size, size - r, size);
+        ctx.lineTo(r, size);
+        ctx.quadraticCurveTo(0, size, 0, size - r);
+        ctx.lineTo(0, r);
+        ctx.quadraticCurveTo(0, 0, r, 0);
+        ctx.closePath();
+        ctx.clip();
+
+        // Dark base so screen has a display background
+        ctx.fillStyle = '#03040A';
+        ctx.fillRect(0, 0, size, size);
+
+        // Screen sequence completes early enough to leave a genuine hold:
+        //   raw 0.42..0.46: Lemon logo fades in
+        //   raw 0.44..0.48: market rain appears and then holds
+        //   raw 0.52..0.58: Market Desk home replaces the boot moment
+        //   raw 0.58..0.94: completed home remains visible
+        const raw = window.__heroRawProgress ?? 0;
+        const logoVisible = Math.max(0, Math.min(1, (raw - 0.42) / 0.04));
+        const matrixVisible = Math.max(0, Math.min(1, (raw - 0.44) / 0.04));
+        const productVisible = Math.max(0, Math.min(1, (raw - 0.52) / 0.06));
+
+        // Reset matrix to clean state right before it becomes visible,
+        // then only advance it while visible so the user sees it from frame one.
+        if (matrixVisible > 0 && !matrixWasVisible) {
+            resetMatrix();
+        }
+        matrixWasVisible = matrixVisible > 0;
+
+        if (matrixVisible > 0) {
+            drawMatrix();
+            ctx.globalAlpha = matrixVisible * (1 - productVisible);
+            ctx.drawImage(matrixCanvas, 0, 0, size, size);
+            ctx.globalAlpha = 1;
+        }
+
+        drawLogoOn(logoVisible * (1 - productVisible));
+        if (productVisible > 0 && productScreenImg.complete && productScreenImg.naturalWidth > 0) {
+            ctx.globalAlpha = productVisible;
+            ctx.drawImage(productScreenImg, 0, 0, size, size);
+            ctx.globalAlpha = 1;
+        }
+        ctx.restore();
+        dashboardTexture.needsUpdate = true;
+    }
+
+    let dashRaf = null;
+    function tick() {
+        dashRaf = requestAnimationFrame(tick);
+        drawScreen();
+    }
+
+    logoImg.onload = () => { drawScreen(); if (!dashRaf) tick(); };
+    logoImg.onerror = () => { drawScreen(); if (!dashRaf) tick(); };
+    productScreenImg.onload = drawScreen;
+    drawScreen();
+    tick();
+
+    // ── Screen assembly: glow halo + metal bezel + display ──
+    const screenAssembly = new THREE.Group();
+
+    // 1) Soft glow halo behind the screen — radial falloff via canvas texture
+    const haloCanvas = document.createElement('canvas');
+    haloCanvas.width = haloCanvas.height = 256;
+    const hctx = haloCanvas.getContext('2d');
+    const haloGrad = hctx.createRadialGradient(128, 128, 40, 128, 128, 128);
+        haloGrad.addColorStop(0.0, 'rgba(0,240,104,0.15)');
+        haloGrad.addColorStop(0.45, 'rgba(0,240,104,0.04)');
+    haloGrad.addColorStop(1.0, 'rgba(0,240,104,0)');
+    hctx.fillStyle = haloGrad;
+    hctx.fillRect(0, 0, 256, 256);
+    const haloTex = new THREE.CanvasTexture(haloCanvas);
+    haloTex.colorSpace = THREE.SRGBColorSpace;
+
+    const haloGeo = new THREE.PlaneGeometry(82, 82);
+    const haloMat = new THREE.MeshBasicMaterial({
+        map: haloTex,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+    });
+    const haloMesh = new THREE.Mesh(haloGeo, haloMat);
+    haloMesh.position.y = -0.08; // slightly behind the display
+    screenAssembly.add(haloMesh);
+
+    // 2) The actual display — square composition mapped onto the front face.
+    const screenGeo = new THREE.PlaneGeometry(70, 70);
+    const screenMat = new THREE.MeshBasicMaterial({
+        map: dashboardTexture,
+        transparent: true,
+        opacity: 0,
+        side: THREE.FrontSide,
+        toneMapped: false, // preserve UI vibrancy under scene tone mapping
+    });
+    dashboardMesh = new THREE.Mesh(screenGeo, screenMat);
+    dashboardMesh.position.y = 0.05; // slightly in front of the halo plane
+    screenAssembly.add(dashboardMesh);
+
+    // Parent the assembly to the case so it moves with the case
+    caseMesh.add(screenAssembly);
+
+    function measureFrontFace(geometry) {
+        geometry.computeBoundingBox();
+
+        const box = geometry.boundingBox;
+        const size = new THREE.Vector3();
+        box.getSize(size);
+
+        const xMin = box.min.x + size.x * 0.13;
+        const xMax = box.max.x - size.x * 0.13;
+        const zMin = box.min.z + size.z * 0.01;
+        const zMax = box.max.z - size.z * 0.19;
+        const yMin = box.max.y - size.y * 0.25;
+
+        let sx = 0;
+        let sz = 0;
+        let sy = 0;
+        let sxx = 0;
+        let szz = 0;
+        let sxz = 0;
+        let sxy = 0;
+        let szy = 0;
+        let count = 0;
+
+        const pos = geometry.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+            const x = pos.getX(i);
+            const y = pos.getY(i);
+            const z = pos.getZ(i);
+
+            if (x < xMin || x > xMax || z < zMin || z > zMax || y < yMin) continue;
+
+            sx += x;
+            sz += z;
+            sy += y;
+            sxx += x * x;
+            szz += z * z;
+            sxz += x * z;
+            sxy += x * y;
+            szy += z * y;
+            count++;
+        }
+
+        const fallbackCenter = new THREE.Vector3(
+            (box.min.x + box.max.x) * 0.5,
+            box.max.y,
+            (box.min.z + box.max.z) * 0.5
+        );
+
+        if (count < 3) {
+            return {
+                normal: new THREE.Vector3(0, 1, 0),
+                center: fallbackCenter,
+            };
+        }
+
+        const det = sxx * (szz * count - sz * sz) - sxz * (sxz * count - sz * sx) + sx * (sxz * sz - szz * sx);
+        if (Math.abs(det) < 1e-6) {
+            return {
+                normal: new THREE.Vector3(0, 1, 0),
+                center: fallbackCenter,
+            };
+        }
+
+        const da = sxy * (szz * count - sz * sz) - sxz * (szy * count - sz * sy) + sx * (szy * sz - szz * sy);
+        const db = sxx * (szy * count - sz * sy) - sxy * (sxz * count - sz * sx) + sx * (sxz * sy - szy * sx);
+        const a = da / det;
+        const b = db / det;
+
+        return {
+            normal: new THREE.Vector3(-a, 1, -b).normalize(),
+            center: new THREE.Vector3(sx / count, sy / count, sz / count),
+        };
+    }
+
+    caseMesh.geometry.computeBoundingBox();
+    const caseBB = caseMesh.geometry.boundingBox;
+    const caseCenter = new THREE.Vector3();
+    caseBB.getCenter(caseCenter);
+    // Screen sits on the +Y face of the case STL (forward after group rotation)
+    const frontNormal = new THREE.Vector3(0, 1, 0);
+    const screenOffset = frontNormal.clone().multiplyScalar(1.0);
+    const planeUp = new THREE.Vector3(0, 0, 1).projectOnPlane(frontNormal).normalize();
+    const planeRight = new THREE.Vector3().crossVectors(planeUp, frontNormal).normalize();
+    const screenBasis = new THREE.Matrix4().makeBasis(planeRight, planeUp, frontNormal);
+
+    screenAssembly.position.set(caseCenter.x + screenOffset.x, caseBB.max.y + screenOffset.y, caseCenter.z + screenOffset.z);
+    screenAssembly.quaternion.setFromRotationMatrix(screenBasis);
+
+    // Expose halo so animation loop can fade it in with the display
+    dashboardMesh.userData.halo = haloMesh;
+
+    // Compute the dashboard's WORLD Z so the camera can look directly at it at t=1
+    assemblyGroup.updateMatrixWorld(true);
+    const screenWorldPos = new THREE.Vector3();
+    dashboardMesh.getWorldPosition(screenWorldPos);
+    screenWorldZ = screenWorldPos.z;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+// ── Scroll progress ──
+function getScrollProgress() {
+    const rect = heroSection.getBoundingClientRect();
+    const distance = heroSection.scrollHeight - window.innerHeight;
+    const HOLD_END = 0.52;
+    const raw = clamp(-rect.top / distance, 0, 1);
+    const exitOpacity = 1 - clamp((raw - 0.94) / 0.04, 0, 1);
+    heroSection.style.setProperty('--hero-exit-opacity', exitOpacity.toFixed(3));
+    window.__heroRawProgress = raw;
+    return clamp(raw / HOLD_END, 0, 1);
+}
+
+// ── Animation loop ──
+let assemblyComplete = false;
+let heroInViewport = true;
+
+const heroVisibilityObserver = new IntersectionObserver((entries) => {
+    heroInViewport = entries.some((entry) => entry.isIntersecting);
+}, { rootMargin: '120px 0px' });
+heroVisibilityObserver.observe(heroSection);
+
+function heroAnimate() {
+    requestAnimationFrame(heroAnimate);
+
+    if (!heroInViewport && !window._editGetProgress) return;
+
+    const t = prefersReducedMotion ? 1.0 : (window._editGetProgress ? window._editGetProgress() : getScrollProgress());
+
+    if (dashboardMesh) {
+        const screenT = easeInOutCubic(phaseProgress(t, 0.82, 1.0));
+        dashboardMesh.material.opacity = screenT;
+        dashboardMesh.userData.halo.material.opacity = 0.55 * screenT;
+    }
+
+    // Update progress bar
+    const pct = Math.round(t * 100);
+    progressBar.style.width = pct + '%';
+    progressBar.setAttribute('aria-valuenow', String(pct));
+
+    // Matrix opacity ramp: boost near the end of the animation
+    const matrixEl = document.getElementById('matrix-rain');
+    if (matrixEl) {
+        const boost = clamp((t - 0.75) / 0.2, 0, 1);
+        const op = 0.55 + boost * 0.35;
+        matrixEl.style.setProperty('--matrix-opacity', op.toFixed(3));
+    }
+
+    // Expose progress for dashboard texture (logo first, then matrix)
+    window.__heroProgress = t;
+
+    if (caseMesh && !prefersReducedMotion) {
+        // ── Part assembly phases ──
+
+        // Lid: t=0.05–0.40 (assembles while camera still behind)
+        const lidT = easeInOutCubic(phaseProgress(t, 0.05, 0.40));
+        lidMesh.position.lerpVectors(
+            HOME.lid.clone().add(EXPLODED.lid),
+            HOME.lid,
+            lidT
+        );
+
+        // Logo: t=0.05–0.50 (starts first, flies from center to its spot on lid)
+        const logoT = easeInOutCubic(phaseProgress(t, 0.05, 0.50));
+        logoMesh.position.lerpVectors(
+            HOME.logo.clone().add(EXPLODED.logo),
+            HOME.logo,
+            logoT
+        );
+
+        // Case stays at home (anchor)
+        caseMesh.position.copy(HOME.case);
+
+        // ── Camera: single continuous spherical orbit around the assembly ──
+        if (!heroControls.enabled) {
+            const camT = easeInOutCubic(t);
+
+            const angle = CAM_PATH.startAngle + (CAM_PATH.endAngle - CAM_PATH.startAngle) * camT;
+            const radius = CAM_PATH.startRadius + (CAM_PATH.endRadius - CAM_PATH.startRadius) * camT;
+            const camY = CAM_PATH.startY + (CAM_PATH.endY - CAM_PATH.startY) * camT;
+
+            const camX = Math.sin(angle) * radius;
+            const camZ = Math.cos(angle) * radius;
+
+            heroCamera.position.set(camX, camY, camZ);
+
+            // Target: origin → screen center as the camera settles into the final frontal view
+            const targetT = easeInOutCubic(phaseProgress(t, 0.80, 1.0));
+            heroCamera.lookAt(0, 0, screenWorldZ * targetT);
+        }
+
+
+
+        // ── Post-assembly: enable orbit controls (user can drag, no auto-rotate) ──
+        if (t >= 1.0 && !assemblyComplete) {
+            assemblyComplete = true;
+            // Orbit around the screen, not the origin, so the dashboard stays centered
+            heroControls.target.set(0, 0, screenWorldZ);
+            heroControls.enabled = true;
+            heroControls.autoRotate = false;
+            heroRenderer.domElement.style.cursor = 'grab';
+        } else if (t < 1.0 && assemblyComplete) {
+            assemblyComplete = false;
+            heroControls.enabled = false;
+            heroControls.autoRotate = false;
+            heroRenderer.domElement.style.cursor = 'default';
+        }
+    }
+
+    if (heroControls.enabled) {
+        heroControls.update();
+    }
+
+    heroRenderer.render(heroScene, heroCamera);
+}
+heroAnimate();
+
+// ── Responsive resize ──
+const heroRO = new ResizeObserver(() => {
+    const w = heroEl.clientWidth;
+    const h = heroEl.clientHeight;
+    applyCamPathForViewport();
+    heroCamera.fov = getHeroCameraFov();
+    heroCamera.aspect = w / h;
+    heroCamera.updateProjectionMatrix();
+    heroRenderer.setSize(w, h);
+});
+heroRO.observe(heroEl);
+
+// ══════════════════════════════════════════════
+// ── EDIT MODE: Full transform controls ──
+// ══════════════════════════════════════════════
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
+
+(function editMode() {
+    let editActive = false;
+    let editT = 0;
+    let selectedName = null;
+    let transformCtrl = null;
+
+    const btnStyle = 'padding:4px 8px;background:#222;color:#ccc;border:1px solid #555;border-radius:4px;cursor:pointer;font-family:inherit;font-size:10px;';
+    const btnActiveStyle = 'padding:4px 8px;background:#00DF1A;color:#121212;border:1px solid #00DF1A;border-radius:4px;cursor:pointer;font-family:inherit;font-size:10px;font-weight:bold;';
+
+    const panel = document.createElement('div');
+    panel.innerHTML = `
+        <div id="edit-panel" style="position:fixed;top:10px;right:10px;z-index:9999;background:rgba(18,18,18,0.95);border:1px solid #00DF1A;border-radius:8px;padding:14px;font-family:'Satoshi',sans-serif;font-size:11px;color:#ccc;width:340px;display:none;max-height:90vh;overflow-y:auto;">
+            <div style="color:#00DF1A;font-weight:bold;margin-bottom:10px;font-size:13px;">EDIT MODE <span style="color:#555;font-weight:normal;font-size:10px;">(Ctrl+E toggle)</span></div>
+
+            <div style="margin-bottom:8px;border-bottom:1px solid #333;padding-bottom:8px;">
+                <div style="color:#888;margin-bottom:4px;">Scroll Progress</div>
+                <input type="range" id="edit-t" min="0" max="100" value="0" style="width:100%;">
+                <span id="edit-t-val" style="color:#00DF1A;">0.00</span>
+            </div>
+
+            <div style="margin-bottom:8px;border-bottom:1px solid #333;padding-bottom:8px;">
+                <div style="color:#888;margin-bottom:4px;">Select Part</div>
+                <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                    <button class="edit-sel" data-name="case" style="${btnStyle}">Case</button>
+                    <button class="edit-sel" data-name="lid" style="${btnStyle}">Lid</button>
+                    <button class="edit-sel" data-name="logo" style="${btnStyle}">Logo</button>
+                    <button class="edit-sel" data-name="group" style="${btnStyle}">Group</button>
+                    <button class="edit-sel" data-name="none" style="${btnStyle}">Deselect</button>
+                </div>
+            </div>
+
+            <div style="margin-bottom:8px;border-bottom:1px solid #333;padding-bottom:8px;">
+                <div style="color:#888;margin-bottom:4px;">Transform Mode</div>
+                <div style="display:flex;gap:4px;">
+                    <button id="edit-mode-translate" style="${btnActiveStyle}">Move (W)</button>
+                    <button id="edit-mode-rotate" style="${btnStyle}">Rotate (E)</button>
+                    <button id="edit-mode-scale" style="${btnStyle}">Scale (R)</button>
+                </div>
+            </div>
+
+            <div style="margin-bottom:8px;border-bottom:1px solid #333;padding-bottom:8px;">
+                <div style="color:#888;margin-bottom:4px;">Camera</div>
+                <div id="edit-cam-info" style="line-height:1.6;margin-bottom:4px;"></div>
+                <label style="color:#ff0;"><input type="checkbox" id="edit-orbit"> Orbit libre (drag fondo)</label>
+                <div style="display:flex;gap:4px;margin-top:4px;">
+                    <button id="edit-cam-start" style="${btnStyle}">Set CAM_START</button>
+                    <button id="edit-cam-end" style="${btnStyle}">Set CAM_END</button>
+                </div>
+            </div>
+
+            <div style="margin-bottom:8px;border-bottom:1px solid #333;padding-bottom:8px;">
+                <div style="color:#888;margin-bottom:4px;">Selected Object Info</div>
+                <div id="edit-obj-info" style="line-height:1.6;color:#aaa;"></div>
+            </div>
+
+            <div>
+                <div style="color:#888;margin-bottom:4px;">Export All Values</div>
+                <button id="edit-export" style="${btnStyle}width:100%;">Copy Config to Console</button>
+                <pre id="edit-output" style="margin-top:6px;color:#ff0;font-size:9px;word-break:break-all;white-space:pre-wrap;max-height:150px;overflow-y:auto;"></pre>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(panel);
+
+    const panelEl = document.getElementById('edit-panel');
+    const tSlider = document.getElementById('edit-t');
+    const tVal = document.getElementById('edit-t-val');
+    const camInfo = document.getElementById('edit-cam-info');
+    const objInfo = document.getElementById('edit-obj-info');
+    const orbitCheck = document.getElementById('edit-orbit');
+    const outputEl = document.getElementById('edit-output');
+
+    // Transform controls
+    transformCtrl = new TransformControls(heroCamera, heroRenderer.domElement);
+    transformCtrl.setSize(0.8);
+    heroScene.add(transformCtrl);
+
+    // Prevent orbit when dragging transform
+    transformCtrl.addEventListener('dragging-changed', (e) => {
+        if (orbitCheck.checked) heroControls.enabled = !e.value;
+    });
+
+    function getMeshByName(name) {
+        if (name === 'case') return caseMesh;
+        if (name === 'lid') return lidMesh;
+        if (name === 'logo') return logoMesh;
+        if (name === 'group') return assemblyGroup;
+        return null;
+    }
+
+    function selectPart(name) {
+        selectedName = name;
+        const mesh = getMeshByName(name);
+        // Update button styles
+        document.querySelectorAll('.edit-sel').forEach(b => {
+            b.style.cssText = b.dataset.name === name ? btnActiveStyle : btnStyle;
+        });
+        if (mesh) {
+            transformCtrl.attach(mesh);
+        } else {
+            transformCtrl.detach();
+        }
+    }
+
+    // Part selection buttons
+    document.querySelectorAll('.edit-sel').forEach(btn => {
+        btn.addEventListener('click', () => selectPart(btn.dataset.name));
+    });
+
+    // Transform mode buttons
+    const modeButtons = {
+        'edit-mode-translate': 'translate',
+        'edit-mode-rotate': 'rotate',
+        'edit-mode-scale': 'scale',
+    };
+    Object.entries(modeButtons).forEach(([id, mode]) => {
+        document.getElementById(id).addEventListener('click', () => {
+            transformCtrl.setMode(mode);
+            Object.keys(modeButtons).forEach(bid => {
+                document.getElementById(bid).style.cssText = bid === id ? btnActiveStyle : btnStyle;
+            });
+        });
+    });
+
+    // Keyboard shortcuts for transform mode
+    window.addEventListener('keydown', (e) => {
+        if (!editActive) return;
+        if (e.key === 'w') { transformCtrl.setMode('translate'); document.getElementById('edit-mode-translate').click(); }
+        if (e.key === 'e' && !e.ctrlKey) { transformCtrl.setMode('rotate'); document.getElementById('edit-mode-rotate').click(); }
+        if (e.key === 'r') { transformCtrl.setMode('scale'); document.getElementById('edit-mode-scale').click(); }
+    });
+
+    // Toggle with Ctrl+E
+    window.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'e') {
+            e.preventDefault();
+            editActive = !editActive;
+            panelEl.style.display = editActive ? 'block' : 'none';
+            if (editActive) {
+                document.documentElement.style.scrollBehavior = 'auto';
+                window.scrollTo(0, 0);
+                heroSection.style.height = '100vh';
+                heroControls.enabled = orbitCheck.checked;
+            } else {
+                heroSection.style.height = '';
+                transformCtrl.detach();
+                heroControls.enabled = false;
+            }
+        }
+    });
+
+    // Slider
+    tSlider.addEventListener('input', () => {
+        editT = parseInt(tSlider.value) / 100;
+        tVal.textContent = editT.toFixed(2);
+    });
+
+    // Orbit checkbox
+    orbitCheck.addEventListener('change', () => {
+        heroControls.enabled = orbitCheck.checked;
+    });
+
+    // Camera buttons
+    let savedStart = '', savedEnd = '';
+    document.getElementById('edit-cam-start').addEventListener('click', () => {
+        const p = heroCamera.position;
+        savedStart = `CAM_START = { x: ${p.x.toFixed(1)}, y: ${p.y.toFixed(1)}, z: ${p.z.toFixed(1)} }`;
+        outputEl.textContent = savedStart + (savedEnd ? '\n' + savedEnd : '');
+    });
+    document.getElementById('edit-cam-end').addEventListener('click', () => {
+        const p = heroCamera.position;
+        savedEnd = `CAM_END = { x: ${p.x.toFixed(1)}, y: ${p.y.toFixed(1)}, z: ${p.z.toFixed(1)} }`;
+        outputEl.textContent = (savedStart ? savedStart + '\n' : '') + savedEnd;
+    });
+
+    // Export all
+    document.getElementById('edit-export').addEventListener('click', () => {
+        const fmt = (v) => `(${v.x.toFixed(1)}, ${v.y.toFixed(1)}, ${v.z.toFixed(1)})`;
+        const fmtR = (r) => `(${(r.x*180/Math.PI).toFixed(1)}°, ${(r.y*180/Math.PI).toFixed(1)}°, ${(r.z*180/Math.PI).toFixed(1)}°)`;
+        const config = {
+            camera: fmt(heroCamera.position),
+            groupPos: fmt(assemblyGroup.position),
+            groupRot: fmtR(assemblyGroup.rotation),
+            groupScale: assemblyGroup.scale.x.toFixed(3),
+        };
+        if (caseMesh) {
+            config.casePos = fmt(caseMesh.position);
+            config.caseRot = fmtR(caseMesh.rotation);
+        }
+        if (lidMesh) {
+            config.lidPos = fmt(lidMesh.position);
+            config.lidRot = fmtR(lidMesh.rotation);
+        }
+        if (logoMesh) {
+            config.logoPos = fmt(logoMesh.position);
+            config.logoRot = fmtR(logoMesh.rotation);
+        }
+        const txt = JSON.stringify(config, null, 2);
+        console.log('EDIT CONFIG:', txt);
+        outputEl.textContent = txt;
+    });
+
+    // Override scroll progress
+    const origGetScrollProgress = getScrollProgress;
+    window._editGetProgress = () => editActive ? editT : origGetScrollProgress();
+
+    // Update info every frame
+    function updatePanel() {
+        requestAnimationFrame(updatePanel);
+        if (!editActive) return;
+        const p = heroCamera.position;
+        camInfo.innerHTML = `pos: (${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}) dist: ${p.length().toFixed(1)}`;
+
+        const mesh = getMeshByName(selectedName);
+        if (mesh) {
+            const mp = mesh.position;
+            const mr = mesh.rotation;
+            const ms = mesh.scale;
+            objInfo.innerHTML = `<span style="color:#00DF1A">${selectedName}</span><br>`
+                + `pos: (${mp.x.toFixed(1)}, ${mp.y.toFixed(1)}, ${mp.z.toFixed(1)})<br>`
+                + `rot: (${(mr.x*180/Math.PI).toFixed(1)}°, ${(mr.y*180/Math.PI).toFixed(1)}°, ${(mr.z*180/Math.PI).toFixed(1)}°)<br>`
+                + `scale: ${ms.x.toFixed(3)}`;
+        } else {
+            objInfo.innerHTML = '<span style="color:#555">nada seleccionado</span>';
+        }
+    }
+    updatePanel();
+})();
+
+
+
+// ══════════════════════════════════════════════
+// ── EXPLORER: Independent viewer (unchanged) ──
+// ══════════════════════════════════════════════
+
+function createViewer(container, opts = {}) {
+    const scene = new THREE.Scene();
+
+    const camera = new THREE.PerspectiveCamera(
+        38,
+        container.clientWidth / container.clientHeight,
+        0.1, 5000
+    );
+    camera.position.set(70, 50, 70);
+
+    const renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+        powerPreference: 'high-performance'
+    });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    container.appendChild(renderer.domElement);
+
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+    const key = new THREE.DirectionalLight(0xffffff, 1.8);
+    key.position.set(60, 100, 60);
+    scene.add(key);
+
+    const rim = new THREE.DirectionalLight(0x00DF1A, 0.9);
+    rim.position.set(-70, 30, -50);
+    scene.add(rim);
+
+    const fill = new THREE.DirectionalLight(0xdde5ff, 0.6);
+    fill.position.set(-40, -30, 60);
+    scene.add(fill);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = opts.speed || 0.8;
+    controls.enableZoom = true;
+    controls.enablePan = false;
+    controls.minDistance = 20;
+    controls.maxDistance = 250;
+    controls.maxPolarAngle = Math.PI * 0.85;
+
+    let mesh = null;
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    const ro = new ResizeObserver(() => {
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+    });
+    ro.observe(container);
+
+    const material = new THREE.MeshPhysicalMaterial({
+        color: 0x4a4a4a,
+        roughness: 0.35,
+        metalness: 0.55,
+        clearcoat: 0.6,
+        clearcoatRoughness: 0.15,
+        reflectivity: 0.5,
+        envMapIntensity: 1.2,
+    });
+
+    const loader = new STLLoader();
+
+    function load(path, preset = {}) {
+        return new Promise((resolve) => {
+            loader.load(path, (geo) => {
+                if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); }
+
+                geo.computeVertexNormals();
+                geo.center();
+
+                mesh = new THREE.Mesh(geo, material);
+
+                if (preset.rotation) {
+                    mesh.rotation.set(preset.rotation[0], preset.rotation[1], preset.rotation[2]);
+                }
+
+                const box = new THREE.Box3().setFromObject(mesh);
+                const size = new THREE.Vector3();
+                box.getSize(size);
+                const s = 45 / Math.max(size.x, size.y, size.z);
+                mesh.scale.setScalar(s);
+
+                scene.add(mesh);
+
+                const dist = preset.camDist || 120;
+                const dir = new THREE.Vector3(1, 0.7, 1).normalize();
+                camera.position.copy(dir.multiplyScalar(dist));
+                camera.lookAt(0, 0, 0);
+                controls.target.set(0, 0, 0);
+                controls.update();
+
+                resolve();
+            });
+        });
+    }
+
+    return { load };
+}
+
+// ── Explorer viewer ──
+const expEl = document.getElementById('explorer-viewer');
+const expLoader = document.getElementById('explorer-loader');
+if (expEl && expLoader) {
+    const expViewer = createViewer(expEl, { speed: 2.5 });
+    let currentPart = 'case';
+    expViewer.load(BASE + PARTS.case.file, PARTS.case).then(() => {
+        expLoader.classList.add('hidden');
+    });
+
+    document.querySelectorAll('.explorer-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            const key = tab.dataset.model;
+            if (key === currentPart) return;
+            currentPart = key;
+
+            document.querySelectorAll('.explorer-tab').forEach(t => {
+                t.classList.remove('active');
+                t.setAttribute('aria-selected', 'false');
+            });
+            tab.classList.add('active');
+            tab.setAttribute('aria-selected', 'true');
+            expEl.setAttribute('aria-labelledby', tab.id);
+
+            expLoader.classList.remove('hidden');
+            expViewer.load(BASE + PARTS[key].file, PARTS[key]).then(() => {
+                expLoader.classList.add('hidden');
+            });
+
+            document.getElementById('part-name').textContent = PARTS[key].name;
+            document.getElementById('part-desc').textContent = PARTS[key].desc;
+        });
+    });
+}
+
+
+// ── Matrix rain (hero background) ──
+(() => {
+    const canvas = document.getElementById('matrix-rain');
+    const host = document.querySelector('.hero-sticky');
+    if (!canvas || !host) return;
+    const ctx = canvas.getContext('2d');
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const CHARS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789₿Ξ$%△▽';
+    const FONT_SIZE = 16;
+    const mobile = window.matchMedia('(max-width: 768px)').matches;
+    const COL_WIDTH = mobile ? 22 : 18;
+    const HEAD_NORMAL = '#00DF1A';
+    const HEAD_BRIGHT = '#FFFFFF';
+    const BODY = '#00DF1A';
+    const FADE = 'rgba(5, 5, 8, 0.05)';
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let cols = 0, columns = [], w = 0, h = 0;
+
+    function makeCol(i) {
+        const bright = Math.random() < 0.22;
+        return {
+            x: i * COL_WIDTH,
+            y: -Math.random() * (h + 400) / FONT_SIZE,
+            speed: 0.09 + Math.random() * 0.16,
+            bright,
+            alpha: bright ? 1.0 : 0.55 + Math.random() * 0.35,
+            lastRow: -1,
+            lastChar: ''
+        };
+    }
+
+    function resize() {
+        const rect = host.getBoundingClientRect();
+        w = rect.width; h = rect.height;
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        cols = Math.ceil(w / COL_WIDTH);
+        columns = new Array(cols).fill(0).map((_, i) => makeCol(i));
+        ctx.fillStyle = '#05050a';
+        ctx.fillRect(0, 0, w, h);
+    }
+
+    function randChar() { return CHARS[(Math.random() * CHARS.length) | 0]; }
+
+    function draw() {
+        ctx.fillStyle = FADE;
+        ctx.fillRect(0, 0, w, h);
+        ctx.font = `${FONT_SIZE}px 'JetBrains Mono', 'Fira Code', monospace`;
+        ctx.textBaseline = 'top';
+        for (let i = 0; i < cols; i++) {
+            const c = columns[i];
+            c.y += c.speed;
+            const row = Math.floor(c.y);
+            if (row !== c.lastRow) {
+                ctx.globalAlpha = c.alpha;
+                if (c.lastRow >= 0 && c.lastChar) {
+                    ctx.fillStyle = BODY;
+                    ctx.fillText(c.lastChar, c.x, c.lastRow * FONT_SIZE);
+                }
+                const ch = randChar();
+                ctx.fillStyle = c.bright ? HEAD_BRIGHT : HEAD_NORMAL;
+                ctx.fillText(ch, c.x, row * FONT_SIZE);
+                c.lastRow = row;
+                c.lastChar = ch;
+            }
+            if (row * FONT_SIZE > h + FONT_SIZE * 6 && Math.random() > 0.975) {
+                const fresh = makeCol(i);
+                fresh.y = -Math.random() * 30 - 5;
+                columns[i] = fresh;
+            }
+        }
+        ctx.globalAlpha = 1;
+    }
+
+    let rafId = null, running = false;
+    function loop() { if (!running) return; draw(); rafId = requestAnimationFrame(loop); }
+    function start() { if (running || reduced) return; running = true; loop(); }
+    function stop() { running = false; if (rafId) cancelAnimationFrame(rafId); }
+
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(host);
+
+    if (reduced) { draw(); return; }
+
+    const io = new IntersectionObserver((entries) => {
+        entries.forEach(e => e.isIntersecting ? start() : stop());
+    }, { threshold: 0 });
+    io.observe(host);
+})();
+
+// ── Live feature cards ──
+(() => {
+    const legacyFeatures = document.getElementById('features');
+    if (!legacyFeatures || legacyFeatures.hidden) return;
+    const SPARK_LEN = 60;
+    const sparkPath = (values, w = 200, h = 36) => {
+        if (!values.length) return '';
+        const min = Math.min(...values), max = Math.max(...values);
+        const range = (max - min) || 1;
+        const step = w / Math.max(values.length - 1, 1);
+        return values.map((v, i) => {
+            const x = i * step;
+            const y = h - ((v - min) / range) * (h - 4) - 2;
+            return (i ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(2);
+        }).join(' ');
+    };
+
+    const fmtUSD = (n) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtARS = (n) => '$' + n.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    const demoSeries = [64240, 64380, 64190, 64610, 64840, 64720, 64980, 65120, 65040, 65260, 65410, 65320];
+
+    function clearLoading(el) {
+        if (el) el.classList.remove('skeleton');
+    }
+
+    function applySparkFallback(pathEl, values = demoSeries, h = 36) {
+        if (!pathEl) return;
+        pathEl.classList.remove('sk-spark');
+        pathEl.setAttribute('d', sparkPath(values, 200, h));
+    }
+
+    function markFallback(deltaEl, label = 'demo') {
+        if (deltaEl && !deltaEl.textContent.includes('demo')) deltaEl.textContent = label;
+    }
+
+    // BTC live via Binance WebSocket (price + 24h change)
+    (() => {
+        const priceEl = document.getElementById('fv-btc-price');
+        const deltaEl = document.getElementById('fv-btc-delta');
+        const pathEl  = document.getElementById('fv-btc-path');
+        if (!priceEl || !pathEl) return;
+        const history = [];
+        let last = null;
+        let change24h = null;
+        let opened = false;
+        let ws = null;
+
+        async function seed() {
+            try {
+                const [klinesRes, tickerRes] = await Promise.all([
+                    fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=24'),
+                    fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT')
+                ]);
+                const klines = await klinesRes.json();
+                const ticker = await tickerRes.json();
+                klines.forEach(k => history.push(parseFloat(k[4])));
+                change24h = parseFloat(ticker.priceChangePercent);
+                if (history.length) {
+                    last = history[history.length - 1];
+                    priceEl.textContent = '$' + fmtUSD(last);
+                    priceEl.classList.remove('skeleton');
+                    pathEl.classList.remove('sk-spark');
+                    updateSpark();
+                    updateDelta();
+                }
+            } catch (e) { /* ignore, WS will populate */ }
+        }
+
+        function updateSpark() {
+            pathEl.setAttribute('d', sparkPath(history));
+        }
+
+        function updateDelta() {
+            if (change24h === null) { deltaEl.textContent = 'demo - 24h'; return; }
+            const pct = change24h;
+            const absPct = Math.abs(pct);
+            if (absPct < 0.01) {
+                deltaEl.textContent = '24h - 0.00%';
+                deltaEl.classList.remove('down');
+                return;
+            }
+            const sign = pct >= 0 ? 'up +' : 'down ';
+            deltaEl.textContent = sign + absPct.toFixed(2) + '% - 24h';
+            deltaEl.classList.toggle('down', pct < 0);
+        }
+
+        async function refresh24h() {
+            try {
+                const res = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT');
+                const t = await res.json();
+                change24h = parseFloat(t.priceChangePercent);
+                updateDelta();
+            } catch (e) {}
+        }
+
+        function connect() {
+            ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@trade');
+            ws.onmessage = (ev) => {
+                const msg = JSON.parse(ev.data);
+                const p = parseFloat(msg.p);
+                if (!Number.isFinite(p)) return;
+                priceEl.textContent = '$' + fmtUSD(p);
+                priceEl.classList.remove('skeleton');
+                pathEl.classList.remove('sk-spark');
+                if (last !== null) {
+                    if (p > last) { priceEl.classList.add('flash-up'); priceEl.classList.remove('flash-dn'); }
+                    else if (p < last) { priceEl.classList.add('flash-dn'); priceEl.classList.remove('flash-up'); }
+                    setTimeout(() => priceEl.classList.remove('flash-up','flash-dn'), 600);
+                }
+                last = p;
+                if (history.length === 0) history.push(p);
+                else history[history.length - 1] = p;
+                updateSpark();
+                opened = true;
+            };
+            ws.onclose = () => { if (opened) setTimeout(connect, 2000); };
+            ws.onerror = () => ws.close();
+        }
+
+        setInterval(refresh24h, 60000);
+
+        applySparkFallback(pathEl);
+        seed().then(connect);
+        setTimeout(() => {
+            if (!priceEl.classList.contains('skeleton')) return;
+            priceEl.textContent = '$65,260.00';
+            clearLoading(priceEl);
+            applySparkFallback(pathEl);
+            markFallback(deltaEl, 'demo - 24h');
+        }, 3500);
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && ws) ws.close();
+            else if (!document.hidden && (!ws || ws.readyState > 1)) connect();
+        });
+    })();
+
+    // About mini-display: live BTC ticker sitting next to the "Qué es?" copy
+    (() => {
+        const priceEl = document.getElementById('ad-btc-price');
+        const deltaEl = document.getElementById('ad-btc-delta');
+        const pathEl  = document.getElementById('ad-btc-path');
+        const bgCanvas = document.getElementById('ad-matrix');
+        if (!priceEl || !pathEl) return;
+
+        const history = [];
+        let last = null;
+        let change24h = null;
+        let opened = false;
+        let ws = null;
+
+        async function seed() {
+            try {
+                const [klinesRes, tickerRes] = await Promise.all([
+                    fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=24'),
+                    fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT')
+                ]);
+                const klines = await klinesRes.json();
+                const ticker = await tickerRes.json();
+                klines.forEach(k => history.push(parseFloat(k[4])));
+                change24h = parseFloat(ticker.priceChangePercent);
+                if (history.length) {
+                    last = history[history.length - 1];
+                    priceEl.textContent = '$' + fmtUSD(last);
+                    priceEl.classList.remove('skeleton');
+                    pathEl.classList.remove('sk-spark');
+                    pathEl.setAttribute('d', sparkPath(history, 200, 48));
+                    updateDelta();
+                }
+            } catch (e) { /* silent */ }
+        }
+
+        function updateDelta() {
+            if (change24h === null) { deltaEl.textContent = 'demo - 24h'; return; }
+            const abs = Math.abs(change24h);
+            if (abs < 0.01) {
+                deltaEl.textContent = '24h - 0.00%';
+                deltaEl.classList.remove('down');
+                return;
+            }
+            const sign = change24h >= 0 ? 'up +' : 'down ';
+            deltaEl.textContent = sign + abs.toFixed(2) + '% - 24h';
+            deltaEl.classList.toggle('down', change24h < 0);
+        }
+
+        async function refresh24h() {
+            try {
+                const res = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT');
+                const t = await res.json();
+                change24h = parseFloat(t.priceChangePercent);
+                updateDelta();
+            } catch (e) {}
+        }
+
+        function connect() {
+            ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@trade');
+            ws.onmessage = (ev) => {
+                const msg = JSON.parse(ev.data);
+                const p = parseFloat(msg.p);
+                if (!Number.isFinite(p)) return;
+                priceEl.textContent = '$' + fmtUSD(p);
+                priceEl.classList.remove('skeleton');
+                pathEl.classList.remove('sk-spark');
+                if (last !== null) {
+                    if (p > last) { priceEl.classList.add('flash-up'); priceEl.classList.remove('flash-dn'); }
+                    else if (p < last) { priceEl.classList.add('flash-dn'); priceEl.classList.remove('flash-up'); }
+                    setTimeout(() => priceEl.classList.remove('flash-up','flash-dn'), 600);
+                }
+                last = p;
+                if (history.length === 0) history.push(p);
+                else history[history.length - 1] = p;
+                pathEl.setAttribute('d', sparkPath(history, 200, 48));
+                opened = true;
+            };
+            ws.onclose = () => { if (opened) setTimeout(connect, 2000); };
+            ws.onerror = () => ws.close();
+        }
+
+        setInterval(refresh24h, 60000);
+        seed().then(connect);
+        setTimeout(() => {
+            if (!priceEl.classList.contains('skeleton')) return;
+            priceEl.textContent = '$65,260.00';
+            clearLoading(priceEl);
+            applySparkFallback(pathEl, demoSeries, 48);
+            markFallback(deltaEl, 'demo - 24h');
+        }, 3500);
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && ws) ws.close();
+            else if (!document.hidden && (!ws || ws.readyState > 1)) connect();
+        });
+
+        // Subtle matrix background inside the bezel
+        if (bgCanvas) {
+            const ctx = bgCanvas.getContext('2d');
+            const CHARS = '₿₿₿アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789Ξ$%△▽';
+            const FONT = 13;
+            const COL_W = 11;
+            const FADE = 'rgba(5, 7, 9, 0.08)';
+            let cols = [], w = 0, h = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+            function resize() {
+                const r = bgCanvas.getBoundingClientRect();
+                w = r.width; h = r.height;
+                bgCanvas.width = w * dpr;
+                bgCanvas.height = h * dpr;
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                const n = Math.ceil(w / COL_W);
+                cols = new Array(n).fill(0).map((_, i) => ({
+                    x: i * COL_W,
+                    y: -Math.random() * 8 - 1,
+                    speed: 0.05 + Math.random() * 0.08,
+                    bright: Math.random() < 0.3,
+                    alpha: 0.7 + Math.random() * 0.3,
+                    lastRow: -1,
+                    lastChar: ''
+                }));
+                ctx.fillStyle = '#05070a';
+                ctx.fillRect(0, 0, w, h);
+            }
+
+            function tick() {
+                if (!running) return;
+                rafId = requestAnimationFrame(tick);
+                ctx.fillStyle = FADE;
+                ctx.fillRect(0, 0, w, h);
+                ctx.font = `${FONT}px 'JetBrains Mono', 'Fira Code', monospace`;
+                ctx.textBaseline = 'top';
+                for (const c of cols) {
+                    c.y += c.speed;
+                    const row = Math.floor(c.y);
+                    if (row !== c.lastRow) {
+                        if (c.lastRow >= 0 && c.lastChar) {
+                            ctx.globalAlpha = c.alpha * 0.85;
+                            ctx.fillStyle = '#00DF1A';
+                            ctx.fillText(c.lastChar, c.x, c.lastRow * FONT);
+                        }
+                        const ch = c.bright ? '₿' : CHARS[(Math.random() * CHARS.length) | 0];
+                        ctx.globalAlpha = c.bright ? 1.0 : c.alpha;
+                        ctx.fillStyle = c.bright ? '#FFFFFF' : '#00DF1A';
+                        ctx.fillText(ch, c.x, row * FONT);
+                        c.lastRow = row;
+                        c.lastChar = ch;
+                    }
+                    if (row * FONT > h + FONT * 4 && Math.random() > 0.975) {
+                        c.y = -Math.random() * 8 - 1;
+                        c.speed = 0.05 + Math.random() * 0.08;
+                        c.bright = Math.random() < 0.3;
+                        c.alpha = 0.7 + Math.random() * 0.3;
+                        c.lastRow = -1;
+                        c.lastChar = '';
+                    }
+                }
+                ctx.globalAlpha = 1;
+            }
+
+            let rafId = null, running = false;
+            function start() { if (running) return; running = true; tick(); }
+            function stop() { running = false; if (rafId) cancelAnimationFrame(rafId); }
+
+            resize();
+            new ResizeObserver(resize).observe(bgCanvas);
+            const io = new IntersectionObserver((entries) => {
+                entries.forEach(e => e.isIntersecting ? start() : stop());
+            }, { threshold: 0 });
+            io.observe(bgCanvas);
+        }
+    })();
+
+    // Tus pares — tap a chip to see 1 BTC priced in that asset
+    (() => {
+        const priceEl = document.getElementById('fv-pairs-price');
+        const unitEl  = document.getElementById('fv-pairs-unit');
+        const chipsEl = document.getElementById('fv-pairs-chips');
+        if (!priceEl || !chipsEl) return;
+
+        const state = { btcUsd: null, ethBtc: null, solUsd: null, arsPerUsd: null, goldUsd: null, active: 'USD' };
+
+        const fmt = (n, opts) => n.toLocaleString('en-US', opts);
+
+        function render() {
+            const p = state.active;
+            let value, unit;
+            switch (p) {
+                case 'USD':
+                    if (state.btcUsd == null) return;
+                    value = '$' + fmt(state.btcUsd, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    unit = '1 BTC - USD';
+                    break;
+                case 'ETH':
+                    if (state.ethBtc == null) return;
+                    value = fmt(1 / state.ethBtc, { maximumFractionDigits: 3 });
+                    unit = '1 BTC - ETH';
+                    break;
+                case 'SOL':
+                    if (state.btcUsd == null || state.solUsd == null) return;
+                    value = fmt(state.btcUsd / state.solUsd, { maximumFractionDigits: 2 });
+                    unit = '1 BTC - SOL';
+                    break;
+                case 'ARS':
+                    if (state.btcUsd == null || state.arsPerUsd == null) return;
+                    value = '$' + (state.btcUsd * state.arsPerUsd).toLocaleString('es-AR', { maximumFractionDigits: 0 });
+                    unit = '1 BTC - ARS';
+                    break;
+                case 'ORO':
+                    if (state.btcUsd == null || state.goldUsd == null) return;
+                    value = fmt(state.btcUsd / state.goldUsd, { maximumFractionDigits: 3 });
+                    unit = '1 BTC - oz ORO';
+                    break;
+            }
+            priceEl.textContent = value;
+            unitEl.textContent = unit;
+            priceEl.classList.remove('skeleton');
+        }
+
+        async function fetchRates() {
+            try {
+                const [btc, eth, sol, ars, gold] = await Promise.allSettled([
+                    fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT').then(r => r.json()),
+                    fetch('https://api.binance.com/api/v3/ticker/price?symbol=ETHBTC').then(r => r.json()),
+                    fetch('https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT').then(r => r.json()),
+                    fetch('https://criptoya.com/api/dolar').then(r => r.json()),
+                    fetch('https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=usd').then(r => r.json()),
+                ]);
+                if (btc.status === 'fulfilled') state.btcUsd = parseFloat(btc.value.price);
+                if (eth.status === 'fulfilled') state.ethBtc = parseFloat(eth.value.price);
+                if (sol.status === 'fulfilled') state.solUsd = parseFloat(sol.value.price);
+                if (ars.status === 'fulfilled') {
+                    const d = ars.value;
+                    state.arsPerUsd = d.cripto?.ccb?.ask || d.cripto?.usdt?.ask || d.blue?.ask || null;
+                }
+                if (gold.status === 'fulfilled') state.goldUsd = gold.value['pax-gold']?.usd || null;
+                render();
+            } catch (e) { /* silent */ }
+        }
+
+        const PAIR_ORDER = ['USD', 'ETH', 'SOL', 'ARS', 'ORO'];
+        let manualPauseUntil = 0;
+
+        function setActive(pair) {
+            state.active = pair;
+            chipsEl.querySelectorAll('.f-chip').forEach(c => {
+                c.classList.toggle('active', c.dataset.pair === pair);
+            });
+            render();
+        }
+
+        chipsEl.addEventListener('click', (ev) => {
+            const btn = ev.target.closest('.f-chip');
+            if (!btn) return;
+            setActive(btn.dataset.pair);
+            manualPauseUntil = performance.now() + 12000;
+        });
+
+        // Auto-cycle through pairs every 3s (paused briefly after user click)
+        setInterval(() => {
+            if (performance.now() < manualPauseUntil) return;
+            const idx = PAIR_ORDER.indexOf(state.active);
+            const next = PAIR_ORDER[(idx + 1) % PAIR_ORDER.length];
+            setActive(next);
+        }, 3000);
+
+        fetchRates();
+        setTimeout(() => {
+            if (!priceEl.classList.contains('skeleton')) return;
+            state.btcUsd = state.btcUsd || 65260;
+            state.ethBtc = state.ethBtc || 0.052;
+            state.solUsd = state.solUsd || 158;
+            state.arsPerUsd = state.arsPerUsd || 1240;
+            state.goldUsd = state.goldUsd || 2350;
+            render();
+            clearLoading(priceEl);
+            if (unitEl) unitEl.textContent = '1 BTC - demo';
+        }, 3500);
+        setInterval(fetchRates, 60000);
+    })();
+
+    // USD/ARS live via CriptoYa
+    (() => {
+        const priceEl = document.getElementById('fv-usd-price');
+        const pathEl  = document.getElementById('fv-usd-path');
+        if (!priceEl || !pathEl) return;
+        const history = [];
+
+        async function tick() {
+            try {
+                const res = await fetch('https://criptoya.com/api/dolar');
+                const data = await res.json();
+                const v = data.cripto?.ccb?.ask || data.cripto?.usdt?.ask || data.blue?.ask;
+                if (!Number.isFinite(v)) return;
+                priceEl.textContent = fmtARS(v);
+                priceEl.classList.remove('skeleton');
+                pathEl.classList.remove('sk-spark');
+                history.push(v);
+                if (history.length > SPARK_LEN) history.shift();
+                pathEl.setAttribute('d', sparkPath(history));
+            } catch (e) { /* show dash */ }
+        }
+        tick();
+        setTimeout(() => {
+            if (!priceEl.classList.contains('skeleton')) return;
+            const values = [1190, 1205, 1212, 1200, 1226, 1238, 1240, 1232, 1248, 1260];
+            priceEl.textContent = fmtARS(values[values.length - 1]);
+            clearLoading(priceEl);
+            applySparkFallback(pathEl, values);
+        }, 3500);
+        setInterval(tick, 30000);
+    })();
+
+    // Polymarket probability drift (visual only, no external fetch to avoid CORS)
+    (() => {
+        const pctEl = document.getElementById('fv-poly-pct');
+        const barEl = document.getElementById('fv-poly-bar');
+        if (!pctEl || !barEl) return;
+        let p = 62;
+        setInterval(() => {
+            p += (Math.random() - 0.5) * 1.2;
+            p = Math.max(40, Math.min(85, p));
+            const r = Math.round(p);
+            pctEl.innerHTML = r + '<span style="font-size:0.7rem;opacity:0.6;">%</span>';
+            barEl.style.width = r + '%';
+        }, 2500);
+    })();
+
+    // Keep the browser tab title stable; matrix motion stays inside the page.
+})();
+</script>
+
+</body>
+</html>

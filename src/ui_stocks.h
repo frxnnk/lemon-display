@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include "data_models.h"
 
@@ -14,12 +15,31 @@ void stocksFetchTask();
 // edit via captive portal).
 void stocksMarkDirty();
 
+// Enable network refreshes while the Stocks card is visible. Disabling it
+// cancels queued burst work but lets any in-flight HTTP fetch finish cleanly.
+void stocksSetActive(bool active);
+
 // ── Accessors used by ui_dashboard to render the compact Z2 card ──
 uint8_t             stocksGetFocusedIdx();
 uint8_t             stocksGetWatchlistCount();
 const char*         stocksGetFocusedSymbol();     // nullptr if watchlist empty
 const StockQuote*   stocksGetFocusedQuote();      // nullptr if no cache for focused symbol
 const SparklineData* stocksGetFocusedSpark();     // nullptr if no sparkline cached
+
+struct StockFocusedSnapshot {
+    uint8_t focusedIdx = 0;
+    uint8_t watchlistCount = 0;
+    char symbol[STOCK_SYMBOL_LEN] = {};
+    char status[32] = {};
+    StockQuote quote = {};
+    SparklineData spark = {};
+    bool hasQuote = false;
+    bool hasSpark = false;
+    bool fetching = false;
+};
+
+bool stocksGetFocusedSnapshot(StockFocusedSnapshot& out);
+bool stocksGetSnapshotAt(uint8_t watchlistIndex, StockFocusedSnapshot& out);
 
 // Advance focused ticker (wraps). Triggers a priority refresh.
 void stocksAdvanceFocused();

@@ -10,15 +10,33 @@ static const unsigned long RECONNECT_MAX = 300000; // 5 min cap
 static char storedSSID[33] = {0};
 static char storedPass[65] = {0};
 static bool everConnected = false;  // Only reconnect if we connected successfully at least once
+static bool dnsApplied = false;
 
 // Async connect state
 static unsigned long connectStartMs = 0;
 static const unsigned long CONNECT_TIMEOUT_MS = 15000;
 static bool asyncConnecting = false;
 
+static void applyPublicDns() {
+    IPAddress dns1(8, 8, 8, 8);
+    IPAddress dns2(1, 1, 1, 1);
+    IPAddress ip = WiFi.localIP();
+    IPAddress gateway = WiFi.gatewayIP();
+    IPAddress subnet = WiFi.subnetMask();
+
+    WiFi.config(ip, gateway, subnet, dns1, dns2);
+    dnsApplied = true;
+
+    String ipStr = ip.toString();
+    String gwStr = gateway.toString();
+    Serial.printf("[WiFi] DNS override: ip=%s gw=%s dns=8.8.8.8/1.1.1.1\n",
+                  ipStr.c_str(), gwStr.c_str());
+}
+
 void wifiSetup(const char* ssid, const char* password) {
     strncpy(storedSSID, ssid, sizeof(storedSSID) - 1);
     strncpy(storedPass, password, sizeof(storedPass) - 1);
+    dnsApplied = false;
 
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(false);  // Don't auto-reconnect until confirmed working
@@ -34,25 +52,27 @@ void wifiSetup(const char* ssid, const char* password) {
 
     if (WiFi.status() == WL_CONNECTED) {
         Serial.printf("[WiFi] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
-        // Force Google DNS to bypass ISP DNS blocking (Telefonica blocks Polymarket)
-        IPAddress dns1(8, 8, 8, 8);
-        IPAddress dns2(1, 1, 1, 1);
-        WiFi.config(WiFi.localIP(), WiFi.gatewayIP(), WiFi.subnetMask(), dns1, dns2);
-        Serial.println("[WiFi] DNS set to 8.8.8.8 / 1.1.1.1");
+        applyPublicDns();
         WiFi.setAutoReconnect(true);  // Only enable after successful connection
         everConnected = true;
     } else {
         Serial.println("[WiFi] Connection failed");
+        dnsApplied = false;
         WiFi.disconnect(true);  // Stop trying
     }
 }
 
 void wifiLoop() {
     if (WiFi.status() == WL_CONNECTED) {
+        if (!dnsApplied) {
+            applyPublicDns();
+        }
         // Reset backoff on successful connection
         reconnectInterval = 10000;
+        everConnected = true;
         return;
     }
+    dnsApplied = false;
     if (storedSSID[0] == '\0') return;  // No credentials stored
     if (!everConnected) return;  // Never connected — don't retry with possibly bad creds
 
@@ -61,6 +81,7 @@ void wifiLoop() {
         lastReconnectAttempt = now;
         Serial.printf("[WiFi] Reconnecting (backoff %lums)...\n", reconnectInterval);
         WiFi.disconnect();
+        dnsApplied = false;
         WiFi.begin(storedSSID, storedPass);
 
         // Exponential backoff: 10s → 20s → 40s → ... → 5min max
@@ -136,6 +157,7 @@ int wifiGetScanResults(WiFiNetwork* results, int maxResults) {
 void wifiConnectAsync(const char* ssid, const char* password) {
     strncpy(storedSSID, ssid, sizeof(storedSSID) - 1);
     strncpy(storedPass, password, sizeof(storedPass) - 1);
+    dnsApplied = false;
 
     WiFi.disconnect();
     WiFi.mode(WIFI_STA);
@@ -150,10 +172,8 @@ void wifiConnectAsync(const char* ssid, const char* password) {
 bool wifiConnecting() {
     if (!asyncConnecting) return false;
     if (WiFi.status() == WL_CONNECTED) {
-        // Force Google DNS to bypass ISP DNS blocking
-        IPAddress dns1(8, 8, 8, 8);
-        IPAddress dns2(1, 1, 1, 1);
-        WiFi.config(WiFi.localIP(), WiFi.gatewayIP(), WiFi.subnetMask(), dns1, dns2);
+        applyPublicDns();
+        everConnected = true;
         asyncConnecting = false;
         return false;
     }
