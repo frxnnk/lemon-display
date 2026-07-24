@@ -13,6 +13,12 @@ struct OtaInfo {
 // Check GitHub releases for a newer version
 OtaInfo otaCheck(const char* repo);
 
+// Check only an exact release asset. This keeps firmware channels isolated.
+OtaInfo otaCheckAsset(const char* repo, const char* assetName, const char* localVersion);
+
+// Lightweight GitHub web redirect probe. It avoids polling the rate-limited API.
+bool otaLatestTagChanged(const char* repo, const char* localVersion);
+
 // Free TLS resources from otaCheck (call before otaFlash to maximize heap)
 void otaFreeCheck();
 

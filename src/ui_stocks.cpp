@@ -1,6 +1,7 @@
 #include "ui_stocks.h"
 #include "config.h"
 #include "nvs_storage.h"
+#include "api_client.h"
 #include "stocks_client.h"
 #include "scheduler.h"
 #include "data_models.h"
@@ -32,6 +33,7 @@ static uint32_t        s_lastOkMs       = 0;                // millis() of last 
 // Yahoo's TLS handshake for 1-5s and would freeze the UI. Running it on
 // a dedicated FreeRTOS task on core 0 keeps the main loop free.
 static TaskHandle_t   s_workerHandle  = nullptr;
+static volatile bool  s_active        = false;
 static volatile bool  s_fetching      = false;
 static char           s_lastDbg[64]   = "";
 enum StockLoadState : uint8_t {
@@ -46,6 +48,7 @@ static int            s_lastCodeBySlot[STOCK_MAX_SYMBOLS] = {};
 static uint32_t       s_retryAtMs[STOCK_MAX_SYMBOLS] = {};
 static uint32_t       s_chainDelayMs = 1200;
 static char           s_statusBuf[32] = "";
+static SemaphoreHandle_t s_lock = nullptr;
 // Burst mode — bitmask of watchlist slots still to fetch in the current
 // burst. The worker drains this one slot at a time (focused first, then
 // lowest-numbered bit). Failed fetches stay set until retries exhaust,
@@ -54,8 +57,28 @@ static char           s_statusBuf[32] = "";
 #define STOCKS_MAX_BURST_RETRIES 2
 static volatile uint8_t s_burstPending = 0;
 static uint8_t          s_burstRetryCount[STOCK_MAX_SYMBOLS] = {0};
+static const uint32_t   STOCKS_REGULAR_REFRESH_MIN_MS = 10UL * 60UL * 1000UL;
 
 static void stocksWorkerTask(void*);
+
+static void ensureStocksWorkerRunning() {
+    if (s_workerHandle) return;
+    xTaskCreatePinnedToCore(stocksWorkerTask, "stocksW", 8192,
+                            nullptr, 1, &s_workerHandle, 0);
+}
+
+static void ensureStocksLock() {
+    if (!s_lock) s_lock = xSemaphoreCreateMutex();
+}
+
+static bool lockStocks(TickType_t wait = pdMS_TO_TICKS(50)) {
+    ensureStocksLock();
+    return s_lock && xSemaphoreTake(s_lock, wait) == pdTRUE;
+}
+
+static void unlockStocks() {
+    if (s_lock) xSemaphoreGive(s_lock);
+}
 
 static uint8_t findQuoteSlot(const char* sym) {
     for (uint8_t i = 0; i < s_quoteCount; i++) {
@@ -86,7 +109,49 @@ static uint32_t pendingRetryDelayMs(uint32_t nowMs) {
     return minDelay;
 }
 
+static const char* formatStatusTextLocked(uint8_t idx, char* out, size_t outSize) {
+    if (!out || outSize == 0) return nullptr;
+    out[0] = '\0';
+    if (s_watchlist.count == 0 || idx >= s_watchlist.count) return nullptr;
+
+    switch (s_loadState[idx]) {
+        case STOCK_LOAD_FETCHING:
+            strncpy(out, "Cargando...", outSize - 1);
+            break;
+        case STOCK_LOAD_RATE_LIMITED: {
+            uint32_t now = millis();
+            if (s_retryAtMs[idx] > now) {
+                uint32_t sec = (s_retryAtMs[idx] - now + 999) / 1000;
+                snprintf(out, outSize, "Reintento %lus", (unsigned long)sec);
+            } else if (s_burstPending & (uint8_t)(1u << idx)) {
+                strncpy(out, "Reintentando...", outSize - 1);
+            } else {
+                strncpy(out, "429 Yahoo", outSize - 1);
+            }
+            break;
+        }
+        case STOCK_LOAD_ERROR:
+            if (s_lastCodeBySlot[idx] == 200) {
+                strncpy(out, "Sin grafico", outSize - 1);
+            } else if (s_lastCodeBySlot[idx] > 0) {
+                snprintf(out, outSize, "HTTP %d", s_lastCodeBySlot[idx]);
+            } else {
+                strncpy(out, "Error de carga", outSize - 1);
+            }
+            break;
+        case STOCK_LOAD_IDLE:
+            strncpy(out, "Esperando...", outSize - 1);
+            break;
+        default:
+            return nullptr;
+    }
+
+    out[outSize - 1] = '\0';
+    return out;
+}
+
 void stocksInit() {
+    lockStocks(portMAX_DELAY);
     nvsLoadWatchlist(s_watchlist);
     Serial.printf("[Stocks] Watchlist loaded: %u symbols\n", (unsigned)s_watchlist.count);
     s_focusedIdx = 0;
@@ -113,27 +178,48 @@ void stocksInit() {
     // Spawn the worker once — pinned to core 0 so Yahoo's TLS handshake
     // never runs on the main loop. 8KB stack fits HTTPClient + mbedtls +
     // ArduinoJson comfortably.
-    if (!s_workerHandle) {
-        xTaskCreatePinnedToCore(stocksWorkerTask, "stocksW", 8192,
-                                nullptr, 1, &s_workerHandle, 0);
+    unlockStocks();
+
+    ensureStocksWorkerRunning();
+}
+
+void stocksMarkDirty() {
+    if (lockStocks()) {
+        s_dirty = true;
+        unlockStocks();
     }
 }
 
-void stocksMarkDirty() { s_dirty = true; }
+void stocksSetActive(bool active) {
+    if (!lockStocks(portMAX_DELAY)) return;
+    s_active = active;
+    if (!active) {
+        s_burstPending = 0;
+        s_priorityIdx = 0xFF;
+        memset(s_burstRetryCount, 0, sizeof(s_burstRetryCount));
+        memset(s_retryAtMs, 0, sizeof(s_retryAtMs));
+        s_chainDelayMs = 1200;
+        s_dirty = true;
+    }
+    unlockStocks();
+    if (active) ensureStocksWorkerRunning();
+}
 
 // Actual fetch body — runs on the worker task (core 0).
 static void stocksFetchBody() {
-    if (s_watchlist.count == 0) return;
-
-    uint32_t nowMs = millis();
-
-    // Pick target: priority (user tap) wins, then the burst pending mask
-    // (preferring focused if still queued, otherwise lowest-numbered slot),
-    // finally the regular RR cursor. Tracked source flags so we only
-    // advance the RR cursor when we're actually on the RR path.
     uint8_t target = 0xFF;
     bool fromBurst = false;
-    bool burstWasActive = (s_burstPending != 0);
+    bool burstWasActive = false;
+    char sym[STOCK_SYMBOL_LEN] = "";
+    uint32_t nowMs = millis();
+
+    if (!lockStocks(pdMS_TO_TICKS(500))) return;
+    if (!s_active || s_watchlist.count == 0) {
+        unlockStocks();
+        return;
+    }
+
+    burstWasActive = (s_burstPending != 0);
 
     if (s_priorityIdx != 0xFF && s_priorityIdx < s_watchlist.count &&
         slotRetryReady(s_priorityIdx, nowMs)) {
@@ -169,27 +255,39 @@ static void stocksFetchBody() {
             delayMs = s_retryAtMs[s_priorityIdx] - nowMs;
         }
         if (delayMs > 0) s_chainDelayMs = delayMs;
+        unlockStocks();
         return;
     }
 
-    if (target >= s_watchlist.count) return;
-    const char* sym = s_watchlist.symbols[target];
+    if (target >= s_watchlist.count) {
+        unlockStocks();
+        return;
+    }
+    strncpy(sym, s_watchlist.symbols[target], sizeof(sym) - 1);
+    sym[sizeof(sym) - 1] = '\0';
     s_loadState[target] = STOCK_LOAD_FETCHING;
     s_dirty = true;
+    unlockStocks();
 
     StockQuote   tmpQuote = {};
     SparklineData tmpSpark = {};
     ApiResult r = fetchStockChart(sym, "1d", "5m", tmpQuote, tmpSpark);
     esp_task_wdt_reset();
-    snprintf(s_lastDbg, sizeof(s_lastDbg),
+    char dbg[64];
+    int lastCode = stocksClientLastCode();
+    snprintf(dbg, sizeof(dbg),
              "%s r=%d c=%d b=%d h=%uk m=%uk",
              sym,
              (int)r,
-             stocksClientLastCode(),
+             lastCode,
              stocksClientLastBytes(),
              (unsigned)(ESP.getFreeHeap() / 1024),
              (unsigned)(ESP.getMaxAllocHeap() / 1024));
-    s_lastCodeBySlot[target] = stocksClientLastCode();
+
+    if (!lockStocks(pdMS_TO_TICKS(500))) return;
+    strncpy(s_lastDbg, dbg, sizeof(s_lastDbg) - 1);
+    s_lastDbg[sizeof(s_lastDbg) - 1] = '\0';
+    s_lastCodeBySlot[target] = lastCode;
 
     if (r == API_OK && tmpQuote.valid) {
         uint8_t slot = findQuoteSlot(tmpQuote.symbol);
@@ -200,7 +298,6 @@ static void stocksFetchBody() {
     bool chartOk = (tmpSpark.valid && tmpSpark.count >= 2);
     if (r == API_OK && tmpQuote.valid && chartOk) {
         uint8_t wIdx = watchlistIndexOf(tmpQuote.symbol);
-        if (wIdx == 0xFF) wIdx = target;
         if (wIdx != 0xFF) s_sparks[wIdx] = tmpSpark;
 
         s_burstRetryCount[target] = 0;
@@ -222,12 +319,12 @@ static void stocksFetchBody() {
                       (unsigned)s_burstRetryCount[target],
                       (unsigned)STOCKS_MAX_BURST_RETRIES);
         s_loadState[target] = (r == API_RATE_LIMITED) ? STOCK_LOAD_RATE_LIMITED : STOCK_LOAD_ERROR;
-        if (s_burstRetryCount[target] < STOCKS_MAX_BURST_RETRIES) {
+        if (fromBurst && s_burstRetryCount[target] < STOCKS_MAX_BURST_RETRIES) {
             s_burstRetryCount[target]++;
             s_burstPending |= (uint8_t)(1u << target);
             s_retryAtMs[target] = millis() + ((r == API_RATE_LIMITED) ? 8000UL : 2500UL);
             s_chainDelayMs = 400;
-        } else {
+        } else if (fromBurst) {
             s_burstPending &= (uint8_t)~(1u << target);
             s_chainDelayMs = 400;
         }
@@ -252,51 +349,100 @@ static void stocksFetchBody() {
     }
 
     s_dirty = true;
+    unlockStocks();
 }
 
 static void stocksWorkerTask(void*) {
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        s_fetching = true;
+        if (lockStocks()) {
+            s_fetching = true;
+            unlockStocks();
+        } else {
+            s_fetching = true;
+        }
         stocksFetchBody();
-        s_fetching = false;
+        uint8_t pending = 0;
+        uint32_t delayMs = 1200;
+        bool active = false;
+        if (lockStocks()) {
+            active = s_active;
+            pending = active ? s_burstPending : 0;
+            delayMs = s_chainDelayMs;
+            if (pending == 0) s_fetching = false;
+            unlockStocks();
+        } else {
+            s_fetching = false;
+        }
 
         // Chain as long as the burst pending mask has slots to serve (a
         // mix of unfetched and retry-queued slots). Brief pause lets the
         // UI repaint the just-finished symbol and gives the TCP/TLS
         // session time to tear down before the next handshake.
-        if (s_burstPending != 0) {
-            uint32_t delayMs = s_chainDelayMs;
+        if (pending != 0 && active) {
             if (delayMs < 200) delayMs = 200;
             vTaskDelay(pdMS_TO_TICKS(delayMs));
-            xTaskNotifyGive(s_workerHandle);
+            TaskHandle_t worker = nullptr;
+            if (lockStocks()) {
+                worker = s_workerHandle;
+                unlockStocks();
+            }
+            if (worker) xTaskNotifyGive(worker);
         }
     }
 }
 
 // Called by the scheduler on core 1. Just notifies the worker — no blocking.
 void stocksFetchTask() {
-    if (!s_workerHandle) return;
+    TaskHandle_t worker = nullptr;
+    uint32_t lastOk = 0;
+    bool active = false;
+    bool hasPriority = false;
+    bool burstActive = false;
+    if (lockStocks()) {
+        worker = s_workerHandle;
+        active = s_active;
+        lastOk = s_lastOkMs;
+        hasPriority = s_priorityIdx != 0xFF;
+        burstActive = s_burstPending != 0;
+        unlockStocks();
+    } else {
+        worker = s_workerHandle;
+        lastOk = s_lastOkMs;
+    }
+    if (!worker) return;
+    if (!active) return;
     uint32_t nowMs = millis();
-    bool stalled = s_lastOkMs > 0 && (nowMs - s_lastOkMs) > 300000UL;
+    bool regularFresh = !hasPriority && !burstActive &&
+                        lastOk > 0 && (nowMs - lastOk) < STOCKS_REGULAR_REFRESH_MIN_MS;
+    if (regularFresh) return;
+    bool stalled = lastOk > 0 && (nowMs - lastOk) > 300000UL;
+    apiStop();
+    delay(100);
     if (stalled) {
         Serial.printf("[Stocks] stall detected (%lus since last OK) — forcing burst\n",
-                      (unsigned long)((nowMs - s_lastOkMs) / 1000));
+                      (unsigned long)((nowMs - lastOk) / 1000));
         stocksRequestBurst();
         return;
     }
-    xTaskNotifyGive(s_workerHandle);
+    xTaskNotifyGive(worker);
 }
 
-// Request a burst refresh — fetches every watchlist symbol back-to-back
+// Kick a burst refresh — fetches every watchlist symbol back-to-back
 // (one RR step per fetch). Called when the user first enters Stocks mode
 // so all charts populate within ~N×1-3s instead of N×60s. Kicks off with
 // the currently focused symbol so the user sees *their* chart fill in on
 // the first fetch (~2-3s) instead of waiting for the RR cursor to reach
 // it after 2-5 earlier fetches.
 void stocksRequestBurst() {
-    if (!s_workerHandle) return;
-    if (s_watchlist.count == 0) return;
+    TaskHandle_t worker = nullptr;
+    ensureStocksWorkerRunning();
+    if (!lockStocks(pdMS_TO_TICKS(500))) return;
+    worker = s_workerHandle;
+    if (!worker || !s_active || s_watchlist.count == 0) {
+        unlockStocks();
+        return;
+    }
     // Queue every watchlist slot; the fetch body will prefer focused first,
     // then lowest-numbered pending slot. Retries are handled transparently
     // by the same mask (failed slots stay set until budget exhausts).
@@ -310,96 +456,185 @@ void stocksRequestBurst() {
     memset(s_retryAtMs, 0, sizeof(s_retryAtMs));
     Serial.printf("[Stocks] burst refresh requested (pending=0x%02X focus=%u)\n",
                   (unsigned)mask, (unsigned)s_focusedIdx);
-    xTaskNotifyGive(s_workerHandle);
+    unlockStocks();
+    xTaskNotifyGive(worker);
 }
 
-bool stocksIsFetching() { return s_fetching; }
+bool stocksIsFetching() {
+    if (!lockStocks()) return s_fetching;
+    bool fetching = s_fetching;
+    unlockStocks();
+    return fetching;
+}
 
-const char* stocksLastDebug() { return s_lastDbg; }
+const char* stocksLastDebug() {
+    static char dbg[64];
+    if (!lockStocks()) return s_lastDbg;
+    strncpy(dbg, s_lastDbg, sizeof(dbg) - 1);
+    dbg[sizeof(dbg) - 1] = '\0';
+    unlockStocks();
+    return dbg;
+}
 
 const char* stocksGetFocusedStatusText() {
-    if (s_watchlist.count == 0 || s_focusedIdx >= s_watchlist.count) return nullptr;
-
-    switch (s_loadState[s_focusedIdx]) {
-        case STOCK_LOAD_FETCHING:
-            return "Cargando...";
-        case STOCK_LOAD_RATE_LIMITED: {
-            uint32_t now = millis();
-            if (s_retryAtMs[s_focusedIdx] > now) {
-                uint32_t sec = (s_retryAtMs[s_focusedIdx] - now + 999) / 1000;
-                snprintf(s_statusBuf, sizeof(s_statusBuf), "Reintento %lus", (unsigned long)sec);
-            } else if (s_burstPending & (uint8_t)(1u << s_focusedIdx)) {
-                strncpy(s_statusBuf, "Reintentando...", sizeof(s_statusBuf) - 1);
-                s_statusBuf[sizeof(s_statusBuf) - 1] = '\0';
-            } else {
-                strncpy(s_statusBuf, "429 Yahoo", sizeof(s_statusBuf) - 1);
-                s_statusBuf[sizeof(s_statusBuf) - 1] = '\0';
-            }
-            return s_statusBuf;
-        }
-        case STOCK_LOAD_ERROR:
-            if (s_lastCodeBySlot[s_focusedIdx] == 200) {
-                strncpy(s_statusBuf, "Sin grafico", sizeof(s_statusBuf) - 1);
-                s_statusBuf[sizeof(s_statusBuf) - 1] = '\0';
-            } else if (s_lastCodeBySlot[s_focusedIdx] > 0) {
-                snprintf(s_statusBuf, sizeof(s_statusBuf), "HTTP %d", s_lastCodeBySlot[s_focusedIdx]);
-            } else {
-                strncpy(s_statusBuf, "Error de carga", sizeof(s_statusBuf) - 1);
-                s_statusBuf[sizeof(s_statusBuf) - 1] = '\0';
-            }
-            return s_statusBuf;
-        case STOCK_LOAD_IDLE:
-            return "Esperando...";
-        default:
-            return nullptr;
-    }
+    if (!lockStocks()) return nullptr;
+    const char* status = formatStatusTextLocked(s_focusedIdx, s_statusBuf, sizeof(s_statusBuf));
+    unlockStocks();
+    return status;
 }
 
 bool stocksConsumeDirty() {
-    if (!s_dirty) return false;
+    if (!lockStocks()) return false;
+    bool dirty = s_dirty;
     s_dirty = false;
-    return true;
+    unlockStocks();
+    return dirty;
 }
 
 void stocksStop() {
-    if (s_workerHandle) {
-        TaskHandle_t h = s_workerHandle;
-        s_workerHandle = nullptr;   // stocksFetchTask sees null and no-ops
+    TaskHandle_t h = nullptr;
+    if (lockStocks(portMAX_DELAY)) {
+        h = s_workerHandle;
+        s_workerHandle = nullptr;
+        s_fetching = false;
+        s_burstPending = 0;
+        unlockStocks();
+    }
+    if (h) {
         vTaskDelete(h);
         Serial.println("[Stocks] worker stopped");
     }
-    s_fetching = false;
-    s_burstPending = 0;
     // Release the worker's dedicated TLS session too — frees ~30KB DRAM.
     stocksClientStop();
 }
 
-uint8_t stocksGetFocusedIdx() { return s_focusedIdx; }
-uint8_t stocksGetWatchlistCount() { return s_watchlist.count; }
+uint8_t stocksGetFocusedIdx() {
+    if (!lockStocks()) return s_focusedIdx;
+    uint8_t idx = s_focusedIdx;
+    unlockStocks();
+    return idx;
+}
+
+uint8_t stocksGetWatchlistCount() {
+    if (!lockStocks()) return s_watchlist.count;
+    uint8_t count = s_watchlist.count;
+    unlockStocks();
+    return count;
+}
 
 const char* stocksGetFocusedSymbol() {
-    if (s_watchlist.count == 0 || s_focusedIdx >= s_watchlist.count) return nullptr;
-    return s_watchlist.symbols[s_focusedIdx];
+    static char symbol[STOCK_SYMBOL_LEN];
+    if (!lockStocks()) return nullptr;
+    if (s_watchlist.count == 0 || s_focusedIdx >= s_watchlist.count) {
+        unlockStocks();
+        return nullptr;
+    }
+    strncpy(symbol, s_watchlist.symbols[s_focusedIdx], sizeof(symbol) - 1);
+    symbol[sizeof(symbol) - 1] = '\0';
+    unlockStocks();
+    return symbol;
 }
 
 const StockQuote* stocksGetFocusedQuote() {
-    const char* sym = stocksGetFocusedSymbol();
-    if (!sym) return nullptr;
-    uint8_t slot = findQuoteSlot(sym);
-    if (slot == 0xFF) return nullptr;
-    return &s_quotes[slot];
+    static StockQuote quote;
+    if (!lockStocks()) return nullptr;
+    if (s_watchlist.count == 0 || s_focusedIdx >= s_watchlist.count) {
+        unlockStocks();
+        return nullptr;
+    }
+    uint8_t slot = findQuoteSlot(s_watchlist.symbols[s_focusedIdx]);
+    if (slot == 0xFF) {
+        unlockStocks();
+        return nullptr;
+    }
+    quote = s_quotes[slot];
+    unlockStocks();
+    return &quote;
 }
 
 const SparklineData* stocksGetFocusedSpark() {
-    if (s_watchlist.count == 0 || s_focusedIdx >= s_watchlist.count) return nullptr;
-    const SparklineData* sp = &s_sparks[s_focusedIdx];
-    return sp->valid ? sp : nullptr;
+    static SparklineData spark;
+    if (!lockStocks()) return nullptr;
+    if (s_watchlist.count == 0 || s_focusedIdx >= s_watchlist.count || !s_sparks[s_focusedIdx].valid) {
+        unlockStocks();
+        return nullptr;
+    }
+    spark = s_sparks[s_focusedIdx];
+    unlockStocks();
+    return &spark;
+}
+
+bool stocksGetFocusedSnapshot(StockFocusedSnapshot& out) {
+    if (!lockStocks()) return false;
+    out = {};
+    out.focusedIdx = s_focusedIdx;
+    out.watchlistCount = s_watchlist.count;
+    out.fetching = s_fetching;
+
+    if (s_watchlist.count == 0 || s_focusedIdx >= s_watchlist.count) {
+        unlockStocks();
+        return true;
+    }
+
+    strncpy(out.symbol, s_watchlist.symbols[s_focusedIdx], sizeof(out.symbol) - 1);
+    out.symbol[sizeof(out.symbol) - 1] = '\0';
+    formatStatusTextLocked(s_focusedIdx, out.status, sizeof(out.status));
+
+    uint8_t slot = findQuoteSlot(out.symbol);
+    if (slot != 0xFF) {
+        out.quote = s_quotes[slot];
+        out.hasQuote = out.quote.valid;
+    }
+
+    if (s_sparks[s_focusedIdx].valid) {
+        out.spark = s_sparks[s_focusedIdx];
+        out.hasSpark = out.spark.count >= 2;
+    }
+
+    unlockStocks();
+    return true;
+}
+
+bool stocksGetSnapshotAt(uint8_t watchlistIndex, StockFocusedSnapshot& out) {
+    if (!lockStocks()) return false;
+    out = {};
+    out.focusedIdx = watchlistIndex;
+    out.watchlistCount = s_watchlist.count;
+    out.fetching = s_fetching;
+
+    if (watchlistIndex >= s_watchlist.count) {
+        unlockStocks();
+        return true;
+    }
+
+    strncpy(out.symbol, s_watchlist.symbols[watchlistIndex], sizeof(out.symbol) - 1);
+    out.symbol[sizeof(out.symbol) - 1] = '\0';
+    formatStatusTextLocked(watchlistIndex, out.status, sizeof(out.status));
+
+    uint8_t quoteSlot = findQuoteSlot(out.symbol);
+    if (quoteSlot != 0xFF) {
+        out.quote = s_quotes[quoteSlot];
+        out.hasQuote = out.quote.valid;
+    }
+    if (s_sparks[watchlistIndex].valid) {
+        out.spark = s_sparks[watchlistIndex];
+        out.hasSpark = out.spark.count >= 2;
+    }
+
+    unlockStocks();
+    return true;
 }
 
 void stocksAdvanceFocused() {
-    if (s_watchlist.count <= 1) return;
-    s_focusedIdx = (s_focusedIdx + 1) % s_watchlist.count;
-    s_priorityIdx = s_focusedIdx;
-    scheduler.requestRun(taskStocks);
-    s_dirty = true;
+    bool request = false;
+    if (lockStocks()) {
+        if (s_watchlist.count > 1) {
+            s_focusedIdx = (s_focusedIdx + 1) % s_watchlist.count;
+            s_priorityIdx = s_focusedIdx;
+            s_dirty = true;
+            request = true;
+        }
+        unlockStocks();
+    }
+    if (request) scheduler.requestRun(taskStocks);
 }

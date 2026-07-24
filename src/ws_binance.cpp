@@ -20,6 +20,7 @@ static unsigned long long currentKlineOpenTime = 0;
 // ── Latest price from stream ──
 static float latestPrice    = 0.0f;
 static bool  hasPrice       = false;
+static uint32_t lastPriceMs = 0;
 
 // ── Invert mode (for ETHBTC/SOLBTC → BTC/ETH, BTC/SOL) ──
 static bool invertMode = false;
@@ -84,6 +85,7 @@ static void parseKline(uint8_t* payload, size_t length) {
     portENTER_CRITICAL(&wsMux);
     latestPrice = closePrice;
     hasPrice = true;
+    lastPriceMs = millis();
 
     if (openTime != currentKlineOpenTime) {
         // New kline started — push new entry
@@ -158,6 +160,13 @@ bool wsBinanceHasPrice() {
     bool h = hasPrice;
     portEXIT_CRITICAL(&wsMux);
     return h;
+}
+
+uint32_t wsBinanceLastPriceMs() {
+    portENTER_CRITICAL(&wsMux);
+    uint32_t updated = lastPriceMs;
+    portEXIT_CRITICAL(&wsMux);
+    return updated;
 }
 
 void wsBinanceGetSparkline(SparklineData& out) {
@@ -269,6 +278,7 @@ bool wsBinanceBackfill() {
         currentKlineOpenTime = lastOpenTime;
         latestPrice = ringBuf[(ringHead == 0) ? (SPARKLINE_POINTS - 1) : (ringHead - 1)];
         hasPrice = true;
+        lastPriceMs = millis();
     }
     portEXIT_CRITICAL(&wsMux);
 
@@ -292,6 +302,7 @@ void wsBinanceReconnect(const char* wsPath, bool invertPrices) {
     currentKlineOpenTime = 0;
     latestPrice = 0.0f;
     hasPrice = false;
+    lastPriceMs = 0;
     portEXIT_CRITICAL(&wsMux);
 
     // Set invert mode
@@ -381,6 +392,7 @@ bool wsBinanceBackfillSymbol(const char* symbol, bool invert) {
         currentKlineOpenTime = lastOpenTime;
         latestPrice = ringBuf[(ringHead == 0) ? (SPARKLINE_POINTS - 1) : (ringHead - 1)];
         hasPrice = true;
+        lastPriceMs = millis();
     }
     portEXIT_CRITICAL(&wsMux);
 

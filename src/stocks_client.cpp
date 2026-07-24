@@ -166,6 +166,28 @@ void stocksClientStop() {
     _stkClient.stop();
 }
 
+static DeserializationError parseYahooChartJson(const char* json, JsonDocument& doc, bool filtered) {
+    doc.clear();
+    if (!filtered) {
+        return deserializeJson(doc, json, DeserializationOption::NestingLimit(20));
+    }
+
+    JsonDocument filter;
+    filter["chart"]["result"][0]["meta"]["symbol"] = true;
+    filter["chart"]["result"][0]["meta"]["shortName"] = true;
+    filter["chart"]["result"][0]["meta"]["longName"] = true;
+    filter["chart"]["result"][0]["meta"]["regularMarketPrice"] = true;
+    filter["chart"]["result"][0]["meta"]["previousClose"] = true;
+    filter["chart"]["result"][0]["meta"]["chartPreviousClose"] = true;
+    filter["chart"]["result"][0]["meta"]["regularMarketDayHigh"] = true;
+    filter["chart"]["result"][0]["meta"]["regularMarketDayLow"] = true;
+    filter["chart"]["result"][0]["indicators"]["quote"][0]["close"][0] = true;
+
+    return deserializeJson(doc, json,
+        DeserializationOption::Filter(filter),
+        DeserializationOption::NestingLimit(20));
+}
+
 // ── Yahoo Finance v8 chart: /v8/finance/chart/SYM?range=...&interval=... ──
 // Single request returns both quote-like meta + the close[] array we
 // downsample into a SparklineData. Avoids the /v7/finance/quote endpoint
@@ -191,17 +213,22 @@ ApiResult fetchStockChart(const char* symbol, const char* range, const char* int
     if (result != API_OK) return result;
     if (!json || !json[0]) return API_NETWORK_ERROR;
 
-    // Parse the full response — the original filter on the doubly-nested
-    // "indicators.quote[0].close" path was silently stripping the close
-    // array in ArduinoJson v7, leaving sparkline permanently invalid even
-    // though meta parsed fine. Memory is fine (response is ~30-40KB, PSRAM
-    // has it), so just let it all through.
     JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, json,
-        DeserializationOption::NestingLimit(20));
+    DeserializationError err = parseYahooChartJson(json, doc, true);
     if (err) {
         Serial.printf("[Yahoo] chart JSON error (%s): %s\n", symbol, err.c_str());
         return API_PARSE_ERROR;
+    }
+
+    JsonArray closes = doc["chart"]["result"][0]["indicators"]["quote"][0]["close"];
+    if (closes.isNull() || closes.size() == 0) {
+        Serial.printf("[Yahoo] %s filtered parse missing close array, retrying full parse\n", symbol);
+        err = parseYahooChartJson(json, doc, false);
+        if (err) {
+            Serial.printf("[Yahoo] chart full JSON error (%s): %s\n", symbol, err.c_str());
+            return API_PARSE_ERROR;
+        }
+        closes = doc["chart"]["result"][0]["indicators"]["quote"][0]["close"];
     }
 
     JsonObject meta = doc["chart"]["result"][0]["meta"];
@@ -230,7 +257,6 @@ ApiResult fetchStockChart(const char* symbol, const char* range, const char* int
     quote.lastUpdate = millis();
 
     // ── Sparkline ──
-    JsonArray closes = doc["chart"]["result"][0]["indicators"]["quote"][0]["close"];
     Serial.printf("[Yahoo] %s parse: closes null=%d size=%d overflow=%d\n",
                   symbol, (int)closes.isNull(), (int)closes.size(),
                   (int)doc.overflowed());

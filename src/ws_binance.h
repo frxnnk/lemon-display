@@ -17,6 +17,7 @@ bool wsBinanceConnected();
 // Latest price from WebSocket stream
 float wsBinanceGetPrice();
 bool  wsBinanceHasPrice();
+uint32_t wsBinanceLastPriceMs();
 
 // Copy circular buffer into linear SparklineData (oldest -> newest)
 void wsBinanceGetSparkline(SparklineData& out);

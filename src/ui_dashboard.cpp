@@ -396,10 +396,13 @@ void dashboardDrawHeader(const char* timeStr, bool offline, bool wsConnected) {
         return;
     }
 
-    // Full imagotipo (122x28 — icon + LEMON wordmark)
     int logoX = MARGIN;
     int logoY = (Z0_H - 28) / 2;
-    drawLemonImagotipo122(sprZ0, logoX, logoY);
+    if (Colors::isLightTheme()) {
+        drawLemonIsotipo28(sprZ0, logoX, logoY);
+    } else {
+        drawLemonImagotipo122(sprZ0, logoX, logoY);
+    }
 
     if (offline) {
         int badgeW = 90, badgeH = 24;
@@ -658,19 +661,6 @@ void dashboardDrawBtcHero(const BtcPrice& btc, const SparklineData& spark, uint8
     const PairDef& pair = BTC_PAIRS[selectedPair];
     bool simpleMode = !pairSelectorEnabled;
 
-    if (!btc.valid) {
-        char loadBuf[24];
-        snprintf(loadBuf, sizeof(loadBuf), "%s...", simpleMode ? "Bitcoin" : pair.pairLabel);
-        drawCentered(sprZ1, loadBuf, z1H / 2 - 10,
-                     &SatoshiMedium18, Colors::TEXT_SECONDARY);
-        if (!_batchMode) {
-            displayWaitVSync();
-            sprZ1.pushSprite(0, Z1_Y);
-        }
-        dirtyZones |= (1 << 1);
-        return;
-    }
-
     // ── Top row: pair label (tappable — opens dropdown) ──
     sprZ1.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_CARD);
     sprZ1.setTextDatum(lgfx::top_left);
@@ -688,6 +678,22 @@ void dashboardDrawBtcHero(const BtcPrice& btc, const SparklineData& spark, uint8
             sprZ1.fillTriangle(chevX, chevY, chevX + 8, chevY, chevX + 4, chevY + 5, Colors::TEXT_SECONDARY);
         }
         sprZ1.setTextDatum(lgfx::top_left);
+    }
+
+    if (!btc.valid) {
+        char loadBuf[24];
+        snprintf(loadBuf, sizeof(loadBuf), "%s...", simpleMode ? "Bitcoin" : pair.pairLabel);
+        drawCentered(sprZ1, loadBuf, z1H / 2 - 10,
+                     &SatoshiMedium18, Colors::TEXT_SECONDARY);
+        if (pairDropdownOpen && pairSelectorEnabled) {
+            drawPairDropdown(sprZ1, pairDropdownSelected);
+        }
+        if (!_batchMode) {
+            displayWaitVSync();
+            sprZ1.pushSprite(0, Z1_Y);
+        }
+        dirtyZones |= (1 << 1);
+        return;
     }
 
     // ── Main price (no glow, centered) ──
@@ -1173,6 +1179,64 @@ void dashboardDrawLemonDollar(const LemonPrice& lemon, const SparklineData* lemo
 //  Z2: STOCKS card (compact layout for ~213px)
 // ══════════════════════════════════════════
 
+void dashboardRedrawDollarChartOnly(const LemonPrice& lemon, const SparklineData& spark,
+                                    ChartStyle dollarChartStyle) {
+    if (s_muted) return;
+    if (!spritesReady) return;
+    if (z2H <= 0) return;
+    if (s_z2Mode == Z2_STOCKS) return;
+    if (!lemon.valid || !spark.valid || spark.count < 2) return;
+
+    bool compact = (z2H <= 60);
+    if (compact) return;
+
+    const int ct = 4;
+    const int chartX = MARGIN + CHART_PAD_X;
+    const int chartY = 82 + ct;
+    const int chartW = CARD_W - 2 * CHART_PAD_X;
+    const int chartH = z2H - chartY - CHART_PAD_B;
+    if (chartH <= 10) return;
+
+    const int clearY = chartY - 2;
+    const int clearH = chartH + 4;
+
+    static SparklineData scaled;
+    scaled = spark;
+    float avg = (lemon.bid + lemon.ask) / 2.0f;
+    float lastPt = spark.points[spark.count - 1];
+    if (lastPt > 0 && avg > 0) {
+        float factor = avg / lastPt;
+        scaled.minVal = 1e12f;
+        scaled.maxVal = -1e12f;
+        for (int i = 0; i < scaled.count; i++) {
+            scaled.points[i] *= factor;
+            if (scaled.points[i] < scaled.minVal) scaled.minVal = scaled.points[i];
+            if (scaled.points[i] > scaled.maxVal) scaled.maxVal = scaled.points[i];
+        }
+    }
+
+    sprZ2.clearClipRect();
+    sprZ2.fillRect(chartX, clearY, chartW, clearH, Colors::BG_CARD);
+    sprZ2.setClipRect(chartX, clearY, chartW, clearH);
+    drawSparkline(sprZ2, chartX, chartY, chartW, chartH,
+                  scaled, Colors::NEBULA, Colors::NEBULA_FILL);
+    if (dollarChartStyle == CHART_MARKERS) {
+        drawChartMarkers(sprZ2, chartX, chartY, chartW, chartH,
+                         scaled, 0.0f, true);
+    }
+    sprZ2.clearClipRect();
+
+    if (_deferPush) {
+        unionClip(_defClips[2], chartX, z2Y + clearY, chartW, clearH);
+    } else {
+        displayWaitVSync();
+        tft.setClipRect(chartX, z2Y + clearY, chartW, clearH);
+        sprZ2.pushSprite(0, z2Y);
+        tft.clearClipRect();
+    }
+    dirtyZones |= (1 << 2);
+}
+
 static const lgfx::IFont* priceFontForZ2(float price) {
     return (price >= 10000.0f) ? &SatoshiMedium18 : &SatoshiBold24;
 }
@@ -1205,7 +1269,9 @@ void dashboardDrawStocksZ2() {
     // Mode dots top-right inside the card
     drawStocksZ2ModeDots(sprZ2, MARGIN + CARD_W - 12, cardT + 8);
 
-    uint8_t wlCount = stocksGetWatchlistCount();
+    StockFocusedSnapshot stock = {};
+    bool hasSnapshot = stocksGetFocusedSnapshot(stock);
+    uint8_t wlCount = hasSnapshot ? stock.watchlistCount : 0;
     if (wlCount == 0) {
         drawCentered(sprZ2, "Add tickers from /config",
                      cardT + cardH / 2 - 6, &Satoshi12, Colors::TEXT_SECONDARY);
@@ -1214,15 +1280,16 @@ void dashboardDrawStocksZ2() {
         return;
     }
 
-    const StockQuote* q = stocksGetFocusedQuote();
-    const char* sym = stocksGetFocusedSymbol();
-    const char* status = stocksGetFocusedStatusText();
+    const StockQuote* q = stock.hasQuote ? &stock.quote : nullptr;
+    const SparklineData* sp = stock.hasSpark ? &stock.spark : nullptr;
+    const char* sym = stock.symbol[0] ? stock.symbol : "--";
+    const char* status = stock.status[0] ? stock.status : nullptr;
 
     // Row 1: symbol + name (left), price (right)
     const int rowY1 = cardT + 18;
     sprZ2.setTextDatum(lgfx::top_left);
     sprZ2.setTextColor(Colors::LEMON_GREEN, Colors::BG_CARD);
-    sprZ2.drawString(sym ? sym : "--", MARGIN + CARD_PAD, rowY1 - 8, &SatoshiBold24);
+    sprZ2.drawString(sym, MARGIN + CARD_PAD, rowY1 - 8, &SatoshiBold24);
 
     if (q && q->valid && q->name[0]) {
         sprZ2.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
@@ -1254,7 +1321,6 @@ void dashboardDrawStocksZ2() {
     const int chartY = cardT + 70;
     const int chartW = CARD_W - 2 * CARD_PAD;
     const int chartH = cardH - 70 - 26;  // leave footer
-    const SparklineData* sp = stocksGetFocusedSpark();
     if (sp && sp->count >= 2) {
         bool up = (q && q->valid) ? (q->change >= 0.0f) : true;
         drawSparkline(sprZ2, chartX, chartY, chartW, chartH, *sp,
@@ -1306,10 +1372,10 @@ void dashboardDrawStocksZ2() {
     }
     if (ageBuf[0]) {
         snprintf(rightLabel, sizeof(rightLabel), "%u/%u  %s",
-                 (unsigned)(stocksGetFocusedIdx() + 1), (unsigned)wlCount, ageBuf);
+                 (unsigned)(stock.focusedIdx + 1), (unsigned)wlCount, ageBuf);
     } else {
         snprintf(rightLabel, sizeof(rightLabel), "%u/%u",
-                 (unsigned)(stocksGetFocusedIdx() + 1), (unsigned)wlCount);
+                 (unsigned)(stock.focusedIdx + 1), (unsigned)wlCount);
     }
     sprZ2.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
     sprZ2.setTextDatum(lgfx::middle_right);
@@ -1317,7 +1383,7 @@ void dashboardDrawStocksZ2() {
 
     // Fetching indicator: small yellow dot above the footer while the worker
     // has a Yahoo request in flight — so the user knows "cargando" vs stale.
-    if (stocksIsFetching()) {
+    if (stock.fetching) {
         sprZ2.fillCircle(MARGIN + CARD_W - CARD_PAD - 4, footerY - 14, 3, Colors::SOLAR);
     }
 
@@ -1588,6 +1654,9 @@ void dashboardFillGaps() {
 #define LOAD_LOGO_H     56
 #define LOAD_LOGO_X     ((SCREEN_W - LOAD_LOGO_W) / 2)
 #define LOAD_LOGO_Y     170
+#define LOAD_ISOTIPO_SIZE 64
+#define LOAD_ISOTIPO_X  ((SCREEN_W - LOAD_ISOTIPO_SIZE) / 2)
+#define LOAD_ISOTIPO_Y  (LOAD_LOGO_Y + (LOAD_LOGO_H - LOAD_ISOTIPO_SIZE) / 2)
 #define LOAD_BAR_W      300
 #define LOAD_BAR_H      6
 #define LOAD_BAR_R      (LOAD_BAR_H / 2)
@@ -1632,8 +1701,13 @@ void dashboardDrawLoading(LoadPhase phase) {
     if (phase == LOAD_LOGO) {
         tft.fillScreen(Colors::BG_BASE);
 
+        if (Colors::isLightTheme()) {
+            displayWaitVSync();
+            drawLemonIsotipo64(tft, LOAD_ISOTIPO_X, LOAD_ISOTIPO_Y);
+        }
+
         // ── Gray → Color logo fade animation (1.5s at 30fps) ──
-        {
+        if (!Colors::isLightTheme()) {
             // Draw color logo into a temp sprite
             LGFX_Sprite colorSpr(&tft);
             colorSpr.setPsram(true);
@@ -2064,9 +2138,14 @@ void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t s
     if (loading || count == 0) {
         if (loading) {
             drawCentered(sprZ2, "Cargando mercados...", z2H / 2 - 10, &Satoshi12, Colors::TEXT_SECONDARY);
+            if (statusMsg && statusMsg[0]) {
+                drawCentered(sprZ2, statusMsg, z2H / 2 + 10, &Satoshi9, Colors::TEXT_TERTIARY);
+            }
         } else {
             drawCentered(sprZ2, "Por ahora no hay", z2H / 2 - 18, &Satoshi12, Colors::TEXT_SECONDARY);
-            drawCentered(sprZ2, "Cambia de temporalidad para ver otra", z2H / 2 + 2, &Satoshi9, Colors::TEXT_TERTIARY);
+            drawCentered(sprZ2,
+                         (statusMsg && statusMsg[0]) ? statusMsg : "Cambia de temporalidad para ver otra",
+                         z2H / 2 + 2, &Satoshi9, Colors::TEXT_TERTIARY);
         }
         predEndEpoch = 0;
         if (!_batchMode) {

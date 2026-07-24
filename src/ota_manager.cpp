@@ -61,6 +61,8 @@ static bool isNewer(const char* remote, const char* local) {
 // File-scope so otaFreeCheck() can release TLS buffers
 static WiFiClientSecure checkClient;
 static HTTPClient checkHttp;
+static WiFiClientSecure probeClient;
+static HTTPClient probeHttp;
 
 void otaFreeCheck() {
     checkHttp.end();
@@ -68,7 +70,67 @@ void otaFreeCheck() {
     Serial.printf("[OTA] Freed check TLS, heap: %d\n", (int)ESP.getFreeHeap());
 }
 
-OtaInfo otaCheck(const char* repo) {
+static bool isHexChar(char c) {
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
+static void normalizeMd5Lower(char value[33]) {
+    for (char* c = value; *c; ++c) {
+        if (*c >= 'A' && *c <= 'F') *c = static_cast<char>(*c - 'A' + 'a');
+    }
+}
+
+static bool extractMd5NearAsset(const char* body, const char* assetName, char out[33]) {
+    out[0] = '\0';
+    if (!body || !assetName) return false;
+    const char* start = strstr(body, assetName);
+    if (!start && strcmp(assetName, "firmware.bin") == 0) start = body;
+    if (!start) return false;
+    const char* end = start + strlen(start);
+    if (end > start + 192) end = start + 192;
+    for (const char* p = start; p + 32 <= end; ++p) {
+        bool valid = true;
+        for (int i = 0; i < 32; ++i) {
+            if (!isHexChar(p[i])) {
+                valid = false;
+                break;
+            }
+        }
+        if (valid && (p == start || !isHexChar(p[-1])) && !isHexChar(p[32])) {
+            memcpy(out, p, 32);
+            out[32] = '\0';
+            normalizeMd5Lower(out);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool otaLatestTagChanged(const char* repo, const char* localVersion) {
+    if (!repo || !localVersion || WiFi.status() != WL_CONNECTED) return false;
+    static char url[192];
+    snprintf(url, sizeof(url), "https://github.com/%s/releases/latest", repo);
+    probeClient.setInsecure();
+    if (!probeHttp.begin(probeClient, url)) return false;
+    probeHttp.setConnectTimeout(5000);
+    probeHttp.setTimeout(5000);
+    probeHttp.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+    int code = probeHttp.sendRequest("HEAD");
+    String location = probeHttp.getLocation();
+    probeHttp.end();
+    probeClient.stop();
+    if ((code != 301 && code != 302 && code != 303 && code != 307 && code != 308) ||
+        location.isEmpty()) return false;
+    int tagAt = location.lastIndexOf("/tag/");
+    if (tagAt < 0) return false;
+    String remote = location.substring(tagAt + 5);
+    if (remote.startsWith("v") || remote.startsWith("V")) remote.remove(0, 1);
+    bool changed = isNewer(remote.c_str(), localVersion);
+    if (changed) Serial.printf("[OTA] Latest tag changed: %s -> %s\n", localVersion, remote.c_str());
+    return changed;
+}
+
+OtaInfo otaCheckAsset(const char* repo, const char* assetName, const char* localVersion) {
     OtaInfo info = {};
     info.available = false;
 
@@ -103,9 +165,11 @@ OtaInfo otaCheck(const char* repo) {
     checkHttp.end();
     checkClient.stop();
 
-    // Parse with ArduinoJson (filter: only tag_name + first asset API URL + body for MD5)
+    // Parse only release metadata and asset names/URLs. The filter prototype at
+    // index 0 applies to every element in the JSON array.
     JsonDocument filter;
     filter["tag_name"] = true;
+    filter["assets"][0]["name"] = true;
     filter["assets"][0]["url"] = true;
     filter["body"] = true;
 
@@ -126,14 +190,21 @@ OtaInfo otaCheck(const char* repo) {
     if (ver[0] == 'v' || ver[0] == 'V') ver++;
     strncpy(info.version, ver, sizeof(info.version) - 1);
 
-    if (!isNewer(info.version, APP_VERSION)) {
-        Serial.printf("[OTA] Up to date: %s (remote: %s)\n", APP_VERSION, info.version);
+    if (!isNewer(info.version, localVersion)) {
+        Serial.printf("[OTA] Up to date: %s (remote: %s)\n", localVersion, info.version);
         return info;
     }
 
-    const char* assetUrl = doc["assets"][0]["url"] | (const char*)nullptr;
+    const char* assetUrl = nullptr;
+    for (JsonObject asset : doc["assets"].as<JsonArray>()) {
+        const char* name = asset["name"] | (const char*)nullptr;
+        if (name && strcmp(name, assetName) == 0) {
+            assetUrl = asset["url"] | (const char*)nullptr;
+            break;
+        }
+    }
     if (!assetUrl) {
-        Serial.println("[OTA] No asset found in release");
+        Serial.printf("[OTA] Exact asset not found: %s\n", assetName);
         return info;
     }
     Serial.printf("[OTA] Asset API URL: %s\n", assetUrl);
@@ -141,33 +212,21 @@ OtaInfo otaCheck(const char* repo) {
     strncpy(info.url, assetUrl, sizeof(info.url) - 1);
     info.available = true;
 
-    // Extract MD5 hash from release body (look for 32-char hex string after "MD5:" or standalone)
+    // Channel-specific checksum format: "firmware-v2.bin MD5: <hash>".
+    // The legacy firmware.bin channel still accepts its historical standalone hash.
     info.md5[0] = '\0';
     const char* bodyStr = doc["body"] | (const char*)nullptr;
-    if (bodyStr) {
-        // Scan for 32 consecutive hex chars
-        for (const char* p = bodyStr; *p; p++) {
-            bool isHex = true;
-            for (int i = 0; i < 32 && p[i]; i++) {
-                char c = p[i];
-                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
-                    isHex = false;
-                    break;
-                }
-            }
-            if (isHex && p[32] != '\0' && !((p[32] >= '0' && p[32] <= '9') ||
-                (p[32] >= 'a' && p[32] <= 'f') || (p[32] >= 'A' && p[32] <= 'F'))) {
-                memcpy(info.md5, p, 32);
-                info.md5[32] = '\0';
-                Serial.printf("[OTA] MD5 from release: %s\n", info.md5);
-                break;
-            }
-        }
+    if (extractMd5NearAsset(bodyStr, assetName, info.md5)) {
+        Serial.printf("[OTA] MD5 for %s: %s\n", assetName, info.md5);
     }
 
-    Serial.printf("[OTA] Update available: %s -> %s\n", APP_VERSION, info.version);
+    Serial.printf("[OTA] Update available: %s -> %s\n", localVersion, info.version);
     Serial.printf("[OTA] URL: %s\n", info.url);
     return info;
+}
+
+OtaInfo otaCheck(const char* repo) {
+    return otaCheckAsset(repo, "firmware.bin", APP_VERSION);
 }
 
 bool otaFlash(const char* binUrl, void(*progressCB)(int pct), const char* md5) {

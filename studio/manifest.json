@@ -1,0 +1,156 @@
+{
+  "experienceVersion": 1,
+  "runtimeSchemaVersion": 1,
+  "basePreset": "lemon-default",
+  "name": "Lemon Box Studio",
+  "theme": "dark",
+  "layout": "btc_usd",
+  "watchlist": [
+    "AAPL",
+    "TSLA",
+    "NVDA",
+    "SPY",
+    "MSTR"
+  ],
+  "cards": [
+    {
+      "id": "btc-hero",
+      "title": "BTC Hero",
+      "kind": "btc",
+      "source": "market:btc-usd",
+      "x": 24,
+      "y": 58,
+      "w": 432,
+      "h": 214,
+      "prompt": "",
+      "style": {
+        "accent": "solar"
+      }
+    },
+    {
+      "id": "lemon-dollar",
+      "title": "Lemon Dollar",
+      "kind": "dollar",
+      "source": "market:usdc-ars",
+      "x": 24,
+      "y": 286,
+      "w": 210,
+      "h": 144,
+      "prompt": "",
+      "style": {
+        "accent": "greent"
+      }
+    },
+    {
+      "id": "watchlist",
+      "title": "Watchlist",
+      "kind": "stocks",
+      "source": "watchlist",
+      "x": 246,
+      "y": 286,
+      "w": 210,
+      "h": 144,
+      "prompt": "",
+      "style": {
+        "accent": "nebula"
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "btc-usd",
+      "title": "BTC / USD",
+      "kind": "market.crypto",
+      "config": {
+        "symbol": "BTC",
+        "currency": "USD"
+      },
+      "keyNames": []
+    },
+    {
+      "id": "watchlist",
+      "title": "Watchlist",
+      "kind": "market.stocks",
+      "config": {
+        "symbols": [
+          "AAPL",
+          "TSLA",
+          "NVDA"
+        ]
+      },
+      "keyNames": []
+    }
+  ],
+  "requiredKeys": [],
+  "deviceSettings": {
+    "theme": "dark",
+    "layout": "btc_usd",
+    "brightness": 255,
+    "z2Mode": "usd",
+    "watchlist": [
+      "AAPL",
+      "TSLA",
+      "NVDA",
+      "SPY",
+      "MSTR"
+    ]
+  },
+  "compatibility": {
+    "firmwareSupported": true,
+    "mode": "device-supported",
+    "deviceSettingsOnly": false,
+    "unsupportedCards": []
+  },
+  "deviceBundle": {
+    "schemaVersion": 1,
+    "screen": {
+      "w": 480,
+      "h": 480
+    },
+    "cards": [
+      {
+        "id": "btc-hero",
+        "title": "BTC Hero",
+        "kind": "btc",
+        "source": "market:btc-usd",
+        "x": 24,
+        "y": 58,
+        "w": 432,
+        "h": 214,
+        "style": {
+          "accent": "solar"
+        }
+      },
+      {
+        "id": "lemon-dollar",
+        "title": "Lemon Dollar",
+        "kind": "dollar",
+        "source": "market:usdc-ars",
+        "x": 24,
+        "y": 286,
+        "w": 210,
+        "h": 144,
+        "style": {
+          "accent": "greent"
+        }
+      },
+      {
+        "id": "watchlist",
+        "title": "Watchlist",
+        "kind": "watchlist",
+        "source": "watchlist",
+        "x": 246,
+        "y": 286,
+        "w": 210,
+        "h": 144,
+        "style": {
+          "accent": "nebula"
+        }
+      }
+    ]
+  },
+  "syncStatus": "local-draft",
+  "lastAppliedDeviceId": "",
+  "mode": "control_room",
+  "releaseNotes": ""
+}

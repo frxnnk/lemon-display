@@ -56,6 +56,8 @@ void dashboardDrawBtcHero(const BtcPrice& btc, const SparklineData& spark, uint8
 void dashboardDrawLemonDollar(const LemonPrice& lemon, const SparklineData* lemonSpark = nullptr,
                               uint8_t dollarPeriod = 1, ChartStyle dollarChartStyle = CHART_LINE,
                               float dollarChange = NAN);
+void dashboardRedrawDollarChartOnly(const LemonPrice& lemon, const SparklineData& spark,
+                                    ChartStyle dollarChartStyle = CHART_LINE);
 
 // Compact stocks card rendered into Z2 (pulls data from ui_stocks accessors).
 void dashboardDrawStocksZ2();

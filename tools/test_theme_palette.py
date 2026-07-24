@@ -43,6 +43,31 @@ class ThemePaletteTests(unittest.TestCase):
         self.assertIn("nvsSetTheme", settings)
         self.assertIn("Colors::setTheme", settings)
 
+    def test_light_theme_uses_stronger_ui_separators(self):
+        source = (SRC / "colors.cpp").read_text(encoding="utf-8")
+
+        self.assertIn("0xBE57", source)
+        self.assertIn("0x9DD4", source)
+        self.assertIn("0xCEB9", source)
+
+    def test_dashboard_header_uses_light_theme_logo_variant(self):
+        dashboard = (SRC / "ui_dashboard.cpp").read_text(encoding="utf-8")
+
+        self.assertIn("Colors::isLightTheme()", dashboard)
+        self.assertIn("drawLemonIsotipo28", dashboard)
+        self.assertNotIn('drawString("LEMON"', dashboard)
+
+    def test_light_loading_uses_static_isotype_not_wordmark_sweep(self):
+        dashboard = (SRC / "ui_dashboard.cpp").read_text(encoding="utf-8")
+
+        self.assertIn("drawLemonIsotipo64", dashboard)
+        self.assertIn("LOAD_ISOTIPO_X", dashboard)
+        self.assertIn("if (Colors::isLightTheme())", dashboard)
+        self.assertLess(
+            dashboard.index("drawLemonIsotipo64"),
+            dashboard.index("drawLemonImagotipo244"),
+        )
+
     def test_boot_applies_saved_theme_before_display_setup(self):
         main = (SRC / "main.cpp").read_text(encoding="utf-8")
         nvs_pos = main.index("nvsInit();")
