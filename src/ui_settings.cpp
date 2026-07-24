@@ -14,8 +14,10 @@
 #include "ws_binance.h"
 #include "api_client.h"
 #include "config_server.h"
+#include "ui_stocks.h"
 #include "data/satoshi_fonts.h"
 #include <Arduino.h>
+#include <WiFi.h>
 
 #define MARGIN     16
 #define CARD_W    448
@@ -25,22 +27,32 @@
 #define VISIBLE_H  (SCREEN_H - HEADER_H)
 
 // ── Content layout: merged settings card + button group ──
-#define SCARD_Y         52
-#define ROW_H           48
-#define SCARD_H        (ROW_H * 5)   // 240px — 5 rows
-#define BTN_H           38
-#define BTN_GAP         10
-#define BTN_START_Y    (SCARD_Y + SCARD_H + 20)              // 264
-#define UPDATE_BTN_Y    BTN_START_Y                            // 264
+#define SCARD_Y         48
+#define ROW_H           42
+#define SCARD_H        (ROW_H * 7)
+#define BTN_H           36
+#define BTN_GAP          8
+#define BTN_START_Y    (SCARD_Y + SCARD_H + 12)
+#define UPDATE_BTN_X    MARGIN
+#define UPDATE_BTN_Y    BTN_START_Y
+#define UPDATE_BTN_W    CARD_W
 #define UPDATE_BTN_H    BTN_H
-#define RESET_BTN_Y    (BTN_START_Y + BTN_H + BTN_GAP)        // 312
-#define RESET_BTN_H     BTN_H
-#define TUTORIAL_BTN_Y (BTN_START_Y + 2 * (BTN_H + BTN_GAP))  // 360
-#define TUTORIAL_BTN_H  BTN_H
-#define ABOUT_Y        (TUTORIAL_BTN_Y + BTN_H + 16)           // 414
+#define SECONDARY_BTN_Y (UPDATE_BTN_Y + UPDATE_BTN_H + BTN_GAP)
+#define SECONDARY_BTN_H BTN_H
+#define SECONDARY_BTN_W ((CARD_W - BTN_GAP) / 2)
+#define RESET_BTN_X     MARGIN
+#define RESET_BTN_Y     SECONDARY_BTN_Y
+#define RESET_BTN_W     SECONDARY_BTN_W
+#define RESET_BTN_H     SECONDARY_BTN_H
+#define TUTORIAL_BTN_X  (MARGIN + SECONDARY_BTN_W + BTN_GAP)
+#define TUTORIAL_BTN_Y  SECONDARY_BTN_Y
+#define TUTORIAL_BTN_W  (CARD_W - SECONDARY_BTN_W - BTN_GAP)
+#define TUTORIAL_BTN_H  SECONDARY_BTN_H
+#define ABOUT_Y        (SECONDARY_BTN_Y + SECONDARY_BTN_H + 12)
 #define ABOUT_H         14
-#define CONTENT_TOTAL  (ABOUT_Y + ABOUT_H)                     // 428
+#define CONTENT_TOTAL  (ABOUT_Y + ABOUT_H)
 #define MAX_SCROLL     ((CONTENT_TOTAL > SCREEN_H) ? (CONTENT_TOTAL - SCREEN_H) : 0)
+static_assert(CONTENT_TOTAL <= SCREEN_H, "Settings actions must fit without bottom clipping");
 
 // ── State ──
 static int scrollY = 0;
@@ -52,6 +64,7 @@ static bool otaAvailableOnBoot = false;
 static bool resetWifiConfirmArmed = false;
 static uint32_t resetWifiConfirmUntilMs = 0;
 static const uint32_t RESET_WIFI_CONFIRM_TIMEOUT_MS = 5000;
+static bool servicesNeedRecovery = false;
 
 // ── Persistent full-screen sprite (allocated once, no fillScreen flash) ──
 static LGFX_Sprite settScr(&tft);
@@ -59,6 +72,7 @@ static bool settScrReady = false;
 
 // ── Layout preset names (0=BTC only, 1=BTC+USD 50/50) ──
 static const char* layoutNames[] = { "BTC", "BTC + USD" };
+static const char* themeNames[] = { "Oscuro", "Claro" };
 
 // ── Helper: check if Y range is visible ──
 static bool isVisible(int itemY, int itemH) {
@@ -175,11 +189,10 @@ void settingsDraw() {
             settScr.setTextDatum(lgfx::middle_left);
             settScr.drawString(wifiSSID(), MARGIN + PAD, rcy + 8, &Satoshi12);
 
-            char rssiBuf[24];
-            snprintf(rssiBuf, sizeof(rssiBuf), "%d dBm", (int)wifiRSSI());
+            String ip = wifiIP();
             settScr.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
             settScr.setTextDatum(lgfx::middle_right);
-            settScr.drawString(rssiBuf, MARGIN + CARD_W - PAD, rcy, &Satoshi9);
+            settScr.drawString(ip, MARGIN + CARD_W - PAD, rcy, &Satoshi12);
         } else {
             settScr.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
             settScr.setTextDatum(lgfx::middle_left);
@@ -206,6 +219,44 @@ void settingsDraw() {
         drawToggle(settScr, toggleX, rcy - 12, soundOn);
     }
 
+    // Divider
+    settScr.drawFastHLine(MARGIN + PAD, cy + ROW_H * 5, CARD_W - PAD * 2, Colors::DIVIDER);
+
+    // Row 5: Tema
+    {
+        int rcy = cy + ROW_H * 5 + ROW_H / 2;
+        uint8_t theme = nvsGetTheme();
+        bool lightOn = (theme == 1);
+
+        settScr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
+        settScr.setTextDatum(lgfx::middle_left);
+        settScr.drawString("Tema", MARGIN + PAD, rcy, &Satoshi12);
+
+        settScr.setTextColor(Colors::LEMON_GREEN, Colors::BG_CARD);
+        settScr.setTextDatum(lgfx::middle_right);
+        settScr.drawString(themeNames[lightOn ? 1 : 0], toggleX - 8, rcy, &Satoshi9);
+
+        drawToggle(settScr, toggleX, rcy - 12, lightOn);
+    }
+
+    // Divider
+    settScr.drawFastHLine(MARGIN + PAD, cy + ROW_H * 6, CARD_W - PAD * 2, Colors::DIVIDER);
+
+    // Row 6: Studio link helper
+    {
+        int rcy = cy + ROW_H * 6 + ROW_H / 2;
+
+        settScr.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+        settScr.setTextDatum(lgfx::middle_left);
+        settScr.drawString("Studio", MARGIN + PAD, rcy - 10, &Satoshi9);
+
+        String ip = wifiConnected() ? wifiIP() : String("sin WiFi");
+        String url = String("/studio?device=") + ip;
+        settScr.setTextColor(wifiConnected() ? Colors::LEMON_GREEN : Colors::TEXT_TERTIARY, Colors::BG_CARD);
+        settScr.setTextDatum(lgfx::middle_right);
+        settScr.drawString(url, MARGIN + CARD_W - PAD, rcy + 8, &Satoshi9);
+    }
+
     // ══════════════════════════════════════
     //  BUTTONS
     // ══════════════════════════════════════
@@ -213,67 +264,71 @@ void settingsDraw() {
     // ── Update button (green outline) ──
     {
         int by = UPDATE_BTN_Y - scrollY;
-        settScr.fillSmoothRoundRect(MARGIN, by, CARD_W, BTN_H, 12, Colors::BG_SURFACE);
-        settScr.drawRoundRect(MARGIN, by, CARD_W, BTN_H, 12, Colors::LEMON_GREEN);
+        settScr.fillSmoothRoundRect(UPDATE_BTN_X, by, UPDATE_BTN_W, UPDATE_BTN_H, 12, Colors::BG_SURFACE);
+        settScr.drawRoundRect(UPDATE_BTN_X, by, UPDATE_BTN_W, UPDATE_BTN_H, 12, Colors::LEMON_GREEN);
 
         if (otaFlashing) {
             settScr.setTextColor(Colors::SOLAR, Colors::BG_SURFACE);
             settScr.setTextDatum(lgfx::middle_center);
-            settScr.drawString("Actualizando...", MARGIN + CARD_W / 2, by + BTN_H / 2, &Satoshi12);
+            settScr.drawString("Actualizando...", UPDATE_BTN_X + UPDATE_BTN_W / 2, by + UPDATE_BTN_H / 2, &Satoshi12);
         } else if (otaChecked && otaResult.available) {
             // Filled green button when update is available
-            settScr.fillSmoothRoundRect(MARGIN, by, CARD_W, BTN_H, 12, Colors::DARK_GREEN);
-            settScr.drawRoundRect(MARGIN, by, CARD_W, BTN_H, 12, Colors::LEMON_GREEN);
+            settScr.fillSmoothRoundRect(UPDATE_BTN_X, by, UPDATE_BTN_W, UPDATE_BTN_H, 12, Colors::DARK_GREEN);
+            settScr.drawRoundRect(UPDATE_BTN_X, by, UPDATE_BTN_W, UPDATE_BTN_H, 12, Colors::LEMON_GREEN);
             char buf[48];
             snprintf(buf, sizeof(buf), "Actualizar a v%s", otaResult.version);
             settScr.setTextColor(Colors::TEXT_PRIMARY, Colors::DARK_GREEN);
             settScr.setTextDatum(lgfx::middle_center);
-            settScr.drawString(buf, MARGIN + CARD_W / 2, by + BTN_H / 2, &SatoshiMedium18);
+            settScr.drawString(buf, UPDATE_BTN_X + UPDATE_BTN_W / 2, by + UPDATE_BTN_H / 2, &SatoshiMedium18);
         } else if (otaChecked && !otaResult.available) {
-            char statusBuf[48];
+            char statusBuf[64];
             if (otaResult.httpCode != 200) {
-                snprintf(statusBuf, sizeof(statusBuf), "Error HTTP %d", otaResult.httpCode);
+                snprintf(statusBuf, sizeof(statusBuf),
+                         "HTTP %d h=%uk m=%uk",
+                         otaResult.httpCode,
+                         (unsigned)(ESP.getFreeHeap() / 1024),
+                         (unsigned)(ESP.getMaxAllocHeap() / 1024));
                 settScr.setTextColor(Colors::NEGATIVE, Colors::BG_SURFACE);
             } else {
                 snprintf(statusBuf, sizeof(statusBuf), "Estas al dia");
                 settScr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_SURFACE);
             }
             settScr.setTextDatum(lgfx::middle_center);
-            settScr.drawString(statusBuf, MARGIN + CARD_W / 2, by + BTN_H / 2, &Satoshi12);
+            settScr.drawString(statusBuf, UPDATE_BTN_X + UPDATE_BTN_W / 2, by + UPDATE_BTN_H / 2, &Satoshi12);
         } else if (otaAvailableOnBoot && !otaChecked) {
-            settScr.fillCircle(MARGIN + 20, by + BTN_H / 2, 4, Colors::LEMON_GREEN);
+            settScr.fillCircle(UPDATE_BTN_X + 20, by + UPDATE_BTN_H / 2, 4, Colors::LEMON_GREEN);
             settScr.setTextColor(Colors::LEMON_GREEN, Colors::BG_SURFACE);
             settScr.setTextDatum(lgfx::middle_center);
-            settScr.drawString("Actualizacion disponible", MARGIN + CARD_W / 2, by + BTN_H / 2, &Satoshi12);
+            settScr.drawString("Actualizacion disponible", UPDATE_BTN_X + UPDATE_BTN_W / 2, by + UPDATE_BTN_H / 2, &Satoshi12);
         } else {
             settScr.setTextColor(Colors::LEMON_GREEN, Colors::BG_SURFACE);
             settScr.setTextDatum(lgfx::middle_center);
-            settScr.drawString("Buscar actualizaciones", MARGIN + CARD_W / 2, by + BTN_H / 2, &Satoshi12);
+            settScr.drawString("Buscar actualizaciones", UPDATE_BTN_X + UPDATE_BTN_W / 2, by + UPDATE_BTN_H / 2, &Satoshi12);
         }
     }
 
     // ── Factory reset button (red outline) ──
     {
         int by = RESET_BTN_Y - scrollY;
-        settScr.fillSmoothRoundRect(MARGIN, by, CARD_W, BTN_H, 12, Colors::BG_SURFACE);
+        settScr.fillSmoothRoundRect(RESET_BTN_X, by, RESET_BTN_W, RESET_BTN_H, 10, Colors::BG_SURFACE);
         bool confirmActive = isResetWifiConfirmActive();
         uint16_t borderColor = confirmActive ? Colors::SOLAR : Colors::NEGATIVE;
         uint16_t textColor = confirmActive ? Colors::SOLAR : Colors::NEGATIVE;
-        settScr.drawRoundRect(MARGIN, by, CARD_W, BTN_H, 12, borderColor);
+        settScr.drawRoundRect(RESET_BTN_X, by, RESET_BTN_W, RESET_BTN_H, 10, borderColor);
         settScr.setTextColor(textColor, Colors::BG_SURFACE);
         settScr.setTextDatum(lgfx::middle_center);
-        settScr.drawString(confirmActive ? "Confirmar reset" : "Reset de fabrica",
-                           MARGIN + CARD_W / 2, by + BTN_H / 2, &Satoshi12);
+        settScr.drawString(confirmActive ? "Confirmar" : "Reset",
+                           RESET_BTN_X + RESET_BTN_W / 2, by + RESET_BTN_H / 2, &Satoshi12);
     }
 
     // ── Tutorial button (neutral outline) ──
     {
         int by = TUTORIAL_BTN_Y - scrollY;
-        settScr.fillSmoothRoundRect(MARGIN, by, CARD_W, BTN_H, 12, Colors::BG_SURFACE);
-        settScr.drawRoundRect(MARGIN, by, CARD_W, BTN_H, 12, Colors::TEXT_TERTIARY);
+        settScr.fillSmoothRoundRect(TUTORIAL_BTN_X, by, TUTORIAL_BTN_W, TUTORIAL_BTN_H, 10, Colors::BG_SURFACE);
+        settScr.drawRoundRect(TUTORIAL_BTN_X, by, TUTORIAL_BTN_W, TUTORIAL_BTN_H, 10, Colors::TEXT_TERTIARY);
         settScr.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_SURFACE);
         settScr.setTextDatum(lgfx::middle_center);
-        settScr.drawString("Ver tutorial", MARGIN + CARD_W / 2, by + BTN_H / 2, &Satoshi12);
+        settScr.drawString("Tutorial", TUTORIAL_BTN_X + TUTORIAL_BTN_W / 2, by + TUTORIAL_BTN_H / 2, &Satoshi12);
     }
 
     // ══════════════════════════════════════
@@ -413,8 +468,24 @@ void settingsHandleTouch(const TouchEvent& evt) {
         return;
     }
 
+    // Row 5: Tema
+    if (touchInRect(tx, cy, MARGIN, SCARD_Y + ROW_H * 5, CARD_W, ROW_H)) {
+        uint8_t next = (nvsGetTheme() == 1) ? 0 : 1;
+        nvsSetTheme(next);
+        Colors::setTheme(next == 1 ? Colors::THEME_LIGHT : Colors::THEME_DARK);
+        dashboardMarkAllDirty();
+        settingsDraw();
+        return;
+    }
+
+    // Row 6 is informational: Studio URL/IP.
+    if (touchInRect(tx, cy, MARGIN, SCARD_Y + ROW_H * 6, CARD_W, ROW_H)) {
+        settingsDraw();
+        return;
+    }
+
     // ══════════ UPDATE BUTTON ══════════
-    if (touchInRect(tx, cy, MARGIN, UPDATE_BTN_Y, CARD_W, BTN_H)) {
+    if (touchInRect(tx, cy, UPDATE_BTN_X, UPDATE_BTN_Y, UPDATE_BTN_W, UPDATE_BTN_H)) {
         if (otaChecked && otaResult.available && !otaFlashing) {
             otaFlashing = true;
             settingsDraw();  // Show "Actualizando..." on the button
@@ -424,6 +495,7 @@ void settingsHandleTouch(const TouchEvent& evt) {
             wsBinanceStop();          // Close WebSocket + its TLS session
             apiStop();                // Release API TLS session
             configServerStop();       // Shut down app config HTTP server
+            stocksStop();             // Tear down stocks worker + its TLS
             if (settScrReady) {
                 settScr.deleteSprite();
                 settScrReady = false;
@@ -439,12 +511,10 @@ void settingsHandleTouch(const TouchEvent& evt) {
             otaFlashing = false;
             settingsDraw();
         } else if (!otaChecked) {
-            // First tap: check (use boot result if available)
-            if (otaAvailableOnBoot) {
-                otaResult = otaCheck(OTA_GITHUB_REPO);
-            } else {
-                otaResult = otaCheck(OTA_GITHUB_REPO);
-            }
+            wsBinanceStop();
+            stocksStop();
+            servicesNeedRecovery = true;
+            otaResult = otaCheck(OTA_GITHUB_REPO);
             otaChecked = true;
             settingsDraw();
         }
@@ -452,7 +522,7 @@ void settingsHandleTouch(const TouchEvent& evt) {
     }
 
     // ══════════ FACTORY RESET BUTTON ══════════
-    if (touchInRect(tx, cy, MARGIN, RESET_BTN_Y, CARD_W, RESET_BTN_H)) {
+    if (touchInRect(tx, cy, RESET_BTN_X, RESET_BTN_Y, RESET_BTN_W, RESET_BTN_H)) {
         if (isResetWifiConfirmActive()) {
             clearResetWifiConfirm();
             nvsFactoryReset();  // Clears ALL NVS: WiFi, tutorial, stats, settings
@@ -465,7 +535,7 @@ void settingsHandleTouch(const TouchEvent& evt) {
     }
 
     // ══════════ TUTORIAL BUTTON ══════════
-    if (touchInRect(tx, cy, MARGIN, TUTORIAL_BTN_Y, CARD_W, TUTORIAL_BTN_H)) {
+    if (touchInRect(tx, cy, TUTORIAL_BTN_X, TUTORIAL_BTN_Y, TUTORIAL_BTN_W, TUTORIAL_BTN_H)) {
         tutorialStart();
         scrollY = 0;
         otaChecked = false;
@@ -485,4 +555,10 @@ void settingsTick() {
 
 void settingsSetOtaAvailable(bool available) {
     otaAvailableOnBoot = available;
+}
+
+bool settingsConsumeServiceRecovery() {
+    if (!servicesNeedRecovery) return false;
+    servicesNeedRecovery = false;
+    return true;
 }

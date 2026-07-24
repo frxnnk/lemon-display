@@ -17,6 +17,8 @@ void     nvsForgetWifi();
 // Display
 uint8_t  nvsGetBrightness();
 void     nvsSetBrightness(uint8_t val);
+uint8_t  nvsGetTheme();
+void     nvsSetTheme(uint8_t theme);
 
 // Sound
 bool     nvsGetSoundEnabled();
@@ -51,10 +53,10 @@ struct PolyStats;
 struct PolyPrediction;
 void     nvsLoadPolyStats(uint8_t periodIdx, PolyStats& stats);
 void     nvsSavePolyStats(uint8_t periodIdx, const PolyStats& stats);
-bool     nvsHasPolyPrediction();
-void     nvsLoadPolyPrediction(PolyPrediction& pred);
-void     nvsSavePolyPrediction(const PolyPrediction& pred);
-void     nvsClearPolyPrediction();
+bool     nvsHasPolyPrediction(uint8_t periodIdx);
+void     nvsLoadPolyPrediction(uint8_t periodIdx, PolyPrediction& pred);
+void     nvsSavePolyPrediction(uint8_t periodIdx, const PolyPrediction& pred);
+void     nvsClearPolyPrediction(uint8_t periodIdx);
 
 // Prediction history ring buffer
 struct PredHistoryEntry;
@@ -66,5 +68,32 @@ struct StockWatchlist;
 void     nvsLoadWatchlist(StockWatchlist& out);   // falls back to defaults if empty
 void     nvsSaveWatchlist(const StockWatchlist& wl);
 
+// Local Studio pairing token.
+bool     nvsGetPairingToken(char* out, size_t outLen);
+void     nvsSetPairingToken(const char* token);
+void     nvsClearPairingToken();
+
+// Stocks quote cache (blob — array of StockQuote)
+struct StockQuote;
+void     nvsLoadStockQuotes(StockQuote* out, uint8_t& count);
+void     nvsSaveStockQuotes(const StockQuote* quotes, uint8_t count);
+
+// Stocks sparkline cache — keyed by symbol internally so watchlist reorders
+// don't corrupt the chart/symbol mapping. On load, sparks are placed into
+// the current watchlist slots; symbols no longer in the watchlist are dropped.
+struct SparklineData;
+void     nvsLoadStockSparks(SparklineData* out, const StockWatchlist& wl);
+void     nvsSaveStockSparks(const SparklineData* sparks, const StockWatchlist& wl);
+
+// Z2 slot mode (0=USD, 1=Markets, 2=Stocks) — persisted so the reboot comes
+// back to whatever the user was looking at.
+uint8_t  nvsGetZ2Mode();
+void     nvsSetZ2Mode(uint8_t mode);
+
 // Factory reset — erases all NVS keys
+uint8_t  nvsGetV2RotationSeconds();
+void     nvsSetV2RotationSeconds(uint8_t seconds);
+uint8_t  nvsGetV2Pair();
+void     nvsSetV2Pair(uint8_t pair);
+
 void     nvsFactoryReset();

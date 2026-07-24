@@ -110,6 +110,8 @@ struct PolyMarket {
     float  refPrice;          // Interval open price (Chainlink BTC/USD)
     bool   refPriceValid;
     bool   closed;
+    bool   winnerKnown;
+    bool   yesWon;
     bool   valid;
 };
 
@@ -117,6 +119,8 @@ struct PolyPrediction {
     char     conditionId[PM_COND_ID_LEN];
     bool     chosenYes;
     float    probAtBet;
+    float    refPrice;
+    uint32_t endEpoch;
     uint32_t timestamp;
     uint8_t  periodIdx;       // BTC_PERIODS index where this prediction was placed
     uint8_t  resolved;        // 0=pending, 1=won, 2=lost

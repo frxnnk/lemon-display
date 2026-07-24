@@ -1,0 +1,16 @@
+{
+  "devices": [
+    {
+      "id": "lemon-A172E0",
+      "name": "Lemon Box",
+      "host": "192.168.1.61",
+      "baseUrl": "http://192.168.1.61",
+      "version": "5.1.1-beta.38",
+      "hardware": "esp32-s3",
+      "mac": "B0:09:AC:A1:72:E0",
+      "lastSeenAt": 1784062924,
+      "tokenRef": "DEVICE_TOKEN_LEMON_A172E0"
+    }
+  ],
+  "currentDeviceId": "lemon-A172E0"
+}

@@ -3,8 +3,190 @@
 #include "config.h"
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <esp_task_wdt.h>
 #include <cstring>
 #include <cmath>
+
+// ── Dedicated HTTP pipeline (off api_client's shared one) ──
+// Stocks fetch runs on a FreeRTOS worker on core 0; api_client's statics
+// are used concurrently by scheduler tasks on core 1, so we need our own
+// set of statics. Buffer lives in PSRAM (Yahoo chart is ~30KB typical).
+static WiFiClientSecure _stkClient;
+static HTTPClient       _stkHttp;
+static char*            _stkBuf = nullptr;
+static const size_t     STK_BUF_SIZE = 64 * 1024;
+static int              _stkLastCode = 0;     // last HTTP status (or error code)
+static int              _stkLastBytes = 0;    // bytes read from last response
+
+int stocksClientLastCode()  { return _stkLastCode; }
+int stocksClientLastBytes() { return _stkLastBytes; }
+
+// Stream adapter that drains http.writeToStream() into _stkBuf. Needed
+// because Yahoo returns Transfer-Encoding: chunked with no Content-Length
+// — reading raw from getStreamPtr() would leave chunk-size markers in the
+// data. writeToStream lets HTTPClient parse the chunk framing for us.
+class StkBufStream : public Stream {
+public:
+    int bytesWritten = 0;
+    size_t write(uint8_t c) override {
+        if (!_stkBuf) return 0;
+        if (bytesWritten >= (int)(STK_BUF_SIZE - 1)) return 0;
+        _stkBuf[bytesWritten++] = (char)c;
+        return 1;
+    }
+    size_t write(const uint8_t* buf, size_t size) override {
+        if (!_stkBuf) return 0;
+        int avail = (int)(STK_BUF_SIZE - 1) - bytesWritten;
+        int toWrite = (int)size;
+        if (toWrite > avail) toWrite = avail;
+        if (toWrite > 0) {
+            memcpy(_stkBuf + bytesWritten, buf, toWrite);
+            bytesWritten += toWrite;
+            esp_task_wdt_reset();
+        }
+        return toWrite;
+    }
+    int available() override { return 0; }
+    int read() override { return -1; }
+    int peek() override { return -1; }
+    void flush() override {}
+};
+
+static const char* stocksHttpGet(const char* url, ApiResult& result, int timeoutMs) {
+    result = API_NETWORK_ERROR;
+    _stkLastCode = 0;
+    _stkLastBytes = 0;
+    if (!_stkBuf) {
+        _stkBuf = (char*)ps_malloc(STK_BUF_SIZE);
+        if (!_stkBuf) {
+            Serial.println("[Stocks] FATAL: cannot allocate response buffer");
+            _stkLastCode = -9001;  // marker: buffer alloc failed
+            return "";
+        }
+    }
+    _stkBuf[0] = '\0';
+
+    // TLS handshake on fragmented DRAM can fail intermittently (HTTP -1).
+    // Retry up to 3 times with a short backoff — mbedtls usually releases
+    // intermediate allocations between attempts and the next handshake
+    // finds a contiguous block.
+    int code = -1;
+    for (int attempt = 0; attempt < 5 && code < 0; attempt++) {
+        if (attempt > 0) {
+            _stkHttp.end();
+            _stkClient.stop();
+            esp_task_wdt_reset();
+            vTaskDelay(pdMS_TO_TICKS(500));
+            esp_task_wdt_reset();
+        }
+
+        _stkClient.setInsecure();
+        _stkHttp.setConnectTimeout(5000);
+        _stkHttp.setTimeout(timeoutMs);
+        if (!_stkHttp.begin(_stkClient, url)) {
+            _stkClient.stop();
+            _stkLastCode = -9002;  // marker: begin() failed
+            return "";
+        }
+        _stkHttp.addHeader("Accept", "application/json");
+        _stkHttp.setUserAgent("Mozilla/5.0 (compatible; Lemon-Box/5.0)");
+
+        esp_task_wdt_reset();
+        code = _stkHttp.GET();
+        esp_task_wdt_reset();
+    }
+    _stkLastCode = code;
+    if (code == 429) {
+        Serial.printf("[Stocks] HTTP 429 %s\n", url);
+        _stkHttp.end();
+        _stkClient.stop();
+        result = API_RATE_LIMITED;
+        return "";
+    }
+    if (code != 200) {
+        Serial.printf("[Stocks] HTTP %d %s\n", code, url);
+        _stkHttp.end();
+        _stkClient.stop();
+        return "";
+    }
+
+    int contentLen = _stkHttp.getSize();
+    int bytesRead = 0;
+    if (contentLen > 0 && contentLen < (int)(STK_BUF_SIZE - 1)) {
+        // Known length — raw stream read
+        WiFiClient* stream = _stkHttp.getStreamPtr();
+        unsigned long readStart = millis();
+        while (bytesRead < contentLen) {
+            if ((int)(millis() - readStart) > timeoutMs) {
+                Serial.printf("[Stocks] body read timeout (%d/%d)\n", bytesRead, contentLen);
+                break;
+            }
+            int avail = stream->available();
+            if (avail > 0) {
+                int toRead = avail;
+                if (toRead > contentLen - bytesRead) toRead = contentLen - bytesRead;
+                int n = stream->readBytes(_stkBuf + bytesRead, toRead);
+                if (n <= 0) break;
+                bytesRead += n;
+                esp_task_wdt_reset();
+            } else if (!stream->connected()) {
+                break;
+            } else {
+                vTaskDelay(pdMS_TO_TICKS(10));
+                esp_task_wdt_reset();
+            }
+        }
+    } else {
+        // Yahoo returns Transfer-Encoding: chunked (no Content-Length). Let
+        // HTTPClient parse chunk framing via writeToStream so we don't end
+        // up with chunk-size markers interleaved in _stkBuf.
+        StkBufStream bufStream;
+        int written = _stkHttp.writeToStream(&bufStream);
+        esp_task_wdt_reset();
+        bytesRead = bufStream.bytesWritten;
+        if (written < 0) {
+            Serial.printf("[Stocks] writeToStream err %d (%d bytes) %s\n",
+                          written, bytesRead, url);
+        }
+    }
+    _stkBuf[bytesRead] = '\0';
+    _stkLastBytes = bytesRead;
+
+    _stkHttp.end();
+    _stkClient.stop();
+
+    if (bytesRead > 0) result = API_OK;
+    return _stkBuf;
+}
+
+void stocksClientStop() {
+    _stkHttp.end();
+    _stkClient.stop();
+}
+
+static DeserializationError parseYahooChartJson(const char* json, JsonDocument& doc, bool filtered) {
+    doc.clear();
+    if (!filtered) {
+        return deserializeJson(doc, json, DeserializationOption::NestingLimit(20));
+    }
+
+    JsonDocument filter;
+    filter["chart"]["result"][0]["meta"]["symbol"] = true;
+    filter["chart"]["result"][0]["meta"]["shortName"] = true;
+    filter["chart"]["result"][0]["meta"]["longName"] = true;
+    filter["chart"]["result"][0]["meta"]["regularMarketPrice"] = true;
+    filter["chart"]["result"][0]["meta"]["previousClose"] = true;
+    filter["chart"]["result"][0]["meta"]["chartPreviousClose"] = true;
+    filter["chart"]["result"][0]["meta"]["regularMarketDayHigh"] = true;
+    filter["chart"]["result"][0]["meta"]["regularMarketDayLow"] = true;
+    filter["chart"]["result"][0]["indicators"]["quote"][0]["close"][0] = true;
+
+    return deserializeJson(doc, json,
+        DeserializationOption::Filter(filter),
+        DeserializationOption::NestingLimit(20));
+}
 
 // ── Yahoo Finance v8 chart: /v8/finance/chart/SYM?range=...&interval=... ──
 // Single request returns both quote-like meta + the close[] array we
@@ -24,29 +206,29 @@ ApiResult fetchStockChart(const char* symbol, const char* range, const char* int
     if (n <= 0 || n >= (int)sizeof(urlBuf)) return API_NETWORK_ERROR;
 
     ApiResult result;
-    const char* json = apiHttpGet(urlBuf, false, result, 8000);
+    // Uses the stocks-dedicated HTTP pipeline (see stocksHttpGet above) so
+    // the FreeRTOS worker can fetch without racing api_client's shared
+    // secureClient that runs on the main-loop scheduler.
+    const char* json = stocksHttpGet(urlBuf, result, 5000);
     if (result != API_OK) return result;
     if (!json || !json[0]) return API_NETWORK_ERROR;
 
-    // Filter: only the fields we actually render.
-    JsonDocument filter;
-    filter["chart"]["result"][0]["meta"]["symbol"]                   = true;
-    filter["chart"]["result"][0]["meta"]["shortName"]                = true;
-    filter["chart"]["result"][0]["meta"]["longName"]                 = true;
-    filter["chart"]["result"][0]["meta"]["regularMarketPrice"]       = true;
-    filter["chart"]["result"][0]["meta"]["previousClose"]            = true;
-    filter["chart"]["result"][0]["meta"]["chartPreviousClose"]       = true;
-    filter["chart"]["result"][0]["meta"]["regularMarketDayHigh"]     = true;
-    filter["chart"]["result"][0]["meta"]["regularMarketDayLow"]      = true;
-    filter["chart"]["result"][0]["indicators"]["quote"][0]["close"]  = true;
-
     JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, json,
-        DeserializationOption::Filter(filter),
-        DeserializationOption::NestingLimit(20));
+    DeserializationError err = parseYahooChartJson(json, doc, true);
     if (err) {
         Serial.printf("[Yahoo] chart JSON error (%s): %s\n", symbol, err.c_str());
         return API_PARSE_ERROR;
+    }
+
+    JsonArray closes = doc["chart"]["result"][0]["indicators"]["quote"][0]["close"];
+    if (closes.isNull() || closes.size() == 0) {
+        Serial.printf("[Yahoo] %s filtered parse missing close array, retrying full parse\n", symbol);
+        err = parseYahooChartJson(json, doc, false);
+        if (err) {
+            Serial.printf("[Yahoo] chart full JSON error (%s): %s\n", symbol, err.c_str());
+            return API_PARSE_ERROR;
+        }
+        closes = doc["chart"]["result"][0]["indicators"]["quote"][0]["close"];
     }
 
     JsonObject meta = doc["chart"]["result"][0]["meta"];
@@ -75,7 +257,9 @@ ApiResult fetchStockChart(const char* symbol, const char* range, const char* int
     quote.lastUpdate = millis();
 
     // ── Sparkline ──
-    JsonArray closes = doc["chart"]["result"][0]["indicators"]["quote"][0]["close"];
+    Serial.printf("[Yahoo] %s parse: closes null=%d size=%d overflow=%d\n",
+                  symbol, (int)closes.isNull(), (int)closes.size(),
+                  (int)doc.overflowed());
     if (closes.isNull() || closes.size() == 0) {
         Serial.printf("[Yahoo] %s: quote OK, chart empty\n", symbol);
         return quote.valid ? API_OK : API_PARSE_ERROR;

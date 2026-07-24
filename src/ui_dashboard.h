@@ -26,6 +26,17 @@ bool dashboardIsMuted();
 void dashboardSetLayout(uint8_t idx);
 uint8_t dashboardGetLayout();
 
+// Z2 slot mode — what lives below the BTC hero.
+enum Z2Mode : uint8_t {
+    Z2_USD     = 0,   // Lemon Dollar
+    Z2_MARKETS = 1,   // Polymarket prediction
+    Z2_STOCKS  = 2,   // Watchlist ticker card
+    Z2_COUNT   = 3
+};
+Z2Mode dashboardGetZ2Mode();
+void   dashboardSetZ2Mode(Z2Mode mode);
+void   dashboardCycleZ2Mode(int8_t dir);   // dir = +1 (next) or -1 (prev)
+
 // Zone geometry accessors (for overlays)
 int dashboardGetZ1H();
 int dashboardGetZ2Y();
@@ -45,6 +56,11 @@ void dashboardDrawBtcHero(const BtcPrice& btc, const SparklineData& spark, uint8
 void dashboardDrawLemonDollar(const LemonPrice& lemon, const SparklineData* lemonSpark = nullptr,
                               uint8_t dollarPeriod = 1, ChartStyle dollarChartStyle = CHART_LINE,
                               float dollarChange = NAN);
+void dashboardRedrawDollarChartOnly(const LemonPrice& lemon, const SparklineData& spark,
+                                    ChartStyle dollarChartStyle = CHART_LINE);
+
+// Compact stocks card rendered into Z2 (pulls data from ui_stocks accessors).
+void dashboardDrawStocksZ2();
 void dashboardDrawPriceOnly(const BtcPrice& btc, uint8_t selectedPair = 0);  // Partial update — price strip only
 void dashboardRedrawChartOnly(const SparklineData& spark, ChartStyle chartStyle, const OhlcData* ohlc = nullptr, float ath = NAN);  // Partial update — chart area only
 
@@ -65,6 +81,14 @@ void dashboardDrawAll(const char* timeStr,
                       uint8_t dollarPeriod = 1,
                       ChartStyle dollarChartStyle = CHART_LINE,
                       float dollarChange = NAN);
+
+// Batch control for atomic transitions (no intermediate vsync/push)
+void dashboardBeginBatch();
+void dashboardCommitBatch();
+
+// Deferred push: direct-update functions track dirty clips, single vsync on flush
+void dashboardSetDeferred(bool defer);
+void dashboardFlushDeferred();
 
 // Loading screen with progress phases
 enum LoadPhase : uint8_t {
@@ -133,15 +157,18 @@ struct PolyStats;
 void dashboardSetPredictionLayout(bool active);
 struct PredHistoryEntry;
 void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t selected,
-                             const PolyPrediction* activePred, const PolyStats& stats,
-                             bool loading, const char* statusMsg = nullptr,
-                             float refPriceUsd = NAN, uint32_t periodStepSec = 300,
-                             const PredHistoryEntry* history = nullptr,
-                             uint8_t histHead = 0, uint8_t histCount = 0);
+                              const PolyPrediction* activePred, const PolyStats& stats,
+                              bool loading, const char* statusMsg = nullptr,
+                              float refPriceUsd = NAN, uint32_t periodStepSec = 300,
+                              uint8_t activePeriodIdx = 0,
+                              const PredHistoryEntry* history = nullptr,
+                              uint8_t histHead = 0, uint8_t histCount = 0,
+                              const char* debugMsg = nullptr);
 bool dashboardIsPredictionMode();
 void dashboardSetPredictionMode(bool active);
 bool dashboardHitTestPredYes(int16_t x, int16_t y);
 bool dashboardHitTestPredNo(int16_t x, int16_t y);
+bool dashboardHitTestPredStats(int16_t x, int16_t y);
 
 // Prediction countdown epoch cache
 uint32_t dashboardGetPredEndEpoch();

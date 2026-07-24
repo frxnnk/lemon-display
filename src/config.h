@@ -8,11 +8,21 @@
 #endif
 
 // ── App version ──
-#define APP_VERSION "5.0.2"
+#define APP_VERSION "5.1.1-beta.49"
 
 // 0 = normal app
 // 1 = minimal static display diagnostic mode
 #define DISPLAY_DIAG_MODE 0
+
+// Dedicated offline player used only by the explicit V2 demo build.
+// The regular firmware always keeps this disabled.
+#ifndef LEMON_V2_DEMO_MODE
+#define LEMON_V2_DEMO_MODE 0
+#endif
+
+#ifndef LEMON_V2_REAL_MODE
+#define LEMON_V2_REAL_MODE 0
+#endif
 
 // ── API endpoints ──
 #define COINGECKO_PRICE_EP   "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true&include_1h_change=true&include_7d_change=true"
@@ -123,6 +133,7 @@ static const int DOLLAR_PERIOD_COUNT = sizeof(DOLLAR_PERIODS) / sizeof(DOLLAR_PE
 
 // ── OTA GitHub repo ──
 #define OTA_GITHUB_REPO "frxnnk/lemon-display"
+#define OTA_V2_ASSET "firmware-v2.bin"
 
 // ── BTC Pair definitions (5 trading pairs) ──
 enum PairSource : uint8_t {

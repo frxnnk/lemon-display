@@ -11,7 +11,6 @@
 #include "data/satoshi_fonts.h"
 #include "data/lemon_logo.h"
 #include "ui_dashboard.h"
-#include "ui_views.h"
 #include "ui_stocks.h"
 #include "config_server.h"
 #include "ui_components.h"
@@ -24,6 +23,9 @@
 #include "tutorial_overlay.h"
 #include "ui_settings.h"
 #include "ota_manager.h"
+#include "app_control.h"
+#include "ui_v2_demo.h"
+#include "v2_runtime.h"
 #include <esp_task_wdt.h>
 #include <cmath>
 #include <time.h>
@@ -60,12 +62,20 @@ static uint8_t dollarVisibleCount = 0;
 static PolyMarket polyMarkets[PM_MAX_MARKETS];
 static uint8_t polyMarketCount = 0;
 static uint8_t polySelectedIdx = 0;
-static PolyPrediction activePred = {};
+static PolyPrediction activePreds[BTC_PERIOD_COUNT] = {};
 static PolyStats polyStats = {};
 static bool polyDataLoaded = false;
+static bool  polyDeferredByStocks = false;
 static char polyOutcomeMsg[BTC_PERIOD_COUNT][64] = {};
+static char polyLoadStatus[64] = {};
+static char polyResolveDebug[80] = {};  // last resolve-attempt status, shown in prediction UI
 static const uint32_t POLY_EPOCH_TS_MIN = 1700000000UL;  // 2023-11-14 UTC
 static const uint32_t POLY_ACTIVE_MAX_AGE_SEC = 20UL * 3600UL;  // short-term bets should settle quickly
+static const uint32_t POLY_LOCAL_RESOLVE_GRACE_SEC = 30UL;
+
+const char* polyGetResolveDebug() {
+    return polyResolveDebug[0] ? polyResolveDebug : nullptr;
+}
 
 // ── Prediction history ring buffer ──
 static PredHistoryEntry predHistory[PRED_HISTORY_MAX];
@@ -84,8 +94,26 @@ static int predSwipeDir = 0;    // -1=swipe right, +1=swipe left, 0=none
 // ── Countdown beep state (fire once per market) ──
 static bool countdownBeepFired = false;
 
+static PolyPrediction* activePredictionFor(uint8_t periodIdx) {
+    return (periodIdx < BTC_PERIOD_COUNT) ? &activePreds[periodIdx] : nullptr;
+}
+
+static const PolyPrediction* currentActivePrediction() {
+    if (selectedPeriod >= BTC_PERIOD_COUNT) return nullptr;
+    return (activePreds[selectedPeriod].conditionId[0] != '\0') ? &activePreds[selectedPeriod] : nullptr;
+}
+
+static const PolyPrediction* firstOtherActivePrediction() {
+    for (uint8_t i = 0; i < BTC_PERIOD_COUNT; i++) {
+        if (i == selectedPeriod) continue;
+        if (activePreds[i].conditionId[0] != '\0') return &activePreds[i];
+    }
+    return nullptr;
+}
+
 static const char* currentPolyOutcomeMsg() {
-    return polyOutcomeMsg[selectedPeriod][0] ? polyOutcomeMsg[selectedPeriod] : nullptr;
+    if (polyOutcomeMsg[selectedPeriod][0]) return polyOutcomeMsg[selectedPeriod];
+    return polyLoadStatus[0] ? polyLoadStatus : nullptr;
 }
 
 static uint32_t currentPolyStepSec() {
@@ -98,11 +126,23 @@ static uint32_t currentPolyStepSec() {
     }
 }
 
+static uint32_t polyStepSecForPeriod(uint8_t periodIdx) {
+    switch (periodIdx) {
+        case 0: return 300;
+        case 1: return 900;
+        case 2: return 3600;
+        case 3: return 14400;
+        default: return 0;
+    }
+}
+
 // Helper: draw prediction UI with all current state (avoids repeating 11 args)
 static void drawPredictionUI(bool loading) {
+    const PolyPrediction* displayPred = currentActivePrediction();
+    if (!displayPred) displayPred = firstOtherActivePrediction();
     dashboardDrawPrediction(polyMarkets, polyMarketCount, polySelectedIdx,
-                            &activePred, polyStats, loading, currentPolyOutcomeMsg(),
-                            state.btc.usd, currentPolyStepSec(),
+                            displayPred, polyStats, loading, currentPolyOutcomeMsg(),
+                            state.btc.usd, currentPolyStepSec(), selectedPeriod,
                             predHistory, predHistHead, predHistCount);
 }
 
@@ -110,22 +150,24 @@ static void loadPolyStatsForSelectedPeriod() {
     nvsLoadPolyStats(selectedPeriod, polyStats);
 }
 
-// Loads active prediction from NVS; optionally clears legacy entries saved with millis()-based timestamps.
-static bool refreshActivePredictionFromNvs(bool clearLegacyTimestamp) {
-    memset(&activePred, 0, sizeof(activePred));
-    if (!nvsHasPolyPrediction()) return false;
+static bool refreshActivePredictionFromNvs(uint8_t periodIdx, bool clearLegacyTimestamp) {
+    PolyPrediction* pred = activePredictionFor(periodIdx);
+    if (!pred) return false;
 
-    nvsLoadPolyPrediction(activePred);
-    if (activePred.conditionId[0] == '\0') {
-        nvsClearPolyPrediction();
+    memset(pred, 0, sizeof(*pred));
+    if (!nvsHasPolyPrediction(periodIdx)) return false;
+
+    nvsLoadPolyPrediction(periodIdx, *pred);
+    if (pred->conditionId[0] == '\0') {
+        nvsClearPolyPrediction(periodIdx);
         return false;
     }
 
-    if (clearLegacyTimestamp && activePred.timestamp < POLY_EPOCH_TS_MIN) {
-        Serial.printf("[Poly] Clearing legacy active prediction (ts=%lu)\n",
-                      (unsigned long)activePred.timestamp);
-        nvsClearPolyPrediction();
-        memset(&activePred, 0, sizeof(activePred));
+    if (clearLegacyTimestamp && pred->timestamp < POLY_EPOCH_TS_MIN) {
+        Serial.printf("[Poly] Clearing legacy active prediction period=%u (ts=%lu)\n",
+                      (unsigned)periodIdx, (unsigned long)pred->timestamp);
+        nvsClearPolyPrediction(periodIdx);
+        memset(pred, 0, sizeof(*pred));
         return false;
     }
 
@@ -133,20 +175,20 @@ static bool refreshActivePredictionFromNvs(bool clearLegacyTimestamp) {
         time_t nowEpoch = time(nullptr);
         if (nowEpoch > (time_t)POLY_EPOCH_TS_MIN) {
             uint32_t nowTs = (uint32_t)nowEpoch;
-            if (activePred.timestamp == 0 || activePred.timestamp > nowTs) {
-                Serial.printf("[Poly] Clearing invalid active prediction ts=%lu now=%lu\n",
-                              (unsigned long)activePred.timestamp, (unsigned long)nowTs);
-                nvsClearPolyPrediction();
-                memset(&activePred, 0, sizeof(activePred));
+            if (pred->timestamp == 0 || pred->timestamp > nowTs) {
+                Serial.printf("[Poly] Clearing invalid active prediction period=%u ts=%lu now=%lu\n",
+                              (unsigned)periodIdx, (unsigned long)pred->timestamp, (unsigned long)nowTs);
+                nvsClearPolyPrediction(periodIdx);
+                memset(pred, 0, sizeof(*pred));
                 return false;
             }
 
-            uint32_t ageSec = nowTs - activePred.timestamp;
+            uint32_t ageSec = nowTs - pred->timestamp;
             if (ageSec > POLY_ACTIVE_MAX_AGE_SEC) {
-                Serial.printf("[Poly] Clearing stale active prediction age=%lus\n",
-                              (unsigned long)ageSec);
-                nvsClearPolyPrediction();
-                memset(&activePred, 0, sizeof(activePred));
+                Serial.printf("[Poly] Clearing stale active prediction period=%u age=%lus\n",
+                              (unsigned)periodIdx, (unsigned long)ageSec);
+                nvsClearPolyPrediction(periodIdx);
+                memset(pred, 0, sizeof(*pred));
                 return false;
             }
         }
@@ -155,36 +197,100 @@ static bool refreshActivePredictionFromNvs(bool clearLegacyTimestamp) {
     return true;
 }
 
+static void refreshAllActivePredictionsFromNvs(bool clearLegacyTimestamp) {
+    for (uint8_t i = 0; i < BTC_PERIOD_COUNT; i++) {
+        refreshActivePredictionFromNvs(i, clearLegacyTimestamp);
+    }
+}
+
 static bool inferYesWinner(const PolyMarket& mkt, bool& yesWon) {
-    if (mkt.yesPrice >= 0.95f || mkt.noPrice <= 0.05f) {
+    // Only trust settled markets: a closed market pays 1.0 to the winning side
+    // and 0.0 to the loser. Anything in between means Polymarket hasn't settled
+    // yet — return false so the caller retries on the next tick instead of
+    // locking in a premature winner.
+    if (mkt.yesPrice >= 0.98f && mkt.noPrice <= 0.02f) {
         yesWon = true;
         return true;
     }
-    if (mkt.noPrice >= 0.95f || mkt.yesPrice <= 0.05f) {
+    if (mkt.noPrice >= 0.98f && mkt.yesPrice <= 0.02f) {
         yesWon = false;
-        return true;
-    }
-    if (mkt.yesPrice > 0.0f || mkt.noPrice > 0.0f) {
-        yesWon = (mkt.yesPrice >= mkt.noPrice);
         return true;
     }
     return false;
 }
 
-static void resolveActivePredictionIfClosed() {
-    if (!refreshActivePredictionFromNvs(true)) return;
+static bool inferYesWinnerFromBtcClose(const PolyPrediction& pred, bool& yesWon, float& endPriceOut) {
+    endPriceOut = 0.0f;
+    if (!timeReady() || pred.endEpoch == 0 || pred.refPrice <= 0.0f) return false;
 
+    time_t nowEpoch = time(nullptr);
+    if (nowEpoch < (time_t)(pred.endEpoch + POLY_LOCAL_RESOLVE_GRACE_SEC)) return false;
+
+    ApiResult res = fetchBinanceOpenPriceAt(pred.endEpoch, endPriceOut);
+    if (res != API_OK || endPriceOut <= 0.0f) return false;
+
+    yesWon = endPriceOut > pred.refPrice;
+    return true;
+}
+
+static void resolveActivePredictionIfClosed(uint8_t periodIdx) {
+    if (!refreshActivePredictionFromNvs(periodIdx, true)) {
+        // Quiet: no active bet to resolve.
+        return;
+    }
+
+    PolyPrediction* pred = activePredictionFor(periodIdx);
+    if (!pred) return;
+
+    const char* hhmm = timeReady() ? getTimeStr(true) : "--:--";
+    bool yesWon = false;
+    float endPrice = 0.0f;
     static PolyMarket settled;  // static: ~265 bytes off the 8KB stack
     memset(&settled, 0, sizeof(settled));
-    ApiResult res = fetchPolyMarketByConditionId(activePred.conditionId, settled);
-    if (res != API_OK || !settled.closed) return;
+    ApiResult res = fetchPolyMarketByConditionId(pred->conditionId, settled);
+    if (res == API_OK) {
+        Serial.printf("[Poly] Resolve check cond=%s closed=%d yes=%.3f no=%.3f end=%s\n",
+                      pred->conditionId, settled.closed ? 1 : 0,
+                      settled.yesPrice, settled.noPrice, settled.endDate);
 
-    bool yesWon = false;
-    if (!inferYesWinner(settled, yesWon)) return;
+        bool pricesTerminal = (settled.yesPrice >= 0.98f && settled.noPrice <= 0.02f) ||
+                             (settled.noPrice  >= 0.98f && settled.yesPrice <= 0.02f);
+        if (settled.winnerKnown) {
+            yesWon = settled.yesWon;
+        } else if (pricesTerminal && inferYesWinner(settled, yesWon)) {
+        } else if (inferYesWinnerFromBtcClose(*pred, yesWon, endPrice)) {
+            snprintf(polyResolveDebug, sizeof(polyResolveDebug),
+                     "Chk %s btc=%.0f ref=%.0f", hhmm, endPrice, pred->refPrice);
+        } else {
+            if (settled.closed) {
+                Serial.printf("[Poly] Resolve waiting: closed but no winner yet (yes=%.3f no=%.3f)\n",
+                              settled.yesPrice, settled.noPrice);
+                snprintf(polyResolveDebug, sizeof(polyResolveDebug),
+                         "Chk %s closed y=%.2f n=%.2f", hhmm,
+                         settled.yesPrice, settled.noPrice);
+            } else {
+                Serial.println("[Poly] Resolve skipped: not settled yet");
+                snprintf(polyResolveDebug, sizeof(polyResolveDebug),
+                         "Chk %s c=%d y=%.2f n=%.2f", hhmm, settled.closed ? 1 : 0,
+                         settled.yesPrice, settled.noPrice);
+            }
+            return;
+        }
+    } else if (inferYesWinnerFromBtcClose(*pred, yesWon, endPrice)) {
+        snprintf(polyResolveDebug, sizeof(polyResolveDebug),
+                 "Chk %s btc=%.0f ref=%.0f", hhmm, endPrice, pred->refPrice);
+    } else {
+        Serial.printf("[Poly] Resolve fetch failed cond=%s res=%d\n",
+                      pred->conditionId, (int)res);
+        snprintf(polyResolveDebug, sizeof(polyResolveDebug),
+                 "Chk %s: fetch err %d", hhmm, (int)res);
+        return;
+    }
+    polyResolveDebug[0] = '\0';  // clear once we actually resolve
 
-    bool userWon = (activePred.chosenYes == yesWon);
-    uint8_t statsPeriod = (activePred.periodIdx < BTC_PERIOD_COUNT)
-        ? activePred.periodIdx
+    bool userWon = (pred->chosenYes == yesWon);
+    uint8_t statsPeriod = (pred->periodIdx < BTC_PERIOD_COUNT)
+        ? pred->periodIdx
         : selectedPeriod;
 
     PolyStats resolvedStats = {};
@@ -214,7 +320,8 @@ static void resolveActivePredictionIfClosed() {
     for (uint8_t i = 0; i < predHistCount; i++) {
         int idx = ((int)predHistHead - 1 - i + PRED_HISTORY_MAX) % PRED_HISTORY_MAX;
         if (predHistory[idx].result == 0 &&
-            predHistory[idx].timestamp == activePred.timestamp) {
+            predHistory[idx].periodIdx == statsPeriod &&
+            predHistory[idx].timestamp == pred->timestamp) {
             predHistory[idx].result = userWon ? 1 : 2;
             break;
         }
@@ -233,11 +340,116 @@ static void resolveActivePredictionIfClosed() {
     showToast(toastBuf);
     // Header redraw deferred — toast rendering loop in main loop will pick it up
 
-    nvsClearPolyPrediction();
-    memset(&activePred, 0, sizeof(activePred));
+    char resolvedCond[PM_COND_ID_LEN];
+    strncpy(resolvedCond, pred->conditionId, sizeof(resolvedCond) - 1);
+    resolvedCond[sizeof(resolvedCond) - 1] = '\0';
+    nvsClearPolyPrediction(statsPeriod);
+    memset(pred, 0, sizeof(*pred));
     Serial.printf("[Poly] Resolved cond=%s -> winner=%s user=%s period=%u\n",
-                  settled.conditionId, yesWon ? "YES" : "NO", userWon ? "WIN" : "LOSE",
+                  resolvedCond, yesWon ? "YES" : "NO", userWon ? "WIN" : "LOSE",
                   (unsigned)statsPeriod);
+}
+
+// Cancel the active prediction without counting it. Used when a stuck pending
+// bet blocks new bets (e.g. a market that closed with indecisive prices so
+// inferYesWinner never accepted settlement). Marks the history entry as 3
+// (cancelled) so the user can see it was discarded.
+static void cancelPendingPrediction() {
+    if (!refreshActivePredictionFromNvs(selectedPeriod, true)) {
+        showToast("Sin apuesta activa");
+        return;
+    }
+
+    PolyPrediction* pred = activePredictionFor(selectedPeriod);
+    if (!pred) {
+        showToast("Sin apuesta activa");
+        return;
+    }
+
+    for (uint8_t i = 0; i < predHistCount; i++) {
+        int idx = ((int)predHistHead - 1 - i + PRED_HISTORY_MAX) % PRED_HISTORY_MAX;
+        if (predHistory[idx].result == 0 &&
+            predHistory[idx].periodIdx == selectedPeriod &&
+            predHistory[idx].timestamp == pred->timestamp) {
+            predHistory[idx].result = 3;  // cancelled
+            break;
+        }
+    }
+    nvsSavePredHistory(predHistory, predHistHead, predHistCount);
+
+    nvsClearPolyPrediction(selectedPeriod);
+    memset(pred, 0, sizeof(*pred));
+    polyOutcomeMsg[selectedPeriod][0] = '\0';
+    showToast("Apuesta cancelada");
+    Serial.println("[Poly] Pending prediction cancelled by user");
+}
+
+// Debug helper: force-resolve the active prediction as a WIN or LOSS without
+// waiting for Polymarket to settle. Triggered by a double-tap on the stats card.
+static void debugForceResolve(bool userWon) {
+    if (!refreshActivePredictionFromNvs(selectedPeriod, true)) {
+        showToast("Sin apuesta activa");
+        return;
+    }
+
+    PolyPrediction* pred = activePredictionFor(selectedPeriod);
+    if (!pred) {
+        showToast("Sin apuesta activa");
+        return;
+    }
+
+    bool yesWon = userWon ? pred->chosenYes : !pred->chosenYes;
+    uint8_t statsPeriod = (pred->periodIdx < BTC_PERIOD_COUNT)
+        ? pred->periodIdx
+        : selectedPeriod;
+
+    PolyStats resolvedStats = {};
+    nvsLoadPolyStats(statsPeriod, resolvedStats);
+    if (userWon) {
+        resolvedStats.wins++;
+        resolvedStats.streak++;
+        if (resolvedStats.streak > resolvedStats.bestStreak) {
+            resolvedStats.bestStreak = resolvedStats.streak;
+        }
+    } else {
+        resolvedStats.losses++;
+        resolvedStats.streak = 0;
+    }
+    nvsSavePolyStats(statsPeriod, resolvedStats);
+
+    if (statsPeriod == selectedPeriod) {
+        polyStats = resolvedStats;
+    }
+
+    snprintf(polyOutcomeMsg[statsPeriod], sizeof(polyOutcomeMsg[statsPeriod]),
+             "%s (%s gano) [SIM]",
+             userWon ? "Ganaste!" : "Perdiste",
+             yesWon ? "SUBE" : "BAJA");
+
+    for (uint8_t i = 0; i < predHistCount; i++) {
+        int idx = ((int)predHistHead - 1 - i + PRED_HISTORY_MAX) % PRED_HISTORY_MAX;
+        if (predHistory[idx].result == 0 &&
+            predHistory[idx].periodIdx == statsPeriod &&
+            predHistory[idx].timestamp == pred->timestamp) {
+            predHistory[idx].result = userWon ? 1 : 2;
+            break;
+        }
+    }
+    nvsSavePredHistory(predHistory, predHistHead, predHistCount);
+
+    if (audioIsEnabled()) {
+        userWon ? playAlertUp() : playAlertDown();
+    }
+
+    char toastBuf[48];
+    snprintf(toastBuf, sizeof(toastBuf), "[SIM] %s",
+             userWon ? "Ganaste" : "Perdiste");
+    showToast(toastBuf);
+
+    nvsClearPolyPrediction(statsPeriod);
+    memset(pred, 0, sizeof(*pred));
+    Serial.printf("[Poly] SIM resolved user=%s period=%u\n",
+                  userWon ? "WIN" : "LOSE", (unsigned)statsPeriod);
 }
 
 // ── Animators ──
@@ -296,6 +508,10 @@ static void startProvisioning();
 static void exitPredictionMode();
 static void switchPair(uint8_t newPair);
 static void refreshPredictionForCurrentPeriod(bool showLoading);
+static void redrawDashboard();
+static void cycleZ2Mode(int8_t dir);
+static void applyZ2Mode(Z2Mode target);
+static void requestStocksBurst();
 
 // ── Carousel item height for velocity conversion ──
 #define CAROUSEL_ITEM_H_PX 34
@@ -383,6 +599,77 @@ static SparklineData& getDollarMorphedSparkline() {
 // ── Helper: redraw hero with current state (uses morph if active) ──
 static bool isProModeEnabled() {
     return nvsGetProMode();
+}
+
+static void stabilizeLiveSparklineRange(SparklineData& next, const SparklineData& prev) {
+    if (!next.valid || next.count < 2 || !prev.valid || prev.count < 2) return;
+    if (!isfinite(next.minVal) || !isfinite(next.maxVal) ||
+        !isfinite(prev.minVal) || !isfinite(prev.maxVal)) return;
+    if (next.maxVal <= next.minVal || prev.maxVal <= prev.minVal) return;
+
+    float rawMin = next.minVal;
+    float rawMax = next.maxVal;
+    float pad = (rawMax - rawMin) * 0.08f;
+    if (pad < 0.5f) pad = 0.5f;
+
+    float targetMin = rawMin - pad;
+    float targetMax = rawMax + pad;
+
+    if (rawMin >= prev.minVal && rawMax <= prev.maxVal) {
+        const float shrink = 0.08f;
+        next.minVal = prev.minVal + (targetMin - prev.minVal) * shrink;
+        next.maxVal = prev.maxVal + (targetMax - prev.maxVal) * shrink;
+        if (next.minVal > rawMin) next.minVal = rawMin;
+        if (next.maxVal < rawMax) next.maxVal = rawMax;
+    } else {
+        next.minVal = fminf(prev.minVal, targetMin);
+        next.maxVal = fmaxf(prev.maxVal, targetMax);
+    }
+
+    if (next.maxVal - next.minVal < 0.01f) {
+        next.minVal = rawMin;
+        next.maxVal = rawMax;
+    }
+}
+
+static void requestStocksBurst() {
+    apiStop();
+    delay(100);
+    stocksRequestBurst();
+}
+
+static bool pairSupportsCandles(const PairDef& pair) {
+    return pair.restSymbol &&
+           (pair.source == PAIR_BINANCE_DIRECT || pair.source == PAIR_BINANCE_INVERT);
+}
+
+static bool currentSelectionSupportsCandles() {
+    if (selectedPeriod >= BTC_PERIOD_COUNT || selectedPair >= BTC_PAIR_COUNT) return false;
+
+    const PeriodDef& pd = BTC_PERIODS[selectedPeriod];
+    const PairDef& pair = BTC_PAIRS[selectedPair];
+    return pd.canOhlc && pd.klineInterval && pairSupportsCandles(pair);
+}
+
+static int findNearestVisibleCandlePeriod() {
+    if (selectedPair >= BTC_PAIR_COUNT || !pairSupportsCandles(BTC_PAIRS[selectedPair])) return -1;
+
+    int bestPeriod = -1;
+    int bestDist = 999;
+    for (uint8_t i = 0; i < btcVisibleCount; i++) {
+        uint8_t periodIdx = btcVisiblePeriods[i];
+        if (periodIdx >= BTC_PERIOD_COUNT) continue;
+
+        const PeriodDef& pd = BTC_PERIODS[periodIdx];
+        if (!pd.canOhlc || !pd.klineInterval) continue;
+
+        int dist = abs((int)periodIdx - (int)selectedPeriod);
+        if (dist < bestDist || (dist == bestDist && periodIdx > selectedPeriod)) {
+            bestPeriod = periodIdx;
+            bestDist = dist;
+        }
+    }
+    return bestPeriod;
 }
 
 // Periods with Polymarket up/down markets (only 5m and 15m exist)
@@ -489,7 +776,7 @@ static void applyModePolicyNow(bool forceSparkRefresh = false) {
     if (clampedBtc != selectedPeriod) {
         selectedPeriod = clampedBtc;
         state.ohlc.valid = false;
-        if (chartStyle == CHART_CANDLE && !BTC_PERIODS[selectedPeriod].canOhlc) {
+        if (chartStyle == CHART_CANDLE && !currentSelectionSupportsCandles()) {
             chartStyle = CHART_LINE;
         }
         if (forceSparkRefresh) {
@@ -558,6 +845,7 @@ static void updateClock() {
 
 static void updateBtc() {
     if (!state.online) return;
+    if (stocksIsFetching()) return;
     // CoinGecko: fetch % changes only (price comes from WebSocket)
     BtcPrice tmp = {};
     ApiResult res = fetchBtcPrice(tmp);
@@ -588,6 +876,7 @@ static void updateBtc() {
 
 static void updateSparkline() {
     if (!state.online) return;
+    if (stocksIsFetching()) return;
     esp_task_wdt_reset();
 
     // Save current sparkline for morph animation (static to avoid stack overflow)
@@ -620,8 +909,8 @@ static void updateSparkline() {
                                            pd.klineInterval, pd.limit, pair.inverted) == API_OK);
         }
 
-        // Fetch OHLC data if in candle mode and period supports it
-        if (ok && chartStyle == CHART_CANDLE && pd.canOhlc && pd.klineInterval && pair.restSymbol) {
+        // Fetch OHLC data if in candle mode and the pair/period supports it
+        if (ok && chartStyle == CHART_CANDLE && currentSelectionSupportsCandles()) {
             fetchBinanceOhlcSymbol(state.ohlc, pair.restSymbol,
                                    pd.klineInterval, pd.limit, pair.inverted);
         }
@@ -715,6 +1004,7 @@ static void updateSparkline() {
 
 static void updateLemon() {
     if (!state.online) return;
+    if (stocksIsFetching()) return;
     if (fetchLemonPrice(state.lemon) == API_OK) {
         lemonBidAnim.set(state.lemon.bid);
         lemonAskAnim.set(state.lemon.ask);
@@ -735,6 +1025,7 @@ static void updateLemon() {
 
 static void updateDollarSparkline() {
     if (!state.online || dashboardGetZ2H() <= 0) return;
+    if (stocksIsFetching()) return;
     esp_task_wdt_reset();
 
     // Save old sparkline for morph (and as fallback if fetch fails)
@@ -778,6 +1069,7 @@ static void updateDollarSparkline() {
 // ── Cross-rate update (for DERIVED and GECKO_ONLY pairs) ──
 static void updateCrossRate() {
     if (!state.online) return;
+    if (stocksIsFetching()) return;
     if (selectedPair == 0) return;  // USD pair doesn't need crossRate
 
     const PairDef& pair = BTC_PAIRS[selectedPair];
@@ -802,7 +1094,31 @@ static void updateCrossRate() {
 
 // ── Polymarket update callback ──
 static void updatePolymarket() {
-    if (!state.online || !dashboardIsPredictionMode()) return;
+    if (!state.online) return;
+    if (stocksIsFetching()) {
+        polyDeferredByStocks = true;
+        strncpy(polyLoadStatus, "Esperando Acciones...", sizeof(polyLoadStatus) - 1);
+        polyLoadStatus[sizeof(polyLoadStatus) - 1] = '\0';
+        if (dashboardIsPredictionMode()) {
+            drawPredictionUI(true);
+            z2DrawnThisFrame = true;
+            z2Dirty = false;
+            frameDirty = true;
+        }
+        Serial.println("[Poly] Deferred while Stocks fetch is active");
+        return;
+    }
+    polyDeferredByStocks = false;
+
+    // Resolve any pending prediction first — runs regardless of current screen so
+    // wins/losses register as soon as the underlying Polymarket settles.
+    esp_task_wdt_reset();
+    for (uint8_t i = 0; i < (uint8_t)(sizeof(POLY_PERIODS) / sizeof(POLY_PERIODS[0])); i++) {
+        resolveActivePredictionIfClosed(POLY_PERIODS[i]);
+        esp_task_wdt_reset();
+    }
+
+    if (!dashboardIsPredictionMode()) return;
 
     uint8_t cnt = 0;
     Serial.printf("[Poly] Fetch for period idx=%d (%s)\n",
@@ -810,11 +1126,8 @@ static void updatePolymarket() {
     esp_task_wdt_reset();
     ApiResult res = fetchPolyMarkets(polyMarkets, cnt, PM_MAX_MARKETS, selectedPeriod);
 
-    // Resolve against Polymarket by conditionId, independent from currently shown market/timeframe.
-    esp_task_wdt_reset();
-    resolveActivePredictionIfClosed();
-
     if (res == API_OK && cnt > 0) {
+        polyLoadStatus[0] = '\0';
         polyMarketCount = cnt;
         if (polySelectedIdx >= polyMarketCount) polySelectedIdx = 0;
         polyDataLoaded = true;
@@ -844,6 +1157,7 @@ static void updatePolymarket() {
         }
     }
     else {
+        snprintf(polyLoadStatus, sizeof(polyLoadStatus), "Error %d - reintentando", (int)res);
         polyMarketCount = 0;
         polySelectedIdx = 0;
         polyDataLoaded = false;
@@ -896,15 +1210,16 @@ static void enterPredictionMode() {
     // Resize zones: Z1 shrinks, Z2 expands
     dashboardSetPredictionLayout(true);
 
-    // Load stats, prediction history, and active prediction from NVS
     loadPolyStatsForSelectedPeriod();
     nvsLoadPredHistory(predHistory, predHistHead, predHistCount);
-    refreshActivePredictionFromNvs(true);
+    refreshAllActivePredictionsFromNvs(true);
     countdownBeepFired = false;
 
-    // Redraw Z1 (shrunken BTC hero) + Z2 (prediction loading)
+    dashboardBeginBatch();
     redrawHero();
     drawPredictionUI(true);
+    dashboardCommitBatch();
+
     z2DrawnThisFrame = true;
     z2Dirty = false;
     frameDirty = true;
@@ -918,22 +1233,69 @@ static void enterPredictionMode() {
 
 static void exitPredictionMode() {
     dashboardSetPredictionMode(false);
-    scheduler.enable(taskPolymarket, false);
-    scheduler.setInterval(taskPolymarket, POLYMARKET_REFRESH_MS);  // Restore default interval
+    scheduler.setInterval(taskPolymarket, POLYMARKET_REFRESH_MS);
 
-    // Restore pair selector and full period list
     dashboardSetPairSelectorEnabled(isProModeEnabled());
     syncDashboardFilters();
 
-    // Restore layout
     dashboardSetPredictionLayout(false);
 
-    // Mark both zones dirty for redraw
-    z1Dirty = true;
-    z2Dirty = true;
-    frameDirty = true;
+    redrawDashboard();
 
     Serial.println("[Poly] Prediction mode exited");
+}
+
+// ── Z2 mode cycling (USD ↔ Markets ↔ Stocks) ──
+// Driven by vertical swipes on Z2. Handles the side-effects of entering /
+// leaving Markets (prediction mode has a different layout and activates
+// its own scheduler task).
+static void applyZ2Mode(Z2Mode target) {
+    bool wasPrediction = dashboardIsPredictionMode();
+    Z2Mode prev = dashboardGetZ2Mode();
+    if (target == prev && wasPrediction == (target == Z2_MARKETS)) return;
+
+    // If we're leaving MARKETS, tear down prediction mode first.
+    if (wasPrediction && target != Z2_MARKETS) {
+        exitPredictionMode();
+    }
+
+    // Stocks scheduler task follows the slot mode — only runs while the
+    // user is actually viewing stocks. Saves Yahoo quota and keeps the
+    // main-loop HTTPS burst off first-boot when default mode is USD.
+    bool stocksOn = (target == Z2_STOCKS);
+    stocksSetActive(stocksOn);
+    scheduler.enable(taskStocks, stocksOn);
+    // Burst-refresh every watchlist symbol on mode entry so charts fill in
+    // ~N×1-3s instead of N×60s of round-robin. Scheduler's 60s poll kicks
+    // in normally after the burst finishes.
+    if (stocksOn) requestStocksBurst();
+
+    if (target == Z2_MARKETS) {
+        // Prediction mode has guards (Pro-mode, z2H>0). If they fail, it
+        // shows a toast and returns — we stay on the previous mode.
+        if (!isProModeEnabled() || dashboardGetZ2H() <= 0) {
+            enterPredictionMode();     // shows toast, returns without flipping
+            return;                     // keep previous Z2 mode
+        }
+        dashboardSetZ2Mode(Z2_MARKETS);
+        enterPredictionMode();
+        return;
+    }
+
+    dashboardSetZ2Mode(target);
+    redrawDashboard();
+}
+
+void appApplyZ2Mode(Z2Mode mode) {
+    applyZ2Mode(mode);
+}
+
+static void cycleZ2Mode(int8_t dir) {
+    Z2Mode cur = dashboardGetZ2Mode();
+    int8_t n = (int8_t)cur + dir;
+    while (n < 0) n += (int8_t)Z2_COUNT;
+    n %= (int8_t)Z2_COUNT;
+    applyZ2Mode((Z2Mode)n);
 }
 
 // ── Place prediction ──
@@ -941,38 +1303,59 @@ static void placePrediction(bool chooseYes) {
     if (!polyDataLoaded || polyMarketCount == 0) return;
 
     const PolyMarket& mkt = polyMarkets[polySelectedIdx];
-
-    // Allow replacing an active prediction when switching markets/timeframes.
-    if (refreshActivePredictionFromNvs(true)) {
-        if (strcmp(activePred.conditionId, mkt.conditionId) == 0) return;
-        nvsClearPolyPrediction();
-        memset(&activePred, 0, sizeof(activePred));
+    if (mkt.closed || mkt.winnerKnown) {
+        showToast("Mercado cerrado");
+        return;
+    }
+    if (!mkt.refPriceValid || mkt.refPrice <= 0.0f) {
+        showToast("Espera el umbral");
+        return;
+    }
+    uint32_t endEpoch = isoToEpoch(mkt.endDate);
+    if (endEpoch == 0) {
+        showToast("Fin invalido");
+        return;
     }
 
-    memset(&activePred, 0, sizeof(activePred));
-    strncpy(activePred.conditionId, mkt.conditionId, PM_COND_ID_LEN - 1);
-    activePred.chosenYes = chooseYes;
-    activePred.probAtBet = chooseYes ? mkt.yesPrice : mkt.noPrice;
-    activePred.periodIdx = selectedPeriod;
+    // Refuse to overwrite a pending bet — previously the old prediction was
+    // silently cleared from NVS, losing the W/L entirely.
+    if (refreshActivePredictionFromNvs(selectedPeriod, true)) {
+        PolyPrediction* pred = activePredictionFor(selectedPeriod);
+        if (pred && strcmp(pred->conditionId, mkt.conditionId) == 0) {
+            showToast("Ya apostaste en este mercado");
+            return;
+        }
+        showToast("Ya tenes apuesta activa en este timeframe");
+        return;
+    }
+
     time_t nowEpoch = time(nullptr);
-    if (nowEpoch > (time_t)POLY_EPOCH_TS_MIN) {
-        activePred.timestamp = (uint32_t)nowEpoch;
-    } else {
-        // Fallback when epoch is not available; kept for compatibility.
-        activePred.timestamp = (uint32_t)(millis() / 1000);
+    if (!timeReady() || nowEpoch <= (time_t)POLY_EPOCH_TS_MIN) {
+        showToast("Espera la hora");
+        return;
     }
-    activePred.resolved = 0;
+
+    PolyPrediction* pred = activePredictionFor(selectedPeriod);
+    if (!pred) return;
+    memset(pred, 0, sizeof(*pred));
+    strncpy(pred->conditionId, mkt.conditionId, PM_COND_ID_LEN - 1);
+    pred->chosenYes = chooseYes;
+    pred->probAtBet = chooseYes ? mkt.yesPrice : mkt.noPrice;
+    pred->refPrice = mkt.refPrice;
+    pred->endEpoch = endEpoch;
+    pred->periodIdx = selectedPeriod;
+    pred->timestamp = (uint32_t)nowEpoch;
+    pred->resolved = 0;
 
     polyOutcomeMsg[selectedPeriod][0] = '\0';
-    nvsSavePolyPrediction(activePred);
-    polyStats.pending = 1;
+    nvsSavePolyPrediction(selectedPeriod, *pred);
 
     // Push to prediction history
     PredHistoryEntry histEntry = {};
-    histEntry.timestamp = activePred.timestamp;
-    histEntry.periodIdx = activePred.periodIdx;
-    histEntry.chosenYes = activePred.chosenYes;
-    histEntry.probAtBet = activePred.probAtBet;
+    histEntry.timestamp = pred->timestamp;
+    histEntry.periodIdx = pred->periodIdx;
+    histEntry.chosenYes = pred->chosenYes;
+    histEntry.probAtBet = pred->probAtBet;
     histEntry.result = 0;  // pending
     predHistPush(histEntry);
     nvsSavePredHistory(predHistory, predHistHead, predHistCount);
@@ -990,7 +1373,7 @@ static void placePrediction(bool chooseYes) {
     frameDirty = true;
 
     Serial.printf("[Poly] Prediction placed: %s @ %.0f%%\n",
-                  chooseYes ? "YES" : "NO", activePred.probAtBet * 100);
+                  chooseYes ? "YES" : "NO", pred->probAtBet * 100);
 }
 
 // ── Refresh prediction market when BTC timeframe changes ──
@@ -1036,8 +1419,7 @@ static void switchPair(uint8_t newPair) {
     morphActive = false;
     chartZoom = { 1.0f, 1.0f, false };
 
-    // GECKO_ONLY pairs don't support candlestick — force line chart
-    if (pair.source == PAIR_GECKO_ONLY && chartStyle == CHART_CANDLE) {
+    if (chartStyle == CHART_CANDLE && (!pairSupportsCandles(pair) || !currentSelectionSupportsCandles())) {
         chartStyle = CHART_LINE;
     }
 
@@ -1211,10 +1593,9 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
                 state.ohlc.valid = false;
                 periodChanges[selectedPeriod] = NAN;
 
-                // Auto-fallback from candle to line for WS-only periods
-                if (chartStyle == CHART_CANDLE && !BTC_PERIODS[selectedPeriod].canOhlc) {
+                if (chartStyle == CHART_CANDLE && !currentSelectionSupportsCandles()) {
                     chartStyle = CHART_LINE;
-                    showToast("OHLC no disponible");
+                    showToast("Velas no disponible");
                     const char* t = timeReady() ? getTimeStr(nvsGet24hFormat()) : "--:--:--";
                     dashboardDrawHeader(t, !state.online, wsBinanceConnected());
                 }
@@ -1232,10 +1613,25 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
         // Tap outside both carousels: cycle chart style
         if (evt.gesture == TOUCH_TAP) {
             int newStyle = ((int)chartStyle + 1) % CHART_STYLE_COUNT;
+            bool candlePeriodChanged = false;
 
-            // Skip CHART_CANDLE for periods without OHLC support
-            if ((ChartStyle)newStyle == CHART_CANDLE && !BTC_PERIODS[selectedPeriod].canOhlc) {
-                newStyle = (newStyle + 1) % CHART_STYLE_COUNT;
+            if ((ChartStyle)newStyle == CHART_CANDLE && !currentSelectionSupportsCandles()) {
+                int candlePeriod = findNearestVisibleCandlePeriod();
+                if (candlePeriod >= 0) {
+                    if ((uint8_t)candlePeriod != selectedPeriod) {
+                        selectedPeriod = (uint8_t)candlePeriod;
+                        state.ohlc.valid = false;
+                        periodChanges[selectedPeriod] = NAN;
+                        syncDashboardFilters();
+                        candlePeriodChanged = true;
+                        Serial.printf("[Touch] Period: %s\n", BTC_PERIODS[selectedPeriod].label);
+                    }
+                } else {
+                    newStyle = (newStyle + 1) % CHART_STYLE_COUNT;
+                    showToast("Velas no disponible");
+                    const char* t = timeReady() ? getTimeStr(nvsGet24hFormat()) : "--:--:--";
+                    dashboardDrawHeader(t, !state.online, wsBinanceConnected());
+                }
             }
 
             chartStyle = (ChartStyle)newStyle;
@@ -1243,6 +1639,9 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
 
             if (chartStyle == CHART_CANDLE && !state.ohlc.valid) {
                 scheduler.forceRun(taskSparkline);
+                if (candlePeriodChanged) {
+                    refreshPredictionForCurrentPeriod(true);
+                }
             }
 
             redrawHero();
@@ -1261,24 +1660,35 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
         return;
     }
 
-    // ── Z2: Dollar / Prediction mode ──
+    // ── Z2: Dollar / Markets / Stocks ──
     if (zoneId == 2) {
+        // Vertical gestures on Z2 cycle between the three Z2 modes
+        // (USD / Markets / Stocks). Slower swipes come through as
+        // TOUCH_SWIPE_UP/DOWN; flicks are reclassified by the touch
+        // manager as TOUCH_FLING_UP/DOWN — handle both.
+        if (evt.gesture == TOUCH_SWIPE_UP || evt.gesture == TOUCH_FLING_UP) {
+            cycleZ2Mode(+1);
+            return;
+        }
+        if (evt.gesture == TOUCH_SWIPE_DOWN || evt.gesture == TOUCH_FLING_DOWN) {
+            cycleZ2Mode(-1);
+            return;
+        }
+
+        // ── Stocks mode: tap or horizontal swipe advances focused ticker ──
+        if (!dashboardIsPredictionMode() && dashboardGetZ2Mode() == Z2_STOCKS) {
+            if (evt.gesture == TOUCH_TAP ||
+                evt.gesture == TOUCH_SWIPE_LEFT ||
+                evt.gesture == TOUCH_SWIPE_RIGHT) {
+                stocksAdvanceFocused();
+                dashboardDrawStocksZ2();
+                frameDirty = true;
+            }
+            return;
+        }
+
         // ── Prediction mode: handle all Z2 touches differently ──
         if (dashboardIsPredictionMode()) {
-            if (evt.gesture == TOUCH_DOUBLE_TAP) {
-                if (refreshActivePredictionFromNvs(false)) {
-                    nvsClearPolyPrediction();
-                    memset(&activePred, 0, sizeof(activePred));
-                    showToast("Prediccion borrada");
-                    const char* t = timeReady() ? getTimeStr(nvsGet24hFormat()) : "--:--:--";
-                    dashboardDrawHeader(t, !state.online, wsBinanceConnected());
-                    drawPredictionUI(false);
-                    z2DrawnThisFrame = true;
-                    z2Dirty = false;
-                    frameDirty = true;
-                }
-                return;
-            }
             if (evt.gesture == TOUCH_TAP) {
                 if (dashboardHitTestPredYes(evt.x, evt.y)) {
                     placePrediction(true);
@@ -1314,7 +1724,17 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
                 frameDirty = true;
                 return;
             }
-            // Long press: exit prediction mode
+            // Long press on stats card: cancel a stuck pending bet without counting
+            if (evt.gesture == TOUCH_LONG_PRESS &&
+                dashboardHitTestPredStats(evt.x, evt.y)) {
+                cancelPendingPrediction();
+                drawPredictionUI(false);
+                z2DrawnThisFrame = true;
+                z2Dirty = false;
+                frameDirty = true;
+                return;
+            }
+            // Long press elsewhere: exit prediction mode
             if (evt.gesture == TOUCH_LONG_PRESS) {
                 exitPredictionMode();
                 return;
@@ -1323,6 +1743,8 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
         }
 
         // ── Normal dollar mode ──
+        // Vertical swipes were handled above (Z2 mode cycle). Horizontal
+        // swipes and the carousel tap still move through dollar periods.
         int8_t dir = 0;
 
         if (evt.gesture == TOUCH_TAP) {
@@ -1330,10 +1752,6 @@ static void onDashboardTouch(const TouchEvent& evt, uint8_t zoneId) {
         } else if (evt.gesture == TOUCH_SWIPE_LEFT) {
             dir = +1;
         } else if (evt.gesture == TOUCH_SWIPE_RIGHT) {
-            dir = -1;
-        } else if (evt.gesture == TOUCH_SWIPE_UP) {
-            dir = +1;
-        } else if (evt.gesture == TOUCH_SWIPE_DOWN) {
             dir = -1;
         }
 
@@ -1406,7 +1824,6 @@ static void redrawDashboard() {
                      state.lemon, !state.online, wsBinanceConnected(),
                      periodChanges, chartStyle, &state.ohlc, &state.lemonSpark,
                      dollarPeriod, dollarChartStyle, dollarChangePercent);
-    if (!tutorialIsActive()) viewsDrawDotsOverlay();
     frameDirty = true;
 }
 
@@ -1545,7 +1962,6 @@ static void enterDashboard() {
     lastRenderedPrice = state.btc.usd;
 
     dashboardDrawLoading(LOAD_DONE);
-    delay(300);
 
     applyModePolicyNow(false);
     const char* timeStr = getTimeStr(nvsGet24hFormat());
@@ -1562,6 +1978,15 @@ static void enterDashboard() {
 
     appSetScreen(SCREEN_DASHBOARD);
     tutorialInit();  // Show tutorial on first boot (checks NVS)
+
+    // If the user booted directly into Stocks mode (persisted from last
+    // session), kick the burst refresh now that WiFi is up. Otherwise the
+    // cached NVS sparks render immediately and the scheduler tick would
+    // only refresh the first symbol 60s later.
+    if (dashboardGetZ2Mode() == Z2_STOCKS) {
+        stocksSetActive(true);
+        requestStocksBurst();
+    }
 }
 
 void setup() {
@@ -1578,6 +2003,33 @@ void setup() {
     return;
 #endif
 
+#if LEMON_V2_DEMO_MODE
+    Serial.begin(115200);
+    Serial.println("\n=== Lemon Box V2 offline demo ===");
+    displaySetup();
+    displaySetupVSync();
+    touchSetup();
+    v2DemoSetup();
+    return;
+#endif
+
+#if LEMON_V2_REAL_MODE
+    Serial.begin(115200);
+    Serial.println("\n=== Lemon Box V2 real canary ===");
+    nvsInit();
+    Colors::setTheme(Colors::THEME_DARK);
+    displaySetup();
+    displaySetupVSync();
+    displaySetBrightness(nvsGetBrightness());
+    audioSetup();
+    audioSetEnabled(nvsGetSoundEnabled());
+    touchSetup();
+    v2RuntimeSetup();
+    esp_task_wdt_init(45, true);
+    esp_task_wdt_add(NULL);
+    return;
+#endif
+
     Serial.begin(115200);
     Serial.println("\n=== Lemon Interface v4.0 (MaTouch 480x480) ===");
 
@@ -1585,6 +2037,7 @@ void setup() {
     for (int i = 0; i < BTC_PERIOD_COUNT; i++) periodChanges[i] = NAN;
 
     nvsInit();
+    Colors::setTheme(nvsGetTheme() == 1 ? Colors::THEME_LIGHT : Colors::THEME_DARK);
 
     displaySetup();
     displaySetupVSync();
@@ -1602,7 +2055,6 @@ void setup() {
 
     dashboardSetTouchCallback(onDashboardTouch);
     appSetDashboardRedrawCB(redrawDashboard);
-    viewsRegisterRedraw(VIEW_STOCKS, stocksDrawAll);
     stocksInit();
 
     taskClock     = scheduler.add("clock",     UPDATE_CLOCK_MS,      updateClock);
@@ -1612,8 +2064,17 @@ void setup() {
     taskDollarSpark = scheduler.add("dolarSpark", UPDATE_SPARKLINE_MS, updateDollarSparkline);
     taskCrossRate   = scheduler.add("crossRate", 60000, updateCrossRate);  // 60s for XAU/ARS rates
     taskPolymarket  = scheduler.add("polymarket", POLYMARKET_REFRESH_MS, updatePolymarket);
-    scheduler.enable(taskPolymarket, false);  // Disabled by default, enabled in prediction mode
+    // Task stays enabled at the default interval so pending predictions resolve
+    // in the background; the callback gates the market fetch on prediction mode.
     taskStocks      = scheduler.add("stocks",    UPDATE_STOCKS_MS,     stocksFetchTask);
+    // Stocks stays idle until the user swaps into Stocks mode — otherwise the
+    // first-boot burst of HTTPS fetches blocks the main loop and the UI feels
+    // trabada. applyZ2Mode enables/disables as the user cycles.
+    {
+        bool stocksOn = dashboardGetZ2Mode() == Z2_STOCKS;
+        stocksSetActive(stocksOn);
+        scheduler.enable(taskStocks, stocksOn);
+    }
 
     applyModePolicyNow(false);
 
@@ -1636,6 +2097,21 @@ void setup() {
 void loop() {
 #if DISPLAY_DIAG_MODE
     delay(20);
+    return;
+#endif
+
+#if LEMON_V2_DEMO_MODE
+    v2DemoTick(millis());
+    TouchEvent demoTouch = touchLoop();
+    v2DemoHandleTouch(demoTouch);
+    delay(4);
+    return;
+#endif
+
+#if LEMON_V2_REAL_MODE
+    esp_task_wdt_reset();
+    v2RuntimeLoop();
+    delay(4);
     return;
 #endif
 
@@ -1725,6 +2201,7 @@ void loop() {
     if (screen == SCREEN_DASHBOARD) {
         wifiLoop();
         state.online = wifiConnected();
+        dashboardSetDeferred(true);
 
         if (!state.online && !state.wasOffline) {
             wsBinanceStop();
@@ -1738,11 +2215,31 @@ void loop() {
             state.wasOffline = false;
             timeSetup();
             wsBinanceSetup();
+            if (dashboardGetZ2Mode() == Z2_STOCKS) {
+                stocksSetActive(true);
+                scheduler.enable(taskStocks, true);
+                requestStocksBurst();
+            }
             showToast("WiFi reconectado");
             if (!tutorialIsActive()) {
                 dashboardDrawHeader(getTimeStr(nvsGet24hFormat()), false, wsBinanceConnected());
             }
             frameDirty = true;
+        }
+
+        if (state.online && settingsConsumeServiceRecovery()) {
+            const PairDef& pair = BTC_PAIRS[selectedPair];
+            if (pair.source == PAIR_BINANCE_DIRECT || pair.source == PAIR_BINANCE_INVERT) {
+                wsBinanceReconnect(pair.wsPath, pair.inverted);
+            } else {
+                wsBinanceReconnect(BTC_PAIRS[0].wsPath, false);
+            }
+            if (dashboardGetZ2Mode() == Z2_STOCKS) {
+                stocksInit();
+                stocksSetActive(true);
+                scheduler.enable(taskStocks, true);
+                requestStocksBurst();
+            }
         }
 
         // WebSocket loop — must run every iteration
@@ -1791,6 +2288,8 @@ void loop() {
                     static SparklineData tmp;  // static: 1,476 bytes off the 8KB stack
                     wsBinanceGetSparkline(tmp);
                     if (tmp.valid) {
+                        static uint8_t lastLiveSparkPeriod = 255;
+                        static uint8_t lastLiveSparkPair = 255;
                         int trimTo = BTC_PERIODS[selectedPeriod].limit;
                         if (tmp.count > trimTo) {
                             int offset = tmp.count - trimTo;
@@ -1803,6 +2302,11 @@ void loop() {
                             }
                             tmp.count = trimTo;
                         }
+                        if (lastLiveSparkPeriod == selectedPeriod && lastLiveSparkPair == selectedPair) {
+                            stabilizeLiveSparklineRange(tmp, state.spark);
+                        }
+                        lastLiveSparkPeriod = selectedPeriod;
+                        lastLiveSparkPair = selectedPair;
                         state.spark = tmp;
                         wsVisualDirty = true;
                     }
@@ -1829,6 +2333,31 @@ void loop() {
         }
 
         scheduler.tick();
+
+        // ── Stocks async worker → UI repaint ──
+        // The worker runs on core 0 and mutates s_quotes / s_sparks after
+        // a Yahoo fetch; it can't touch the TFT itself, so we poll
+        // stocksConsumeDirty() here and redraw Z2 from the main loop.
+        if (stocksConsumeDirty() &&
+            appGetScreen() == SCREEN_DASHBOARD &&
+            !dashboardIsPredictionMode() &&
+            dashboardGetZ2Mode() == Z2_STOCKS &&
+            dashboardGetZ2H() > 0) {
+            dashboardDrawStocksZ2();
+            frameDirty = true;
+        }
+
+        if (polyDeferredByStocks && !stocksIsFetching()) {
+            polyDeferredByStocks = false;
+            scheduler.requestRun(taskPolymarket);
+            if (dashboardIsPredictionMode()) {
+                drawPredictionUI(true);
+                z2DrawnThisFrame = true;
+                z2Dirty = false;
+                frameDirty = true;
+            }
+            Serial.println("[Poly] Deferred fetch resumed after Stocks idle");
+        }
 
         // ── Prediction countdown tick (1Hz Z2 refresh + adaptive polling + beep) ──
         if (dashboardIsPredictionMode() && polyDataLoaded && !tutorialIsActive()) {
@@ -1862,15 +2391,22 @@ void loop() {
         }
 
         // Drive morph animation (~30fps during 800ms transition)
-        // Full redraw every frame to avoid ghost artifacts from partial updates.
+        // Chart-only push for intermediate frames (~40% less data than full Z1).
+        // Morph needs immediate push (not deferred) for smooth 30fps animation.
         {
             static bool wasMorphing = false;
             if (morphActive && chartStyle != CHART_CANDLE && !tutorialIsActive()) {
                 static unsigned long lastMorphFrame = 0;
                 unsigned long now = millis();
-                if (now - lastMorphFrame >= 33) {  // 30fps
+                if (now - lastMorphFrame >= 33) {
                     lastMorphFrame = now;
-                    redrawHero();  // full sprite rebuild (uses morphed data internally)
+                    dashboardFlushDeferred();
+                    dashboardSetDeferred(false);
+                    SparklineData& morphed = getMorphedSparkline();
+                    dashboardRedrawChartOnly(morphed, chartStyle, &state.ohlc, state.btc.ath);
+                    dashboardSetDeferred(true);
+                    z1DrawnThisFrame = true;
+                    z1Dirty = false;
                     frameDirty = true;
                     if (!morphActive) {
                         z1Dirty = true;
@@ -1888,7 +2424,7 @@ void loop() {
             if (now - lastDollarMorphFrame >= 33) {
                 lastDollarMorphFrame = now;
                 SparklineData& morphed = getDollarMorphedSparkline();
-                dashboardDrawLemonDollar(state.lemon, &morphed, dollarPeriod, dollarChartStyle, dollarChangePercent);
+                dashboardRedrawDollarChartOnly(state.lemon, morphed, dollarChartStyle);
                 z2DrawnThisFrame = true;
                 z2Dirty = false;
                 // Final frame: redraw with real data to show % change
@@ -1995,14 +2531,12 @@ void loop() {
     }
 
     // ── Frame pacing ──
-    // Double buffering disabled (was causing bounce/repeat artifacts).
-    // Single-buffer mode: sprites write directly to the framebuffer.
-    // VSync wait reduces tearing by aligning draws to blanking period.
     if (screen == SCREEN_DASHBOARD) {
+        dashboardFlushDeferred();
         if (frameDirty) {
             frameDirty = false;
         }
-        delay(4);              // Yield to RTOS when idle
+        delay(4);
     } else {
         delay(20);
     }

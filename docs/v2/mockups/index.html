@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=480, initial-scale=1">
+  <title>Lemon Box V2 mockups</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="screen" data-scene="home" aria-label="Home ambiental">
+    <div class="safe">
+      <header class="topbar">
+        <img class="logo logo-light" src="../assets/brand-official/logos/lemon_horizontal_light.svg" alt="Lemon">
+        <span class="time">09:41</span>
+      </header>
+
+      <section class="hero home-hero">
+        <div class="eyebrow">BITCOIN · DATOS DE DEMO</div>
+        <div class="price">$ 118.420</div>
+        <div class="change">↗ +2,8% HOY</div>
+        <svg class="sparkline" viewBox="0 0 384 94" aria-hidden="true">
+          <path d="M2 78 L35 69 L62 74 L91 53 L126 60 L158 36 L190 45 L222 23 L253 35 L284 13 L318 21 L348 7 L382 11"></path>
+        </svg>
+      </section>
+
+      <footer class="moment">
+        <span>MERCADO EE.UU.</span>
+        <strong>ABRE EN 00:19:42</strong>
+      </footer>
+    </div>
+  </main>
+
+  <main class="screen" data-scene="tape" aria-label="Market Tape">
+    <div class="safe">
+      <header class="topbar">
+        <img class="logo logo-light" src="../assets/brand-official/logos/lemon_horizontal_light.svg" alt="Lemon">
+        <span class="demo-tag">DEMO</span>
+      </header>
+
+      <section class="tape-header">
+        <div class="eyebrow">MERCADO ABIERTO</div>
+        <div class="section-title">MARKET TAPE</div>
+      </section>
+
+      <section class="tape-list">
+        <div class="quote quote-focus"><strong>S&amp;P 500</strong><span>6.309,62</span><b>↗ 0,54%</b></div>
+        <div class="quote"><strong>NASDAQ</strong><span>21.083,32</span><b>↗ 0,61%</b></div>
+        <div class="quote"><strong>AAPL</strong><span>227,16</span><b>↗ 1,80%</b></div>
+        <div class="quote"><strong>NVDA</strong><span>171,38</span><b>↘ 2,10%</b></div>
+      </section>
+
+      <footer class="pack-strip"><span>PACK IA</span><strong>↗ 1,4%</strong></footer>
+    </div>
+  </main>
+
+  <main class="screen screen-news" data-scene="news" aria-label="Noticia importante">
+    <div class="safe">
+      <header class="topbar">
+        <img class="logo logo-black" src="../assets/brand-official/logos/lemon_horizontal_black.svg" alt="Lemon">
+        <span class="demo-tag demo-tag-dark">DEMO</span>
+      </header>
+
+      <article class="news-card">
+        <div class="eyebrow eyebrow-dark">QUÉ PASÓ</div>
+        <h1>NVIDIA<br>CAE 4,2%</h1>
+        <p>Nuevas restricciones de exportación presionan al sector de chips.</p>
+        <div class="news-rule"></div>
+        <h2>POR QUÉ IMPORTA</h2>
+        <p>Puede mover al sector tecnológico y al Pack IA.</p>
+      </article>
+
+      <footer class="continue">VER CONTEXTO EN LEMON <span>→</span></footer>
+    </div>
+  </main>
+
+  <script>
+    const scene = new URLSearchParams(location.search).get('scene') || 'home';
+    document.querySelectorAll('[data-scene]').forEach((node) => {
+      node.hidden = node.dataset.scene !== scene;
+    });
+  </script>
+</body>
+</html>
