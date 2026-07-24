@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lemon Box Studio</title>
+  <meta name="description" content="Concepto de interfaz y herramientas locales de Lemon Box Studio.">
+  <meta name="theme-color" content="#060807">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./styles.css?v=studio-web-7">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/three.module.js",
+        "three/addons/": "./vendor/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Ir al Studio</a>
+  <div class="studio-app">
+    <header class="app-topbar">
+      <div class="brand">
+        <img src="./brand/lemon_imagotipo_load.png" width="123" height="28" alt="Lemon">
+        <div><b>Lemon Box Studio</b><span>Studio local</span></div>
+      </div>
+      <nav id="studio-nav" class="studio-nav" aria-label="Studio sections">
+        <button class="nav-button active" data-panel="device" type="button">Cajita</button>
+        <button class="nav-button" data-panel="flash" data-advanced type="button">Tecnico</button>
+        <button class="nav-button" data-panel="design" data-labs type="button">Disenar</button>
+        <button class="nav-button" data-panel="data" data-labs type="button">Datos</button>
+      </nav>
+      <div class="top-actions">
+        <div class="status-pill"><b id="device-badge">Sin USB</b><span id="server-state">Conectando...</span></div>
+        <button id="refresh-all" class="ghost-button" type="button">Refresh</button>
+        <button id="advanced-toggle" class="ghost-button" data-labs type="button" aria-pressed="false">Modo avanzado</button>
+        <button id="scan-job" class="primary-button" data-labs type="button">Scan USB</button>
+      </div>
+      <a class="review-back" href="../">Volver al caso V1 → V2</a>
+    </header>
+
+    <main id="main-content" class="workbench-pro">
+      <aside class="left-rail">
+        <section class="panel simple-guide" data-section="design" data-labs>
+          <div class="panel-head"><span>Diseno por ahora</span><small>preview</small></div>
+          <ol>
+            <li>La pantalla 3D muestra una vista previa.</li>
+            <li>Cards libres todavia no corren en firmware.</li>
+            <li>Para editar cards, activa modo avanzado.</li>
+          </ol>
+        </section>
+
+        <section class="panel" data-section="design" data-labs>
+          <div class="panel-head"><span>Cards</span><button id="save-manifest" class="primary-button small" type="button">Guardar</button></div>
+          <div id="card-palette" class="chip-grid" aria-label="Agregar card"></div>
+        </section>
+
+        <section class="panel" data-section="data" data-labs>
+          <div class="panel-head"><span>Source Catalog</span><small id="source-preview-state">idle</small></div>
+          <div id="source-catalog" class="source-catalog"></div>
+          <button id="preview-source" class="ghost-button wide" type="button">Previsualizar datos</button>
+        </section>
+
+        <section class="panel" data-section="data" data-labs>
+          <div class="panel-head"><span>Configurar datos</span><small id="source-editor-state">Elige una fuente</small></div>
+          <div class="source-editor-group" data-source-editor="crypto">
+            <div class="two-col">
+              <label>Simbolo<input id="source-symbol" autocomplete="off" placeholder="BTC"></label>
+              <label>Moneda<input id="source-currency" autocomplete="off" placeholder="USD"></label>
+            </div>
+          </div>
+          <div class="source-editor-group" data-source-editor="stocks">
+            <label>Tickers<textarea id="source-symbols" rows="2" placeholder="AAPL, TSLA, NVDA"></textarea></label>
+          </div>
+          <div class="source-editor-group" data-source-editor="weather">
+            <label>Ciudad<input id="source-city" autocomplete="off" placeholder="Buenos Aires"></label>
+          </div>
+          <div class="source-editor-group" data-source-editor="custom" data-advanced>
+            <label>URL<input id="source-url" autocomplete="off" placeholder="http://127.0.0.1/data.json"></label>
+            <label>JSON path<input id="source-json-path" autocomplete="off" placeholder="data.value"></label>
+          </div>
+          <button id="save-source-config" class="primary-button wide" type="button">Actualizar datos</button>
+        </section>
+
+        <section class="panel" data-section="data" data-labs>
+          <div class="panel-head"><span>Keys</span><small>local vault</small></div>
+          <input id="key-name" autocomplete="off" placeholder="WEATHER_API_KEY">
+          <input id="key-value" type="password" autocomplete="off" placeholder="Valor privado">
+          <button id="save-key" class="ghost-button wide" type="button">Guardar key</button>
+          <p id="key-state" class="inline-state"></p>
+          <div id="key-list" class="stack-list"></div>
+        </section>
+
+        <section class="panel" data-section="design" data-labs>
+          <div class="panel-head"><span>Experience Draft</span><small>MCP ready</small></div>
+          <textarea id="deploy-prompt" rows="5" placeholder="Crea una experiencia con clima, watchlist y alertas..."></textarea>
+          <div class="two-col">
+            <label>Target<select id="deploy-target"><option value="firmware">Firmware preset</option><option value="weblive">WebLive</option><option value="static">Static</option></select></label>
+            <button id="agent-draft-job" class="primary-button" type="button">Agent draft</button>
+          </div>
+          <button id="deploy-draft-job" class="ghost-button wide" type="button">Deploy draft legacy</button>
+          <p id="deploy-state" class="inline-state"></p>
+        </section>
+      </aside>
+
+      <aside class="review-rail review-rail-left" aria-label="Configuración demo de Market Desk">
+        <div class="demo-label"><span>Demo de producto</span><b>No productiva</b></div>
+
+        <section class="demo-device-card" aria-label="Dispositivo de demostración">
+          <div class="demo-section-title"><span>Dispositivo</span><strong>Canary 01</strong></div>
+          <div class="demo-device-meta"><span>4.0” · 480 × 480</span><span class="demo-offline">Sin conexión</span></div>
+        </section>
+
+        <section class="demo-screen-picker" aria-label="Elegir estado de pantalla">
+          <div class="demo-section-title"><span>Vista previa</span><strong id="demo-screen-name">Home ambiental</strong></div>
+          <button class="demo-screen-button active" data-demo-screen="home" type="button">
+            <span>01</span><b>Home</b><small>Persistente</small>
+          </button>
+          <button class="demo-screen-button" data-demo-screen="tape" type="button">
+            <span>02</span><b>Market Tape</b><small>Momento</small>
+          </button>
+          <button class="demo-screen-button" data-demo-screen="context" type="button">
+            <span>03</span><b>Contexto</b><small>Editorial</small>
+          </button>
+        </section>
+
+        <div class="demo-footnote">Datos ilustrativos · no controla dispositivos</div>
+      </aside>
+
+      <section class="stage-column">
+        <section class="workbench-stage">
+          <div class="stage-toolbar">
+            <span id="scene-state">Cargando 3D...</span>
+            <span class="stage-meta"><span id="preview-mode">BTC + USD</span><span id="preview-theme">Dark</span></span>
+          </div>
+          <div id="device-viewer" class="device-viewer" aria-label="Lemon Box 3D"></div>
+          <div class="assembly-control">
+            <span>Assembly</span>
+            <input id="assembly-slider" type="range" min="0" max="100" value="100">
+            <button id="screen-focus" class="stage-link" type="button">Acercar</button>
+          </div>
+        </section>
+
+        <div id="screen-editor" class="screen-editor hidden-screen-editor" aria-label="Screen card editor" hidden></div>
+      </section>
+
+      <aside class="right-rail">
+        <section class="panel inspector-panel" data-section="design" data-labs>
+          <div class="panel-head"><span>Inspector</span><small id="selected-card">Sin seleccion</small></div>
+          <label>Title<input id="card-title" autocomplete="off"></label>
+          <div class="two-col">
+            <label>Kind<select id="card-kind"><option value="btc">btc</option><option value="dollar">dollar</option><option value="stocks">stocks</option><option value="watchlist">watchlist</option><option value="chart">chart</option><option value="metric">metric</option><option value="text">text</option><option value="list">list</option><option value="sparkline">sparkline</option><option value="weather">weather</option><option value="custom">custom</option></select></label>
+            <label>Accent<select id="card-accent"><option value="greent">greent</option><option value="solar">solar</option><option value="nebula">nebula</option><option value="starlight">starlight</option><option value="sky">sky</option></select></label>
+          </div>
+          <label>Source<input id="card-source" autocomplete="off"></label>
+          <label data-labs>Prompt<textarea id="card-prompt" rows="3"></textarea></label>
+          <div class="quad" data-labs>
+            <label>X<input id="card-x" type="number"></label>
+            <label>Y<input id="card-y" type="number"></label>
+            <label>W<input id="card-w" type="number"></label>
+            <label>H<input id="card-h" type="number"></label>
+          </div>
+          <div class="two-col">
+            <button id="duplicate-card" class="ghost-button" type="button">Duplicar</button>
+            <button id="delete-card" class="danger-button" type="button">Borrar</button>
+          </div>
+        </section>
+
+        <section id="device-readiness" class="panel" data-section="device">
+          <div class="panel-head"><span>Control</span><small id="device-settings-state">Sin conectar</small></div>
+          <div class="device-summary" aria-label="Estado de la cajita">
+            <div><span>Conexion</span><strong id="device-connection-label">Sin conectar</strong><small id="device-connection-detail">Agrega la IP local de la cajita.</small></div>
+            <div><span>Senal WiFi</span><strong id="device-signal-label">--</strong><small id="device-signal-detail">Pendiente</small></div>
+            <div><span>Firmware</span><strong id="device-version-label">--</strong><small id="device-uptime-label">Sin datos</small></div>
+            <div><span>Ultima sync</span><strong id="device-sync-label">No aplicada</strong><small id="device-sync-detail">Solo settings soportados.</small></div>
+          </div>
+          <input id="manifest-name" type="hidden" autocomplete="off">
+          <input id="experience-id" type="hidden" autocomplete="off">
+          <span id="manifest-state" hidden>Sin cargar</span>
+          <textarea id="manifest-notes" rows="2" hidden></textarea>
+          <div id="experience-list" class="stack-list compact" hidden></div>
+          <label>IP de la cajita<input id="device-host" autocomplete="off" placeholder="192.168.1.42"></label>
+          <input id="pair-code" type="hidden" autocomplete="one-time-code">
+          <label>Modo secundario<select id="device-z2"><option value="usd">USD</option><option value="markets">Markets</option><option value="stocks">Stocks</option></select></label>
+          <div class="two-col">
+            <label>Tema<select id="manifest-theme"><option value="dark">Dark</option><option value="light">Light</option></select></label>
+            <label>Layout<select id="manifest-layout"><option value="btc_usd">BTC + USD</option><option value="btc_focus">BTC focus</option></select></label>
+          </div>
+          <textarea id="manifest-watchlist" rows="2" hidden></textarea>
+          <div class="field-group">
+            <div class="field-title">Watchlist</div>
+            <div id="stock-picker" class="stock-picker" aria-label="Seleccionar acciones"></div>
+          </div>
+          <label data-labs>Brillo<input id="device-brightness" type="number" min="1" max="255" value="255"><small class="field-note">Depende del backlight PWM fisico de la placa.</small></label>
+          <label class="checkline"><input id="device-pro-mode" type="checkbox"> Modo Pro para Markets</label>
+          <button id="connect-device" class="ghost-button wide" type="button">Conectar</button>
+          <button id="scan-network" class="ghost-button wide" type="button">Buscar cajita</button>
+          <div class="two-col">
+            <button id="apply-device-settings" class="primary-button" type="button">Aplicar</button>
+            <button id="health-device" class="ghost-button" type="button">Chequear</button>
+          </div>
+          <button id="ota-latest-simple" class="ghost-button wide" type="button">Buscar actualizacion</button>
+          <p id="flash-state" class="inline-state"></p>
+          <button id="save-experience" class="ghost-button wide" data-labs type="button">Fork</button>
+          <dl class="metrics" data-labs>
+            <div><dt>Compatibility</dt><dd id="compatibility-state">--</dd></div>
+            <div><dt>Required keys</dt><dd id="required-keys-state">--</dd></div>
+          </dl>
+        </section>
+
+        <section class="panel" data-section="flash" id="control" data-labs>
+          <div class="panel-head"><span>Herramientas tecnicas</span><small>confirmacion humana</small></div>
+          <div class="support-map">
+            <div><strong>Build firmware</strong><span>Compila el firmware local antes de OTA o flash.</span></div>
+            <div><strong>OTA local</strong><span>Actualiza la app por WiFi. No reemplaza recovery USB.</span></div>
+            <div><strong>Flash USB normal</strong><span>Escribe solo firmware normal. Recovery queda fuera de la UI.</span></div>
+          </div>
+          <div class="two-col">
+            <label>USB<select id="port-select"></select></label>
+            <label>Firmware<select id="firmware-source"><option value="local">Local build</option><option value="path">Custom path</option></select></label>
+          </div>
+          <label id="custom-path-row" hidden>Path<input id="firmware-path" autocomplete="off" placeholder="C:\path\to\firmware.bin"></label>
+          <div class="mode-row" data-labs>
+            <button class="flash-mode active" data-mode="normal" type="button">Normal</button>
+            <button class="flash-mode danger" data-mode="recovery" type="button">Recovery</button>
+          </div>
+          <label class="checkline" data-labs><input id="recovery-ack" type="checkbox"> Recovery borra y reescribe bootloader, partitions, firmware y SPIFFS.</label>
+          <div class="two-col">
+            <button id="build-job" class="primary-button" type="button">Build firmware</button>
+            <button id="health-device-technical" class="ghost-button" type="button">Health</button>
+          </div>
+          <div class="two-col">
+            <button id="ota-upload-action" class="ghost-button" type="button">OTA local</button>
+            <button id="flash-action" class="ghost-button" type="button">Flash USB normal</button>
+          </div>
+          <button id="verify-action" class="ghost-button wide" type="button">Verify USB boot</button>
+          <button id="ota-latest-action" class="ghost-button wide" data-labs type="button">OTA latest</button>
+          <button id="ota-verify-action" class="ghost-button wide" data-labs type="button">Verify OTA health</button>
+          <p id="flash-state-technical" class="inline-state"></p>
+        </section>
+
+        <section class="panel" data-section="flash" data-labs>
+          <div class="panel-head"><span>Release Center</span><small id="latest-release">--</small></div>
+          <dl class="metrics">
+            <div><dt>App</dt><dd id="app-version">--</dd></div>
+            <div><dt>Build</dt><dd id="local-build">--</dd></div>
+            <div><dt>Recovery</dt><dd id="recovery-ready">--</dd></div>
+          </dl>
+          <div class="two-col">
+            <button id="release-job" class="ghost-button" type="button">Check</button>
+            <button id="download-job" class="ghost-button" type="button">Download</button>
+          </div>
+          <button id="build-job-legacy" class="primary-button wide" type="button">Build firmware</button>
+        </section>
+      </aside>
+
+      <aside class="review-rail review-rail-right" aria-label="Perfil demo de Market Desk">
+        <div class="demo-profile-head">
+          <div><span>Perfil de experiencia</span><strong>Market Desk V2</strong></div>
+          <i>Demo</i>
+        </div>
+
+        <section class="demo-config" aria-label="Configuración ilustrativa">
+          <div><span>Activo principal</span><strong>Bitcoin</strong></div>
+          <div><span>Watchlist</span><strong>SPY · QQQ · GGAL</strong></div>
+          <div><span>Mercado</span><strong>Buenos Aires</strong></div>
+          <div><span>Retorno al home</span><strong>12 segundos</strong></div>
+        </section>
+
+        <section class="demo-sequence" aria-label="Secuencia de experiencia">
+          <div class="demo-section-title"><span>Secuencia</span><strong>Hoy</strong></div>
+          <div class="demo-sequence-row current"><time>Ahora</time><span>Home ambiental</span></div>
+          <div class="demo-sequence-row"><time>10:30</time><span>Market Tape</span></div>
+          <div class="demo-sequence-row"><time>Señal</time><span>Contexto editorial</span></div>
+        </section>
+
+        <div class="demo-publish">
+          <div><span>Estado</span><strong>Borrador local</strong></div>
+          <button type="button" disabled>Publicar demo</button>
+          <small>No aplica cambios ni ejecuta OTA.</small>
+        </div>
+      </aside>
+
+      <section id="agent-timeline" class="agent-timeline">
+        <div class="panel-head"><span>Timeline</span><small>jobs / logs / agent actions</small></div>
+        <div id="jobs-list" class="jobs-list" aria-live="polite"></div>
+      </section>
+    </main>
+  </div>
+  <script type="module" src="./app.js?v=studio-web-6"></script>
+</body>
+</html>

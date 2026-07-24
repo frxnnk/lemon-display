@@ -8,6 +8,8 @@
 #include "data/market_icons.h"
 #include "data/satoshi_fonts.h"
 #include "api_client.h"
+#include "nvs_storage.h"
+#include "ui_stocks.h"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -37,6 +39,8 @@ static int z1H = 300;  // Default: standard layout
 static int z2H = 120;
 static int z2Y = 354;  // Z1_Y + z1H + GAP
 static uint8_t currentLayout = 0;
+static Z2Mode  s_z2Mode = Z2_USD;      // Which card occupies Z2 slot
+static bool    predictionModeActive = false;   // defined here; used across the file
 
 // When true, all public draw functions no-op. Set by ui_views when the
 // carousel is showing a different view (Stocks, Polymarket) so background
@@ -83,10 +87,29 @@ static LGFX_Sprite sprZ2(&tft);   // Lemon    480×120
 static bool spritesReady = false;
 
 // ── Dirty zone bitmask (bit 0=Z0, bit 1=Z1, bit 2=Z2) ──
-static uint8_t dirtyZones = 0x07;  // All dirty initially
+static uint8_t dirtyZones = 0x07;
 
 // ── Batch mode: draw functions skip push, dashboardDrawAll pushes once ──
 static bool _batchMode = false;
+
+// ── Deferred push mode: direct-update functions track dirty clips instead of pushing ──
+static bool _deferPush = false;
+struct DeferredClip { int16_t x, y, w, h; bool active; };
+static DeferredClip _defClips[3] = {};  // Z0, Z1, Z2
+static void unionClip(DeferredClip& dc, int16_t x, int16_t y, int16_t w, int16_t h) {
+    if (!dc.active) {
+        dc = {x, y, w, h, true};
+    } else {
+        int16_t x2 = min(dc.x, x);
+        int16_t y2 = min(dc.y, y);
+        int16_t r1 = dc.x + dc.w, r2 = x + w;
+        int16_t b1 = dc.y + dc.h, b2 = y + h;
+        dc.x = x2;
+        dc.y = y2;
+        dc.w = max(r1, r2) - x2;
+        dc.h = max(b1, b2) - y2;
+    }
+}
 
 // ── Carousel momentum state (global, accessible from main.cpp) ──
 CarouselState btcCarousel     = { 0.0f, 0.0f, false, -1 };
@@ -230,6 +253,16 @@ void dashboardSetup() {
     resetDollarFilterToAll();
     pairSelectorEnabled = true;
 
+    // Restore Z2 slot mode from NVS (USD / Markets / Stocks). Markets is
+    // only reachable when Pro mode is active — if NVS persisted Markets
+    // from a prior session and Pro is off, fall back to USD so Z2 is
+    // never blank at boot.
+    {
+        uint8_t raw = nvsGetZ2Mode();
+        if (raw >= Z2_COUNT) raw = Z2_USD;
+        s_z2Mode = (Z2Mode)raw;
+    }
+
     // Allocate persistent zone sprites in PSRAM (once, never freed)
     sprZ0.setPsram(true);
     sprZ0.setColorDepth(16);
@@ -257,6 +290,27 @@ void dashboardSetup() {
 
     Serial.printf("[Dashboard] Zone sprites allocated: Z0=%dB Z1=%dB Z2=%dB\n",
                   SCREEN_W * Z0_H * 2, SCREEN_W * z1H * 2, SCREEN_W * z2H * 2);
+}
+
+// ══════════════════════════════════════════
+//  Z2 MODE (USD / Markets / Stocks)
+// ══════════════════════════════════════════
+
+Z2Mode dashboardGetZ2Mode() { return s_z2Mode; }
+
+void dashboardSetZ2Mode(Z2Mode mode) {
+    if ((uint8_t)mode >= Z2_COUNT) mode = Z2_USD;
+    if (mode == s_z2Mode) return;
+    s_z2Mode = mode;
+    nvsSetZ2Mode((uint8_t)mode);
+    Serial.printf("[Dashboard] Z2 mode -> %d\n", (int)mode);
+}
+
+void dashboardCycleZ2Mode(int8_t dir) {
+    int8_t n = (int8_t)s_z2Mode + dir;
+    while (n < 0) n += Z2_COUNT;
+    n %= Z2_COUNT;
+    dashboardSetZ2Mode((Z2Mode)n);
 }
 
 // ══════════════════════════════════════════
@@ -311,10 +365,6 @@ void dashboardSetLayout(uint8_t idx) {
             Serial.println("[Dashboard] ERROR: sprite re-allocation failed!");
         }
 
-        // Refill gaps (VSync-protected to avoid visible tear)
-        displayWaitVSync();
-        tft.fillRect(0, Z1_Y + z1H, SCREEN_W, SCREEN_H - (Z1_Y + z1H), Colors::BG_BASE);
-
         Serial.printf("[Dashboard] Layout %d: Z1=%d Z2=%d\n", idx, z1H, z2H);
     }
 }
@@ -346,10 +396,13 @@ void dashboardDrawHeader(const char* timeStr, bool offline, bool wsConnected) {
         return;
     }
 
-    // Full imagotipo (122x28 — icon + LEMON wordmark)
     int logoX = MARGIN;
     int logoY = (Z0_H - 28) / 2;
-    drawLemonImagotipo122(sprZ0, logoX, logoY);
+    if (Colors::isLightTheme()) {
+        drawLemonIsotipo28(sprZ0, logoX, logoY);
+    } else {
+        drawLemonImagotipo122(sprZ0, logoX, logoY);
+    }
 
     if (offline) {
         int badgeW = 90, badgeH = 24;
@@ -529,11 +582,14 @@ void dashboardUpdateTimeDirect(const char* timeStr) {
         sx += cellW;
     }
 
-    // Atomic clipped push from sprZ0 (no intermediate blank frame)
-    displayWaitVSync();
-    tft.setClipRect(clearStartX, Z0_Y + cellY_spr, maxTotalW, cellH);
-    sprZ0.pushSprite(0, Z0_Y);
-    tft.clearClipRect();
+    if (_deferPush) {
+        unionClip(_defClips[0], clearStartX, Z0_Y + cellY_spr, maxTotalW, cellH);
+    } else {
+        displayWaitVSync();
+        tft.setClipRect(clearStartX, Z0_Y + cellY_spr, maxTotalW, cellH);
+        sprZ0.pushSprite(0, Z0_Y);
+        tft.clearClipRect();
+    }
 }
 
 // ── Direct-to-framebuffer price update (stable-width, single strip clear) ──
@@ -578,11 +634,14 @@ void dashboardUpdatePriceDirect(const BtcPrice& btc, uint8_t selectedPair) {
     sprZ1.fillRect(110, STRIP_Y, STRIP_W + 4 - (110 - (STRIP_X - 2)), 6, Colors::BG_CARD);
     drawFixedWidthPrice(sprZ1, priceBuf, PRICE_CX, PRICE_CY, priceFont, priceColor, Colors::BG_CARD);
 
-    // Atomic clipped push from sprZ1 (no intermediate blank frame)
-    displayWaitVSync();
-    tft.setClipRect(STRIP_X - 2, Z1_Y + STRIP_Y, STRIP_W + 4, STRIP_H);
-    sprZ1.pushSprite(0, Z1_Y);
-    tft.clearClipRect();
+    if (_deferPush) {
+        unionClip(_defClips[1], STRIP_X - 2, Z1_Y + STRIP_Y, STRIP_W + 4, STRIP_H);
+    } else {
+        displayWaitVSync();
+        tft.setClipRect(STRIP_X - 2, Z1_Y + STRIP_Y, STRIP_W + 4, STRIP_H);
+        sprZ1.pushSprite(0, Z1_Y);
+        tft.clearClipRect();
+    }
 }
 
 // ══════════════════════════════════════════
@@ -602,19 +661,6 @@ void dashboardDrawBtcHero(const BtcPrice& btc, const SparklineData& spark, uint8
     const PairDef& pair = BTC_PAIRS[selectedPair];
     bool simpleMode = !pairSelectorEnabled;
 
-    if (!btc.valid) {
-        char loadBuf[24];
-        snprintf(loadBuf, sizeof(loadBuf), "%s...", simpleMode ? "Bitcoin" : pair.pairLabel);
-        drawCentered(sprZ1, loadBuf, z1H / 2 - 10,
-                     &SatoshiMedium18, Colors::TEXT_SECONDARY);
-        if (!_batchMode) {
-            displayWaitVSync();
-            sprZ1.pushSprite(0, Z1_Y);
-        }
-        dirtyZones |= (1 << 1);
-        return;
-    }
-
     // ── Top row: pair label (tappable — opens dropdown) ──
     sprZ1.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_CARD);
     sprZ1.setTextDatum(lgfx::top_left);
@@ -632,6 +678,22 @@ void dashboardDrawBtcHero(const BtcPrice& btc, const SparklineData& spark, uint8
             sprZ1.fillTriangle(chevX, chevY, chevX + 8, chevY, chevX + 4, chevY + 5, Colors::TEXT_SECONDARY);
         }
         sprZ1.setTextDatum(lgfx::top_left);
+    }
+
+    if (!btc.valid) {
+        char loadBuf[24];
+        snprintf(loadBuf, sizeof(loadBuf), "%s...", simpleMode ? "Bitcoin" : pair.pairLabel);
+        drawCentered(sprZ1, loadBuf, z1H / 2 - 10,
+                     &SatoshiMedium18, Colors::TEXT_SECONDARY);
+        if (pairDropdownOpen && pairSelectorEnabled) {
+            drawPairDropdown(sprZ1, pairDropdownSelected);
+        }
+        if (!_batchMode) {
+            displayWaitVSync();
+            sprZ1.pushSprite(0, Z1_Y);
+        }
+        dirtyZones |= (1 << 1);
+        return;
     }
 
     // ── Main price (no glow, centered) ──
@@ -903,13 +965,14 @@ void dashboardRedrawChartOnly(const SparklineData& spark, ChartStyle chartStyle,
 
     sprZ1.clearClipRect();
 
-    // Clipped push — only transfer the chart region (~40% less data than full Z1)
-    // Glow dots / thick lines are contained by the sprite clip rect above,
-    // so the clear rect fully covers all changed pixels.
-    displayWaitVSync();
-    tft.setClipRect(chartX, Z1_Y + clearY, chartW, clearH);
-    sprZ1.pushSprite(0, Z1_Y);
-    tft.clearClipRect();
+    if (_deferPush) {
+        unionClip(_defClips[1], chartX, Z1_Y + clearY, chartW, clearH);
+    } else {
+        displayWaitVSync();
+        tft.setClipRect(chartX, Z1_Y + clearY, chartW, clearH);
+        sprZ1.pushSprite(0, Z1_Y);
+        tft.clearClipRect();
+    }
     dirtyZones |= (1 << 1);
 }
 
@@ -981,6 +1044,10 @@ void dashboardDrawLemonDollar(const LemonPrice& lemon, const SparklineData* lemo
                               float dollarChange) {
     if (s_muted) return;
     if (z2H <= 0) return;  // BTC-only layout — no Z2
+    // Stocks owns its own render path — skip background lemon WS updates.
+    // Everything else (USD or MARKETS without active prediction) falls back
+    // to USD content so the slot never goes blank.
+    if (s_z2Mode == Z2_STOCKS) return;
     sprZ2.clearClipRect();
     sprZ2.fillSprite(Colors::BG_BASE);
     bool simpleMode = !pairSelectorEnabled;
@@ -1100,6 +1167,227 @@ void dashboardDrawLemonDollar(const LemonPrice& lemon, const SparklineData* lemo
 
     // Flash border (drawn last, on top of everything)
     drawFlashBorderIfActive(sprZ2, 2, z2H);
+
+    if (!_batchMode) {
+        displayWaitVSync();
+        sprZ2.pushSprite(0, z2Y);
+    }
+    dirtyZones |= (1 << 2);
+}
+
+// ══════════════════════════════════════════
+//  Z2: STOCKS card (compact layout for ~213px)
+// ══════════════════════════════════════════
+
+void dashboardRedrawDollarChartOnly(const LemonPrice& lemon, const SparklineData& spark,
+                                    ChartStyle dollarChartStyle) {
+    if (s_muted) return;
+    if (!spritesReady) return;
+    if (z2H <= 0) return;
+    if (s_z2Mode == Z2_STOCKS) return;
+    if (!lemon.valid || !spark.valid || spark.count < 2) return;
+
+    bool compact = (z2H <= 60);
+    if (compact) return;
+
+    const int ct = 4;
+    const int chartX = MARGIN + CHART_PAD_X;
+    const int chartY = 82 + ct;
+    const int chartW = CARD_W - 2 * CHART_PAD_X;
+    const int chartH = z2H - chartY - CHART_PAD_B;
+    if (chartH <= 10) return;
+
+    const int clearY = chartY - 2;
+    const int clearH = chartH + 4;
+
+    static SparklineData scaled;
+    scaled = spark;
+    float avg = (lemon.bid + lemon.ask) / 2.0f;
+    float lastPt = spark.points[spark.count - 1];
+    if (lastPt > 0 && avg > 0) {
+        float factor = avg / lastPt;
+        scaled.minVal = 1e12f;
+        scaled.maxVal = -1e12f;
+        for (int i = 0; i < scaled.count; i++) {
+            scaled.points[i] *= factor;
+            if (scaled.points[i] < scaled.minVal) scaled.minVal = scaled.points[i];
+            if (scaled.points[i] > scaled.maxVal) scaled.maxVal = scaled.points[i];
+        }
+    }
+
+    sprZ2.clearClipRect();
+    sprZ2.fillRect(chartX, clearY, chartW, clearH, Colors::BG_CARD);
+    sprZ2.setClipRect(chartX, clearY, chartW, clearH);
+    drawSparkline(sprZ2, chartX, chartY, chartW, chartH,
+                  scaled, Colors::NEBULA, Colors::NEBULA_FILL);
+    if (dollarChartStyle == CHART_MARKERS) {
+        drawChartMarkers(sprZ2, chartX, chartY, chartW, chartH,
+                         scaled, 0.0f, true);
+    }
+    sprZ2.clearClipRect();
+
+    if (_deferPush) {
+        unionClip(_defClips[2], chartX, z2Y + clearY, chartW, clearH);
+    } else {
+        displayWaitVSync();
+        tft.setClipRect(chartX, z2Y + clearY, chartW, clearH);
+        sprZ2.pushSprite(0, z2Y);
+        tft.clearClipRect();
+    }
+    dirtyZones |= (1 << 2);
+}
+
+static const lgfx::IFont* priceFontForZ2(float price) {
+    return (price >= 10000.0f) ? &SatoshiMedium18 : &SatoshiBold24;
+}
+
+static void drawStocksZ2ModeDots(LGFX_Sprite& spr, int xRight, int y) {
+    // 3 small pills at top-right indicating active Z2 mode (USD / Markets / Stocks).
+    // Filled = active, outline = inactive.
+    const int pillW = 10;
+    const int pillH = 4;
+    const int gap   = 4;
+    for (int i = 0; i < (int)Z2_COUNT; i++) {
+        int px = xRight - (int)Z2_COUNT * (pillW + gap) + i * (pillW + gap);
+        uint16_t color = (i == (int)s_z2Mode) ? Colors::LEMON_GREEN : Colors::CARD_BORDER;
+        spr.fillSmoothRoundRect(px, y, pillW, pillH, 2, color);
+    }
+}
+
+void dashboardDrawStocksZ2() {
+    if (s_muted) return;
+    if (z2H <= 0) return;
+    if (s_z2Mode != Z2_STOCKS) return;
+
+    sprZ2.clearClipRect();
+    sprZ2.fillSprite(Colors::BG_BASE);
+
+    const int cardT = 4;
+    const int cardH = z2H - cardT;
+    drawGlassCard(sprZ2, MARGIN, cardT, CARD_W, cardH, CARD_R);
+
+    // Mode dots top-right inside the card
+    drawStocksZ2ModeDots(sprZ2, MARGIN + CARD_W - 12, cardT + 8);
+
+    StockFocusedSnapshot stock = {};
+    bool hasSnapshot = stocksGetFocusedSnapshot(stock);
+    uint8_t wlCount = hasSnapshot ? stock.watchlistCount : 0;
+    if (wlCount == 0) {
+        drawCentered(sprZ2, "Add tickers from /config",
+                     cardT + cardH / 2 - 6, &Satoshi12, Colors::TEXT_SECONDARY);
+        if (!_batchMode) { displayWaitVSync(); sprZ2.pushSprite(0, z2Y); }
+        dirtyZones |= (1 << 2);
+        return;
+    }
+
+    const StockQuote* q = stock.hasQuote ? &stock.quote : nullptr;
+    const SparklineData* sp = stock.hasSpark ? &stock.spark : nullptr;
+    const char* sym = stock.symbol[0] ? stock.symbol : "--";
+    const char* status = stock.status[0] ? stock.status : nullptr;
+
+    // Row 1: symbol + name (left), price (right)
+    const int rowY1 = cardT + 18;
+    sprZ2.setTextDatum(lgfx::top_left);
+    sprZ2.setTextColor(Colors::LEMON_GREEN, Colors::BG_CARD);
+    sprZ2.drawString(sym, MARGIN + CARD_PAD, rowY1 - 8, &SatoshiBold24);
+
+    if (q && q->valid && q->name[0]) {
+        sprZ2.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
+        sprZ2.drawString(q->name, MARGIN + CARD_PAD, rowY1 + 22, &Satoshi9);
+    }
+
+    if (q && q->valid) {
+        char priceStr[24];
+        if (q->price < 1.0f)       snprintf(priceStr, sizeof(priceStr), "$%.4f", q->price);
+        else                       snprintf(priceStr, sizeof(priceStr), "$%.2f", q->price);
+        sprZ2.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_CARD);
+        sprZ2.setTextDatum(lgfx::top_right);
+        sprZ2.drawString(priceStr, MARGIN + CARD_W - CARD_PAD, rowY1 - 8, priceFontForZ2(q->price));
+
+        bool up = q->change >= 0.0f;
+        char changeStr[40];
+        snprintf(changeStr, sizeof(changeStr), "%s%.2f  %s%.2f%%",
+                 up ? "+" : "", q->change, up ? "+" : "", q->changePct);
+        sprZ2.setTextColor(up ? Colors::POSITIVE : Colors::NEGATIVE, Colors::BG_CARD);
+        sprZ2.drawString(changeStr, MARGIN + CARD_W - CARD_PAD, rowY1 + 22, &Satoshi12);
+    } else {
+        sprZ2.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
+        sprZ2.setTextDatum(lgfx::top_right);
+        sprZ2.drawString(status ? status : "Loading...", MARGIN + CARD_W - CARD_PAD, rowY1 - 2, &Satoshi12);
+    }
+
+    // Sparkline (middle band)
+    const int chartX = MARGIN + CARD_PAD;
+    const int chartY = cardT + 70;
+    const int chartW = CARD_W - 2 * CARD_PAD;
+    const int chartH = cardH - 70 - 26;  // leave footer
+    if (sp && sp->count >= 2) {
+        bool up = (q && q->valid) ? (q->change >= 0.0f) : true;
+        drawSparkline(sprZ2, chartX, chartY, chartW, chartH, *sp,
+                      up ? Colors::POSITIVE : Colors::NEGATIVE,
+                      up ? Colors::CHART_FILL : Colors::BADGE_BG_NEG);
+    } else {
+        int dots = (status && strcmp(status, "Cargando...") == 0) ? (int)((millis() / 400) % 4) : 0;
+        char load[24];
+        if (status && strcmp(status, "Cargando...") != 0) {
+            strncpy(load, status, sizeof(load) - 1);
+            load[sizeof(load) - 1] = '\0';
+        } else {
+            snprintf(load, sizeof(load), "Cargando%s",
+                     dots == 0 ? ""    :
+                     dots == 1 ? "."   :
+                     dots == 2 ? ".."  : "...");
+        }
+        sprZ2.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
+        sprZ2.setTextDatum(lgfx::middle_center);
+        sprZ2.drawString(load, chartX + chartW / 2, chartY + chartH / 2, &Satoshi12);
+    }
+
+    // Footer: H / L left, page idx center, timestamp right
+    const int footerY = cardT + cardH - 16;
+    sprZ2.setTextDatum(lgfx::middle_left);
+    if (q && q->valid && isfinite(q->dayHigh) && isfinite(q->dayLow)) {
+        char hl[48];
+        snprintf(hl, sizeof(hl), "H $%.2f   L $%.2f", q->dayHigh, q->dayLow);
+        sprZ2.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
+        sprZ2.drawString(hl, MARGIN + CARD_PAD, footerY, &Satoshi9);
+    }
+
+    // Right side: page index + staleness indicator. "lastUpdate == 0" marks a
+    // quote restored from NVS cache (millis timestamps don't survive reboot),
+    // so surface it as "stale" instead of a bogus "0m ago".
+    char rightLabel[32];
+    char ageBuf[16] = "";
+    if (q && q->valid) {
+        if (q->lastUpdate == 0) {
+            strncpy(ageBuf, "stale", sizeof(ageBuf) - 1);
+        } else {
+            uint32_t now = millis();
+            uint32_t age = (now > q->lastUpdate) ? (now - q->lastUpdate) : 0;
+            uint32_t sec = age / 1000;
+            if      (sec < 60)    snprintf(ageBuf, sizeof(ageBuf), "%us",  (unsigned)sec);
+            else if (sec < 3600)  snprintf(ageBuf, sizeof(ageBuf), "%um",  (unsigned)(sec / 60));
+            else                  snprintf(ageBuf, sizeof(ageBuf), "%uh",  (unsigned)(sec / 3600));
+        }
+    }
+    if (ageBuf[0]) {
+        snprintf(rightLabel, sizeof(rightLabel), "%u/%u  %s",
+                 (unsigned)(stock.focusedIdx + 1), (unsigned)wlCount, ageBuf);
+    } else {
+        snprintf(rightLabel, sizeof(rightLabel), "%u/%u",
+                 (unsigned)(stock.focusedIdx + 1), (unsigned)wlCount);
+    }
+    sprZ2.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+    sprZ2.setTextDatum(lgfx::middle_right);
+    sprZ2.drawString(rightLabel, MARGIN + CARD_W - CARD_PAD, footerY, &Satoshi9);
+
+    // Fetching indicator: small yellow dot above the footer while the worker
+    // has a Yahoo request in flight — so the user knows "cargando" vs stale.
+    if (stock.fetching) {
+        sprZ2.fillCircle(MARGIN + CARD_W - CARD_PAD - 4, footerY - 14, 3, Colors::SOLAR);
+    }
+
+    sprZ2.setTextDatum(lgfx::top_left);
 
     if (!_batchMode) {
         displayWaitVSync();
@@ -1233,7 +1521,15 @@ void dashboardDrawAll(const char* timeStr,
     dashboardDrawHeader(timeStr, offline, wsConnected);
     dashboardDrawBtcHero(btc, spark, selectedPeriod, periodChanges, chartStyle, ohlc, selectedPair);
     if (z2H > 0) {
-        dashboardDrawLemonDollar(lemon, lemonSpark, dollarPeriod, dollarChartStyle, dollarChange);
+        if (predictionModeActive) {
+            // Prediction is drawn by main.cpp's own path.
+        } else if (s_z2Mode == Z2_STOCKS) {
+            dashboardDrawStocksZ2();
+        } else {
+            // Z2_USD or Z2_MARKETS-without-active-prediction → draw USD so
+            // the slot never goes blank.
+            dashboardDrawLemonDollar(lemon, lemonSpark, dollarPeriod, dollarChartStyle, dollarChange);
+        }
     }
     _batchMode = false;
 
@@ -1242,6 +1538,12 @@ void dashboardDrawAll(const char* timeStr,
     sprZ0.pushSprite(0, Z0_Y);
     sprZ1.pushSprite(0, Z1_Y);
     if (z2H > 0) sprZ2.pushSprite(0, z2Y);
+
+    // Fill gaps between zones (prevents background flash on layout transitions)
+    tft.fillRect(0, Z0_Y + Z0_H, SCREEN_W, Z1_Y - (Z0_Y + Z0_H), Colors::BG_BASE);
+    tft.fillRect(0, Z1_Y + z1H, SCREEN_W, z2Y - (Z1_Y + z1H), Colors::BG_BASE);
+    if (z2H > 0 && z2Y + z2H < SCREEN_H)
+        tft.fillRect(0, z2Y + z2H, SCREEN_W, SCREEN_H - (z2Y + z2H), Colors::BG_BASE);
 }
 
 // ══════════════════════════════════════════
@@ -1253,10 +1555,8 @@ void dashboardSyncDrawBuffer() {
     if (!spritesReady) return;
 
     uint8_t dz = dirtyZones;
-    dirtyZones = 0;  // Reset for next frame
+    dirtyZones = 0;
 
-    // Only push zones that were actually modified this frame.
-    // Gaps are filled once in dashboardSetup() — no need to refill here.
     if (dz) displayWaitVSync();
     if (dz & (1 << 0)) {
         sprZ0.pushSprite(0, Z0_Y);
@@ -1267,6 +1567,55 @@ void dashboardSyncDrawBuffer() {
     if ((dz & (1 << 2)) && z2H > 0) {
         sprZ2.pushSprite(0, z2Y);
     }
+}
+
+void dashboardBeginBatch() {
+    _batchMode = true;
+}
+
+void dashboardCommitBatch() {
+    _batchMode = false;
+    if (!spritesReady) return;
+    displayWaitVSync();
+    sprZ0.pushSprite(0, Z0_Y);
+    sprZ1.pushSprite(0, Z1_Y);
+    if (z2H > 0) sprZ2.pushSprite(0, z2Y);
+    tft.fillRect(0, Z0_Y + Z0_H, SCREEN_W, Z1_Y - (Z0_Y + Z0_H), Colors::BG_BASE);
+    tft.fillRect(0, Z1_Y + z1H, SCREEN_W, z2Y - (Z1_Y + z1H), Colors::BG_BASE);
+    if (z2H > 0 && z2Y + z2H < SCREEN_H)
+        tft.fillRect(0, z2Y + z2H, SCREEN_W, SCREEN_H - (z2Y + z2H), Colors::BG_BASE);
+}
+
+void dashboardSetDeferred(bool defer) {
+    if (defer) {
+        for (auto& c : _defClips) c.active = false;
+    }
+    _deferPush = defer;
+}
+
+void dashboardFlushDeferred() {
+    if (!_deferPush) return;
+    _deferPush = false;
+    bool any = false;
+    for (auto& c : _defClips) if (c.active) { any = true; break; }
+    if (!any) return;
+    displayWaitVSync();
+    if (_defClips[0].active) {
+        tft.setClipRect(_defClips[0].x, _defClips[0].y, _defClips[0].w, _defClips[0].h);
+        sprZ0.pushSprite(0, Z0_Y);
+        _defClips[0].active = false;
+    }
+    if (_defClips[1].active) {
+        tft.setClipRect(_defClips[1].x, _defClips[1].y, _defClips[1].w, _defClips[1].h);
+        sprZ1.pushSprite(0, Z1_Y);
+        _defClips[1].active = false;
+    }
+    if (_defClips[2].active) {
+        tft.setClipRect(_defClips[2].x, _defClips[2].y, _defClips[2].w, _defClips[2].h);
+        sprZ2.pushSprite(0, z2Y);
+        _defClips[2].active = false;
+    }
+    tft.clearClipRect();
 }
 
 void dashboardPushSpotlight(int16_t sx, int16_t sy, int16_t sw, int16_t sh) {
@@ -1305,6 +1654,9 @@ void dashboardFillGaps() {
 #define LOAD_LOGO_H     56
 #define LOAD_LOGO_X     ((SCREEN_W - LOAD_LOGO_W) / 2)
 #define LOAD_LOGO_Y     170
+#define LOAD_ISOTIPO_SIZE 64
+#define LOAD_ISOTIPO_X  ((SCREEN_W - LOAD_ISOTIPO_SIZE) / 2)
+#define LOAD_ISOTIPO_Y  (LOAD_LOGO_Y + (LOAD_LOGO_H - LOAD_ISOTIPO_SIZE) / 2)
 #define LOAD_BAR_W      300
 #define LOAD_BAR_H      6
 #define LOAD_BAR_R      (LOAD_BAR_H / 2)
@@ -1349,8 +1701,13 @@ void dashboardDrawLoading(LoadPhase phase) {
     if (phase == LOAD_LOGO) {
         tft.fillScreen(Colors::BG_BASE);
 
+        if (Colors::isLightTheme()) {
+            displayWaitVSync();
+            drawLemonIsotipo64(tft, LOAD_ISOTIPO_X, LOAD_ISOTIPO_Y);
+        }
+
         // ── Gray → Color logo fade animation (1.5s at 30fps) ──
-        {
+        if (!Colors::isLightTheme()) {
             // Draw color logo into a temp sprite
             LGFX_Sprite colorSpr(&tft);
             colorSpr.setPsram(true);
@@ -1547,7 +1904,6 @@ void dashboardHandleTouch(const TouchEvent& evt) {
 
 #include "data_models.h"
 
-static bool predictionModeActive = false;
 static uint32_t predEndEpoch = 0;      // Cached end-of-market epoch (UTC seconds)
 static uint32_t lastPredStepSec = 300; // Cached period step for direct countdown updates
 
@@ -1752,9 +2108,6 @@ void dashboardSetPredictionLayout(bool active) {
             Serial.println("[Dashboard] ERROR: sprite re-allocation failed!");
         }
 
-        // Refill gaps
-        dashboardFillGaps();
-
         Serial.printf("[Dashboard] Prediction layout: Z1=%d Z2=%d z2Y=%d\n", z1H, z2H, z2Y);
     }
 }
@@ -1762,9 +2115,10 @@ void dashboardSetPredictionLayout(bool active) {
 void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t selected,
                              const PolyPrediction* activePred, const PolyStats& stats,
                              bool loading, const char* statusMsg, float refPriceUsd,
-                             uint32_t periodStepSec,
+                             uint32_t periodStepSec, uint8_t activePeriodIdx,
                              const PredHistoryEntry* history,
-                             uint8_t histHead, uint8_t histCount) {
+                             uint8_t histHead, uint8_t histCount,
+                             const char* debugMsg) {
     if (s_muted) return;
     if (z2H <= 0) return;  // BTC-only layout — no Z2
     sprZ2.clearClipRect();
@@ -1784,13 +2138,20 @@ void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t s
     if (loading || count == 0) {
         if (loading) {
             drawCentered(sprZ2, "Cargando mercados...", z2H / 2 - 10, &Satoshi12, Colors::TEXT_SECONDARY);
+            if (statusMsg && statusMsg[0]) {
+                drawCentered(sprZ2, statusMsg, z2H / 2 + 10, &Satoshi9, Colors::TEXT_TERTIARY);
+            }
         } else {
             drawCentered(sprZ2, "Por ahora no hay", z2H / 2 - 18, &Satoshi12, Colors::TEXT_SECONDARY);
-            drawCentered(sprZ2, "Cambia de temporalidad para ver otra", z2H / 2 + 2, &Satoshi9, Colors::TEXT_TERTIARY);
+            drawCentered(sprZ2,
+                         (statusMsg && statusMsg[0]) ? statusMsg : "Cambia de temporalidad para ver otra",
+                         z2H / 2 + 2, &Satoshi9, Colors::TEXT_TERTIARY);
         }
         predEndEpoch = 0;
-        displayWaitVSync();
-        sprZ2.pushSprite(0, z2Y);
+        if (!_batchMode) {
+            displayWaitVSync();
+            sprZ2.pushSprite(0, z2Y);
+        }
         dirtyZones |= (1 << 2);
         return;
     }
@@ -1836,6 +2197,8 @@ void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t s
     drawProbabilityBar(sprZ2, MARGIN + CARD_PAD, PRED_BAR_Y,
                        CARD_W - 2 * CARD_PAD, PRED_BAR_H, mkt.yesPrice);
 
+    bool hasAnyPending = (activePred && activePred->conditionId[0] != '\0' &&
+                          activePred->resolved == 0);
     bool hasActive = (activePred && activePred->conditionId[0] != '\0' &&
                       strcmp(activePred->conditionId, mkt.conditionId) == 0);
     drawPredictionButton(sprZ2, PRED_BTN_YES_X, PRED_BTN_Y, PRED_BTN_W, PRED_BTN_H,
@@ -1849,20 +2212,60 @@ void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t s
         int sh = 28;
         drawGlassCard(sprZ2, MARGIN + CARD_PAD, sy, CARD_W - 2 * CARD_PAD, sh, 8);
 
-        char statsBuf[64];
-        snprintf(statsBuf, sizeof(statsBuf), "W %d   L %d   Racha %d",
-                 stats.wins, stats.losses, stats.streak);
+        char statsBuf[72];
+        if (hasAnyPending) {
+            snprintf(statsBuf, sizeof(statsBuf), "W %d   L %d   Racha %d   \xE2\x97\x8F",
+                     stats.wins, stats.losses, stats.streak);
+        } else {
+            snprintf(statsBuf, sizeof(statsBuf), "W %d   L %d   Racha %d",
+                     stats.wins, stats.losses, stats.streak);
+        }
         sprZ2.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_CARD);
         sprZ2.setTextDatum(lgfx::middle_center);
-        sprZ2.drawString(statsBuf, SCREEN_W / 2, sy + sh / 2, &Satoshi9);
+        sprZ2.drawString(statsBuf, SCREEN_W / 2, sy + 9, &Satoshi9);
+
+        // ── History dots (last 10, most recent on right) ──
+        if (history && histCount > 0) {
+            const uint8_t DOT_SIZE = 5;
+            const uint8_t DOT_GAP  = 3;
+            const uint8_t MAX_DOTS = 10;
+            uint8_t filtered[PRED_HISTORY_MAX] = {};
+            uint8_t n = 0;
+            for (uint8_t i = 0; i < histCount && n < MAX_DOTS; i++) {
+                int idx = ((int)histHead - 1 - i + (int)PRED_HISTORY_MAX) % (int)PRED_HISTORY_MAX;
+                if (history[idx].periodIdx != activePeriodIdx) continue;
+                filtered[n++] = (uint8_t)idx;
+            }
+            int totalW = n * DOT_SIZE + ((n > 0) ? ((n - 1) * DOT_GAP) : 0);
+            int startX = (SCREEN_W - totalW) / 2;
+            int dotY   = sy + sh - DOT_SIZE - 4;
+
+            for (uint8_t i = 0; i < n; i++) {
+                int idx = filtered[n - 1 - i];
+                uint8_t r = history[idx].result;
+                uint16_t col = (r == 1) ? Colors::POSITIVE
+                             : (r == 2) ? Colors::NEGATIVE
+                             : (r == 3) ? Colors::TEXT_SECONDARY  // cancelled
+                             :            Colors::SOLAR;   // pending
+                int x = startX + i * (DOT_SIZE + DOT_GAP);
+                sprZ2.fillRect(x, dotY, DOT_SIZE, DOT_SIZE, col);
+            }
+        }
     }
 
     // ── Active prediction / last resolution status (Y=176) ──
-    if (hasActive || (statusMsg && statusMsg[0])) {
+    if (hasAnyPending || (statusMsg && statusMsg[0])) {
         char predBuf[64];
         if (hasActive && activePred->resolved == 0) {
-            snprintf(predBuf, sizeof(predBuf), "Pendiente: %s (%.0f%%)",
+            snprintf(predBuf, sizeof(predBuf), "Pendiente: %s (%.0f%%) | mantener stats = cancelar",
                      activePred->chosenYes ? "SUBE" : "BAJA", activePred->probAtBet * 100);
+            sprZ2.setTextColor(Colors::SOLAR, Colors::BG_CARD);
+        } else if (hasAnyPending) {
+            const char* tf = (activePred->periodIdx < BTC_PERIOD_COUNT)
+                ? BTC_PERIODS[activePred->periodIdx].label
+                : "otro";
+            snprintf(predBuf, sizeof(predBuf), "Apuesta activa en %s: %s",
+                     tf, activePred->chosenYes ? "SUBE" : "BAJA");
             sprZ2.setTextColor(Colors::SOLAR, Colors::BG_CARD);
         } else if (hasActive && activePred->resolved == 1) {
             snprintf(predBuf, sizeof(predBuf), "Ganaste!");
@@ -1888,8 +2291,10 @@ void dashboardDrawPrediction(const PolyMarket* markets, uint8_t count, uint8_t s
     // ── Countdown progress bar (Y=186, H=6) + time text (Y=198) ──
     drawPredCountdown(periodStepSec);
 
-    displayWaitVSync();
-    sprZ2.pushSprite(0, z2Y);
+    if (!_batchMode) {
+        displayWaitVSync();
+        sprZ2.pushSprite(0, z2Y);
+    }
     dirtyZones |= (1 << 2);
 }
 
@@ -1907,14 +2312,16 @@ void dashboardUpdateCountdownDirect() {
     const int STRIP_H = z2H - STRIP_Y;  // to card bottom
     sprZ2.fillRect(MARGIN + 1, STRIP_Y, CARD_W - 2, STRIP_H, Colors::BG_CARD);
 
-    // Redraw bar + text into the sprite
     drawPredCountdown(lastPredStepSec);
 
-    // Push only the changed strip to screen
-    displayWaitVSync();
-    tft.setClipRect(0, z2Y + STRIP_Y, SCREEN_W, STRIP_H);
-    sprZ2.pushSprite(0, z2Y);
-    tft.clearClipRect();
+    if (_deferPush) {
+        unionClip(_defClips[2], 0, z2Y + STRIP_Y, SCREEN_W, STRIP_H);
+    } else {
+        displayWaitVSync();
+        tft.setClipRect(0, z2Y + STRIP_Y, SCREEN_W, STRIP_H);
+        sprZ2.pushSprite(0, z2Y);
+        tft.clearClipRect();
+    }
 }
 
 bool dashboardHitTestPredYes(int16_t x, int16_t y) {
@@ -1927,6 +2334,12 @@ bool dashboardHitTestPredNo(int16_t x, int16_t y) {
     int sprY = y - z2Y;
     return (x >= PRED_BTN_NO_X && x < PRED_BTN_NO_X + PRED_BTN_W &&
             sprY >= PRED_BTN_Y && sprY < PRED_BTN_Y + PRED_BTN_H);
+}
+
+bool dashboardHitTestPredStats(int16_t x, int16_t y) {
+    int sprY = y - z2Y;
+    return (x >= MARGIN + CARD_PAD && x < SCREEN_W - MARGIN - CARD_PAD &&
+            sprY >= 146 && sprY < 174);
 }
 
 

@@ -8,3 +8,48 @@ tools/fonts/Satoshi_Complete/
 cacrt_all.pem
 data/cert/
 gen_crt_bundle.py
+
+# Build artifacts
+tools/build/
+tools/dist/
+tools/dist*/
+*.spec
+
+# Debug/screenshot artifacts
+hero-*.png
+hero-*.json
+hero-*.txt
+landing-*.png
+landing-*.txt
+landing-*.md
+screen-*.json
+front-centroid.json
+case-*.json
+
+# Personal documents that ended up in src/
+src/*.pdf
+
+# Playwright / browser automation
+.playwright-cli/
+.playwright-mcp/
+test-results/
+
+# Vercel
+.vercel/
+landing/.vercel/
+
+# Worktrees
+.worktrees/
+
+# Claude / agent local config
+.claude/
+
+# Temp
+tmp/
+output/
+tools/__t.wav
+
+# Misc local
+Lemon-box-with-screen.stl
+run_gen_script.py
+lemon-box-flasher.skill
