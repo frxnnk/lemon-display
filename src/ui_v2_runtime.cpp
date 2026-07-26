@@ -33,6 +33,14 @@ static constexpr int V2_HERO_CLIP_X = 28;
 static constexpr int V2_HERO_CLIP_Y = 72;
 static constexpr int V2_HERO_CLIP_W = 424;
 static constexpr int V2_HERO_CLIP_H = 156;
+static constexpr int V2_HERO_TEXT_CLIP_X = 28;
+static constexpr int V2_HERO_TEXT_CLIP_Y = 72;
+static constexpr int V2_HERO_TEXT_CLIP_W = 212;
+static constexpr int V2_HERO_TEXT_CLIP_H = 128;
+static constexpr int V2_HERO_GRAPH_CLIP_X = 248;
+static constexpr int V2_HERO_GRAPH_CLIP_Y = 94;
+static constexpr int V2_HERO_GRAPH_CLIP_W = 204;
+static constexpr int V2_HERO_GRAPH_CLIP_H = 88;
 static constexpr int V2_NEWS_CLIP_X = 28;
 static constexpr int V2_NEWS_CLIP_Y = 228;
 static constexpr int V2_NEWS_CLIP_W = 424;
@@ -801,9 +809,15 @@ void v2UiUpdateStatus(const V2RuntimeSnapshot& snapshot, const V2RuntimeModel& m
 
 void v2UiUpdateStockHero(const V2RuntimeSnapshot& snapshot, const V2RuntimeModel& model) {
     if (!s_spriteReady || model.scene != V2_HOME) return;
-    s_v2Sprite.fillRect(V2_HERO_CLIP_X, V2_HERO_CLIP_Y, V2_HERO_CLIP_W, V2_HERO_CLIP_H, pal->bg);
+    s_v2Sprite.fillRect(V2_HERO_TEXT_CLIP_X, V2_HERO_TEXT_CLIP_Y,
+                        V2_HERO_TEXT_CLIP_W, V2_HERO_TEXT_CLIP_H, pal->bg);
+    s_v2Sprite.fillRect(V2_HERO_GRAPH_CLIP_X, V2_HERO_GRAPH_CLIP_Y,
+                        V2_HERO_GRAPH_CLIP_W, V2_HERO_GRAPH_CLIP_H, pal->bg);
     drawStockHero(snapshot);
-    pushClip(V2_HERO_CLIP_X, V2_HERO_CLIP_Y, V2_HERO_CLIP_W, V2_HERO_CLIP_H);
+    pushClip(V2_HERO_TEXT_CLIP_X, V2_HERO_TEXT_CLIP_Y,
+             V2_HERO_TEXT_CLIP_W, V2_HERO_TEXT_CLIP_H);
+    pushClip(V2_HERO_GRAPH_CLIP_X, V2_HERO_GRAPH_CLIP_Y,
+             V2_HERO_GRAPH_CLIP_W, V2_HERO_GRAPH_CLIP_H);
 }
 
 void v2UiUpdateStockPrice(const V2RuntimeSnapshot& snapshot, const V2RuntimeModel& model) {
