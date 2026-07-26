@@ -12,6 +12,8 @@ LGFX tft;
 // ── VSync counter (incremented by shared ISR on LCD VSync interrupt) ──
 static volatile uint32_t _vsync_count = 0;
 static intr_handle_t _vsync_intr = nullptr;
+static portMUX_TYPE _display_diag_mux = portMUX_INITIALIZER_UNLOCKED;
+static DisplayDiagnostics _display_diag = {};
 
 static void IRAM_ATTR vsync_counter_isr(void*) {
     _vsync_count++;
@@ -51,10 +53,38 @@ void displaySetupVSync() {
 void displayWaitVSync() {
     uint32_t v0 = _vsync_count;
     unsigned long t0 = millis();
+    bool timedOut = false;
     while (_vsync_count == v0) {
-        if (millis() - t0 > 25) break;  // Timeout: ~1.2 frames at 49Hz
+        if (millis() - t0 > 25) {
+            timedOut = true;
+            break;
+        }
         vTaskDelay(1);  // Yield 1ms to RTOS instead of busy-spinning
     }
+    portENTER_CRITICAL(&_display_diag_mux);
+    _display_diag.waitCalls++;
+    if (timedOut) _display_diag.waitTimeouts++;
+    portEXIT_CRITICAL(&_display_diag_mux);
+}
+
+void displayRecordPush(uint32_t bytes, uint32_t durationUs) {
+    portENTER_CRITICAL(&_display_diag_mux);
+    _display_diag.pushCount++;
+    _display_diag.pushedBytes += bytes;
+    _display_diag.lastPushUs = durationUs;
+    _display_diag.lastPushBytes = bytes;
+    if (durationUs > _display_diag.maxPushUs) _display_diag.maxPushUs = durationUs;
+    if (bytes > _display_diag.maxPushBytes) _display_diag.maxPushBytes = bytes;
+    portEXIT_CRITICAL(&_display_diag_mux);
+}
+
+DisplayDiagnostics displayGetDiagnostics() {
+    DisplayDiagnostics snapshot;
+    portENTER_CRITICAL(&_display_diag_mux);
+    snapshot = _display_diag;
+    portEXIT_CRITICAL(&_display_diag_mux);
+    snapshot.vsyncCount = _vsync_count;
+    return snapshot;
 }
 
 void displaySetBrightness(uint8_t level) {
