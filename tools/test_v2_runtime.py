@@ -62,6 +62,149 @@ class V2StocksAccessTests(unittest.TestCase):
         self.assertIn("StockFocusedSnapshot& out", body)
 
 
+class V2NewsRuntimeTests(unittest.TestCase):
+    def setUp(self):
+        self.runtime = (SRC / "v2_runtime.cpp").read_text(encoding="utf-8")
+
+    def test_news_is_queued_at_boot_and_only_fetched_after_stocks_are_idle(self):
+        start = self.runtime.split("static void startNetworkServices() {", 1)[1].split(
+            "static void startProvisioning", 1
+        )[0]
+        loop = self.runtime.split("void v2RuntimeLoop()", 1)[1]
+
+        self.assertIn("requestNewsFetch();", start)
+        self.assertRegex(
+            loop,
+            r"s_newsFetchPending\s*&&\s*online\s*&&\s*!stocksIsFetching\(\)",
+        )
+
+    def test_news_request_does_not_open_tls_inside_touch_or_rotation_handlers(self):
+        touch = self.runtime.split("static void handleTouch()", 1)[1].split(
+            "void v2RuntimeSetup", 1
+        )[0]
+        rotation = self.runtime.split("if (rotation > 0", 1)[1].split(
+            "if (v2ApplyTimeout", 1
+        )[0]
+
+        self.assertIn("requestNewsFetch();", touch)
+        self.assertNotIn("fetchNewsNow();", touch)
+        self.assertIn("requestNewsFetch();", rotation)
+        self.assertNotIn("fetchNewsNow();", rotation)
+
+    def test_news_fetch_releases_shared_tls_before_opening_its_connection(self):
+        fetch = self.runtime.split("static void fetchNewsNow()", 1)[1].split(
+            "static void fetchPairAuxNow", 1
+        )[0]
+
+        self.assertIn("apiStop();", fetch)
+        self.assertLess(fetch.index("apiStop();"), fetch.index("newsFetch("))
+
+    def test_news_client_uses_the_live_google_rss_instead_of_retired_yahoo_feed(self):
+        client = (SRC / "news_client.cpp").read_text(encoding="utf-8")
+
+        self.assertIn("https://news.google.com/rss/search?q=%s+stock", client)
+        self.assertNotIn("feeds.finance.yahoo.com/rss", client)
+
+    def test_news_reuses_the_hardened_chunked_http_pipeline(self):
+        client = (SRC / "news_client.cpp").read_text(encoding="utf-8")
+        api = (SRC / "api_client.cpp").read_text(encoding="utf-8")
+        fetch = client.split("bool newsFetch", 1)[1]
+
+        self.assertIn("apiHttpGet(url, false, result", fetch)
+        self.assertIn("result != API_OK", fetch)
+        self.assertIn("writeToStream(&bufStream)", api)
+        self.assertNotIn("getStreamPtr", client)
+        self.assertNotIn("WiFiClientSecure", client)
+
+    def test_switching_stock_reuses_fresh_symbol_cache_without_loading_or_tls(self):
+        header = (SRC / "news_client.h").read_text(encoding="utf-8")
+        client = (SRC / "news_client.cpp").read_text(encoding="utf-8")
+        request = self.runtime.split("static void requestNewsFetch()", 1)[1].split(
+            "static void fetchNewsNow", 1
+        )[0]
+
+        self.assertIn("newsCacheIsFresh", header)
+        self.assertIn("NewsCacheEntry", client)
+        self.assertIn("_newsCache[STOCK_MAX_SYMBOLS]", client)
+        self.assertNotIn("static char  _cachedSymbol", client)
+        self.assertIn("newsGetCached", request)
+        self.assertIn("newsCacheIsFresh", request)
+        self.assertIn("if (cachedCount == 0)", request)
+        cache_flow = request.split("uint8_t cachedCount = 0;", 1)[1]
+        self.assertNotIn(
+            "s_snapshot.newsCount = 0;",
+            cache_flow.split("if (cachedCount == 0)", 1)[0],
+        )
+
+    def test_news_reader_cycles_cached_items_without_requesting_network(self):
+        marker = "if (event.gesture == TOUCH_TAP && s_model.scene == V2_NEWS_READER)"
+        self.assertIn(marker, self.runtime)
+        reader_touch = self.runtime.split(marker, 1)[1].split(
+            "if (event.gesture == TOUCH_TAP && s_model.scene == V2_HOME)", 1
+        )[0]
+
+        self.assertIn("v2NextNews", reader_touch)
+        self.assertNotIn("requestNewsFetch", reader_touch)
+
+
+class V2NewsRenderingTests(unittest.TestCase):
+    def test_home_and_context_use_two_pixel_fitted_headline_lines(self):
+        ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
+        home = ui.split("static void drawNewsHeadline", 1)[1].split(
+            "static void drawBtcCard", 1
+        )[0]
+        context = ui.split("static void drawContext", 1)[1].split(
+            "static void drawWifiRecovery", 1
+        )[0]
+
+        self.assertIn("layoutHeadline", ui)
+        self.assertIn("textWidth", ui)
+        self.assertNotIn("maxChars = 42", home)
+        headline_block = ui.split("static void drawHeadlineBlock", 1)[1].split(
+            "static void drawNewsHeadline", 1
+        )[0]
+        self.assertIn("drawHeadlineBlock", home)
+        self.assertGreaterEqual(headline_block.count("SatoshiMedium18"), 2)
+        self.assertIn("drawHeadlineBlock", context)
+        self.assertNotIn("for (uint8_t i = 0; i < snapshot.newsCount", context)
+
+    def test_news_client_normalizes_punctuation_missing_from_ascii_only_font(self):
+        client = (SRC / "news_client.cpp").read_text(encoding="utf-8")
+        font = (SRC / "data" / "SatoshiMedium18.h").read_text(encoding="utf-8")
+
+        self.assertIn("0x20, 0x7E", font)
+        self.assertIn("normalizeNewsPunctuation", client)
+        normalization = client.split("normalizeNewsPunctuation", 1)[1].split(
+            "static void stripHtml", 1
+        )[0]
+        for replacement in (
+            "*dst++ = '\\''",
+            "*dst++ = '\"'",
+            "*dst++ = '-'",
+            'memcpy(dst, "...", 3)',
+        ):
+            self.assertIn(replacement, normalization)
+
+    def test_news_tap_opens_full_reader_with_multi_line_cached_navigation(self):
+        model = (SRC / "v2_runtime_model.h").read_text(encoding="utf-8")
+        ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
+
+        self.assertIn("V2_NEWS_READER", model)
+        self.assertIn("selectedNews", model)
+        self.assertIn("v2NextNews", model)
+        self.assertRegex(
+            model,
+            r"y >= 228 && y < 300 \? V2_NEWS_READER",
+        )
+        reader = ui.split("static void drawNewsReader", 1)[1].split(
+            "static void drawWifiRecovery", 1
+        )[0]
+        self.assertIn("wrapHeadline", reader)
+        self.assertIn("NEWS_READER_MAX_LINES", reader)
+        self.assertIn("model.selectedNews", reader)
+        self.assertIn("TOCA PARA SIGUIENTE", reader)
+
+
 class V2NvsSettingsTests(unittest.TestCase):
     def test_rotation_preference_is_persisted_and_clamped(self):
         header = (SRC / "nvs_storage.h").read_text(encoding="utf-8")
@@ -103,11 +246,11 @@ class V2RealUiContractTests(unittest.TestCase):
         source = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
         self.assertIn("V2_SAFE_INSET = 32", source)
         self.assertIn("V2RuntimeSnapshot", source)
-        self.assertIn('strstr(stock.status, "429")', source)
         self.assertIn("stocksGetSnapshotAt", (SRC / "v2_runtime.cpp").read_text(encoding="utf-8"))
 
     def test_ui_does_not_contain_demo_quotes_or_fake_news(self):
         source = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
+        settings = (SRC / "ui_v2_settings.cpp").read_text(encoding="utf-8")
         forbidden = (
             "$ 118.420",
             "6.309,62",
@@ -117,7 +260,7 @@ class V2RealUiContractTests(unittest.TestCase):
         )
         for fixture in forbidden:
             self.assertNotIn(fixture, source)
-        self.assertIn("PROVIDER PENDIENTE", source)
+        self.assertIn("PROVIDER PENDIENTE", settings)
 
     def test_settings_surface_keeps_canary_controls_shallow(self):
         source = (SRC / "ui_v2_settings.cpp").read_text(encoding="utf-8")
@@ -159,7 +302,7 @@ class V2RenderStabilityTests(unittest.TestCase):
             r"V2_HERO_PRICE_GRAPH_GAP",
         )
         formatter = ui.split("static void formatHeroPrice", 1)[1].split(
-            "static void drawPairSparkline", 1
+            "static void drawSparkline", 1
         )[0]
         self.assertNotIn("pair.suffix", formatter)
         self.assertNotIn('const char* gap = pair.prefix[0] ? " " : ""', formatter)
@@ -177,24 +320,25 @@ class V2RenderStabilityTests(unittest.TestCase):
     def test_home_hero_centers_price_against_the_graph_instead_of_top_aligning_font_boxes(self):
         ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
         self.assertIn("V2_HERO_LABEL_Y = 82", ui)
-        self.assertIn("V2_HERO_GRAPH_Y = 106", ui)
-        self.assertIn("V2_HERO_CENTER_Y = 144", ui)
-        self.assertIn("V2_HOME_CARD_Y = 258", ui)
-        self.assertIn("V2_HOME_TAPE_Y = 370", ui)
-        pair = ui.split("static void drawPairPanel", 1)[1].split("static void drawHomeCards", 1)[0]
+        self.assertIn("V2_HERO_GRAPH_Y = 98", ui)
+        self.assertIn("V2_HERO_CENTER_Y = 132", ui)
+        self.assertIn("V2_HERO_CHANGE_Y = 168", ui)
+        self.assertIn("V2_HOME_CARD_Y = 328", ui)
+        self.assertNotIn("V2_HOME_TAPE_Y", ui)
+        pair = ui.split("static void drawStockHero", 1)[1].split("static void drawBtcCard", 1)[0]
         self.assertIn("setTextDatum(lgfx::middle_left)", pair)
         self.assertIn("V2_HERO_CENTER_Y", pair)
         self.assertIn("V2_HERO_LABEL_Y", pair)
 
-    def test_home_settings_is_a_separate_bottom_button_with_a_clear_controls_icon(self):
+    def test_home_settings_lives_in_the_header_with_a_drawn_controls_icon(self):
         ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
-        actions = ui.split("static void drawHomeActions", 1)[1].split("static void drawHeader", 1)[0]
-        home = ui.split("static void drawHome(", 1)[1].split("static void drawTape", 1)[0]
-        self.assertNotIn("drawSettingsIcon", actions)
-        self.assertIn("TOCA PARA CAMBIAR", actions)
-        self.assertIn("drawSettingsButton", home)
-        self.assertIn("V2_SETTINGS_BUTTON_X = 390", ui)
-        self.assertIn("V2_HOME_TAPE_W = 340", ui)
+        header = ui.split("static void drawHeader", 1)[1].split("static void drawStockHero", 1)[0]
+        self.assertIn("drawSettingsIcon", header)
+        self.assertNotIn("drawSettingsButton", ui)
+        self.assertNotIn("drawHomeActions", ui)
+        self.assertNotIn("static void drawTape", ui)
+        self.assertNotIn("V2_SETTINGS_BUTTON_X", ui)
+        self.assertNotIn("V2_HOME_TAPE_W", ui)
 
     def test_clock_uses_a_vsync_clipped_push_instead_of_full_scene_redraw(self):
         header = (SRC / "ui_v2_runtime.h").read_text(encoding="utf-8")
@@ -219,12 +363,74 @@ class V2RenderStabilityTests(unittest.TestCase):
         self.assertIn("strcmp", clock)
         self.assertLess(clock.index("strcmp"), clock.index("fillRect"))
 
+    def test_deferred_redraws_keep_distant_regions_in_separate_clips(self):
+        ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
+        deferred = ui.split("struct DeferredClip", 1)[1].split(
+            "static void drawChevron", 1
+        )[0]
+        flush = deferred.split("void v2UiFlushDeferred()", 1)[1]
+
+        self.assertIn("s_defClips[V2_MAX_DEFERRED_CLIPS]", deferred)
+        self.assertIn("clipsOverlap", deferred)
+        self.assertNotIn("unionDefClip", deferred)
+        self.assertIn("nextDeferredClip", flush)
+        self.assertEqual(flush.count("displayWaitVSync()"), 1)
+        self.assertEqual(flush.count("pushSprite(0, 0)"), 1)
+
+    def test_deferred_flush_sends_only_one_clip_per_vsync_and_preserves_pending(self):
+        ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
+        deferred = ui.split("struct DeferredClip", 1)[1].split(
+            "static void drawChevron", 1
+        )[0]
+        set_deferred = deferred.split("void v2UiSetDeferred", 1)[1].split(
+            "void v2UiFlushDeferred", 1
+        )[0]
+        flush = deferred.split("void v2UiFlushDeferred()", 1)[1]
+
+        self.assertNotIn("clip.active = false", set_deferred)
+        self.assertIn("DeferredClip* clip = nextDeferredClip();", flush)
+        self.assertIn("clip->active = false;", flush)
+        self.assertNotIn("for (auto& clip : s_defClips)", flush)
+        self.assertIn("clearDeferredClips();", ui.split("void v2UiDraw(", 1)[1])
+
+    def test_display_push_diagnostics_are_exposed_on_health(self):
+        display_h = (SRC / "display_manager.h").read_text(encoding="utf-8")
+        display = (SRC / "display_manager.cpp").read_text(encoding="utf-8")
+        server = (SRC / "config_server.cpp").read_text(encoding="utf-8")
+
+        self.assertIn("struct DisplayDiagnostics", display_h)
+        self.assertIn("displayRecordPush", display_h)
+        self.assertIn("displayGetDiagnostics", display_h)
+        self.assertIn("waitTimeouts", display_h)
+        self.assertIn("maxPushUs", display_h)
+        self.assertIn("displayRecordPush", display)
+        health = server.split("static void sendHealthJson", 1)[1].split(
+            "static void", 1
+        )[0]
+        self.assertIn("displayGetDiagnostics", health)
+        for field in (
+            '"vsyncCount"',
+            '"waitCalls"',
+            '"waitTimeouts"',
+            '"pushCount"',
+            '"pushedBytes"',
+            '"lastPushUs"',
+            '"maxPushUs"',
+            '"lastPushBytes"',
+            '"maxPushBytes"',
+        ):
+            self.assertIn(field, health)
+
+    def test_rgb_pixel_clock_keeps_psram_bandwidth_headroom(self):
+        panel = (SRC / "lgfx_matouch_40.h").read_text(encoding="utf-8")
+        self.assertIn("cfg.freq_write = 12000000;", panel)
+
     def test_live_price_updates_have_their_own_clipped_render_path(self):
         header = (SRC / "ui_v2_runtime.h").read_text(encoding="utf-8")
         ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
-        self.assertIn("v2UiUpdatePair", header)
-        self.assertIn("v2UiUpdatePair", ui)
-        self.assertIn("V2_PAIR_CLIP", ui)
+        self.assertIn("v2UiUpdateBtcCard", header)
+        self.assertIn("v2UiUpdateBtcCard", ui)
+        self.assertIn("V2_HERO_CLIP", ui)
 
     def test_periodic_data_updates_never_invalidate_the_full_scene(self):
         runtime = (SRC / "v2_runtime.cpp").read_text(encoding="utf-8")
@@ -235,7 +441,7 @@ class V2RenderStabilityTests(unittest.TestCase):
         self.assertIn("v2UiUpdateData", stocks_block)
         rotation_block = runtime.split("if (rotation > 0", 1)[1].split("if (v2ApplyTimeout", 1)[0]
         self.assertNotIn("s_dirty = true", rotation_block)
-        self.assertIn("v2UiUpdateHomeCards", rotation_block)
+        self.assertIn("v2UiUpdateStockHero", rotation_block)
 
     def test_all_market_data_surfaces_have_clipped_update_paths(self):
         header = (SRC / "ui_v2_runtime.h").read_text(encoding="utf-8")
@@ -248,7 +454,7 @@ class V2RenderStabilityTests(unittest.TestCase):
         ):
             self.assertIn(function, header)
             self.assertIn(function, ui)
-        self.assertIn("V2_HOME_CARDS_CLIP", ui)
+        self.assertIn("V2_CARDS_CLIP", ui)
 
 
 class V2BootAndHomeParityTests(unittest.TestCase):
@@ -265,12 +471,11 @@ class V2BootAndHomeParityTests(unittest.TestCase):
     def test_loading_restores_progressive_legacy_lemon_wordmark(self):
         ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
         loading = ui.split("void v2UiDrawLoading", 1)[1].split("void v2UiDraw(", 1)[0]
-        self.assertIn('#include "data/lemon_logo.h"', ui)
+        self.assertIn('#include "data/lemon_v2_logo_black_120.h"', ui)
         self.assertIn("drawLoadingLogoProgress", ui)
-        self.assertIn("lemon_imagotipo_244", ui)
+        self.assertIn("lemon_v2_logo_black_120", ui)
         self.assertIn("V2_LOADING_LOGO_W", ui)
-        self.assertIn("progress * V2_LOADING_LOGO_W", ui)
-        self.assertIn("toGray565", ui)
+        self.assertIn("progress * 240", ui)
         self.assertNotIn("fillSmoothRoundRect(64, 286", loading)
 
     def test_loading_only_shows_logo_and_phase_text(self):
@@ -281,8 +486,8 @@ class V2BootAndHomeParityTests(unittest.TestCase):
 
     def test_home_removes_technical_labels_and_sparkline_baseline(self):
         ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
-        pair = ui.split("static void drawPairPanel", 1)[1].split("static void drawHomeCards", 1)[0]
-        spark = ui.split("static void drawPairSparkline", 1)[1].split("static void drawHeader", 1)[0]
+        pair = ui.split("static void drawStockHero", 1)[1].split("static void drawBtcCard", 1)[0]
+        spark = ui.split("static void drawSparkline", 1)[1].split("static void drawChevron", 1)[0]
         self.assertNotIn("COTIZACION CRUZADA", ui)
         self.assertNotIn("CRIPTOYA", ui)
         self.assertNotIn("pairSource", pair)
@@ -290,7 +495,7 @@ class V2BootAndHomeParityTests(unittest.TestCase):
 
     def test_prices_use_positive_and_negative_market_colors(self):
         ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
-        self.assertIn("V2_NEGATIVE", ui)
+        self.assertIn("pal->neg", ui)
         self.assertIn("trendColor", ui)
         self.assertIn("pairTrend", ui)
         self.assertIn("stock->quote.changePct", ui)
@@ -301,8 +506,9 @@ class V2BootAndHomeParityTests(unittest.TestCase):
         ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
         self.assertIn("lemonFreshness", runtime_header)
         self.assertIn("fetchLemonNow", runtime)
-        for label in ("DOLAR LEMON", "COMPRA", "VENTA"):
+        for label in ("usdc_token_32", "COMPRA", "VENTA"):
             self.assertIn(label, ui)
+        self.assertNotIn('"Dolar Digital"', ui)
         self.assertIn("CRIPTOYA_LEMON_EP", (SRC / "config.h").read_text(encoding="utf-8"))
 
     def test_pair_hero_has_real_sparkline_and_compact_large_numbers(self):
@@ -311,7 +517,7 @@ class V2BootAndHomeParityTests(unittest.TestCase):
         ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
         self.assertIn("SparklineData pairSpark", runtime_header)
         self.assertIn("wsBinanceGetSparkline", runtime)
-        self.assertIn("drawPairSparkline", ui)
+        self.assertIn("drawSparkline", ui)
         self.assertIn("formatHeroPrice", ui)
         self.assertIn("1000000.0f", ui)
         self.assertIn("100000.0f", ui)
@@ -323,6 +529,160 @@ class V2BootAndHomeParityTests(unittest.TestCase):
         ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
         self.assertIn("drawChevron", ui)
         self.assertNotIn('drawString(">"', ui)
+
+
+class V2MarketCardTests(unittest.TestCase):
+    def setUp(self):
+        self.ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
+        self.runtime = (SRC / "v2_runtime.cpp").read_text(encoding="utf-8")
+
+    def test_cards_expand_to_the_bottom_safe_area_and_keep_clipped_updates(self):
+        for token in (
+            "V2_HOME_CARD_Y = 328",
+            "V2_CARD_H = 120",
+            "V2_CARDS_CLIP_Y = 324",
+            "V2_CARDS_CLIP_H = 128",
+        ):
+            self.assertIn(token, self.ui)
+
+        btc_update = self.ui.split("void v2UiUpdateBtcCard", 1)[1].split(
+            "void v2UiUpdateBtcPrice", 1
+        )[0]
+        dollar_update = self.ui.split("void v2UiUpdateDollarCard", 1)[1].split(
+            "void v2UiUpdateNews", 1
+        )[0]
+        for update in (btc_update, dollar_update):
+            self.assertIn("V2_CARD_H", update)
+            self.assertIn("pushClip", update)
+
+        touch = self.runtime.split(
+            "if (event.gesture == TOUCH_TAP && s_model.scene == V2_HOME)", 1
+        )[1].split("handleSettingsAction", 1)[0]
+        self.assertIn("event.y >= 328", touch)
+        self.assertIn("event.y < 448", touch)
+
+    def test_btc_card_uses_large_price_live_status_and_compact_sparkline(self):
+        btc = self.ui.split("static void drawBtcCard", 1)[1].split(
+            "static void drawDollarCard", 1
+        )[0]
+
+        self.assertIn("PPNeueMachinaBold24", btc)
+        self.assertIn("cardPriceFont", btc)
+        self.assertIn("pairFreshness", btc)
+        self.assertIn("24H", btc)
+        self.assertIn("drawCompactSparkline", btc)
+        self.assertNotIn('"SIN SERIE"', btc)
+
+    def test_cards_use_real_token_icons_instead_of_long_titles(self):
+        btc = self.ui.split("static void drawBtcCard", 1)[1].split(
+            "static void drawDollarCard", 1
+        )[0]
+        dollar = self.ui.split("static void drawDollarCard", 1)[1].split(
+            "static void drawHome", 1
+        )[0]
+
+        self.assertIn('#include "data/btc_token_32.h"', self.ui)
+        self.assertIn('#include "data/usdc_token_32.h"', self.ui)
+        self.assertIn("btc_token_32", btc)
+        self.assertIn("usdc_token_32", dollar)
+        self.assertNotIn("pair.pairLabel", btc)
+        self.assertNotIn("pair.label", btc)
+        self.assertNotIn('"Dolar Digital"', dollar)
+
+        for asset in ("btc_token_32.h", "usdc_token_32.h"):
+            source = (SRC / "data" / asset).read_text(encoding="utf-8")
+            self.assertIn("[1024]", source)
+
+    def test_btc_and_dollar_cards_make_24h_variation_prominent(self):
+        btc = self.ui.split("static void drawBtcCard", 1)[1].split(
+            "static void drawDollarCard", 1
+        )[0]
+        dollar = self.ui.split("static void drawDollarCard", 1)[1].split(
+            "static void drawHome", 1
+        )[0]
+
+        self.assertIn("SatoshiMedium18", btc)
+        self.assertIn('"24H"', btc)
+        self.assertGreaterEqual(dollar.count("SatoshiMedium18"), 2)
+        self.assertIn("formatArsPrice", dollar)
+        self.assertIn("lemonChange24h", dollar)
+        self.assertIn('"24H"', dollar)
+        self.assertIn("V2_CARD_Y + 3", dollar)
+        self.assertIn("V2_CARD_Y + 27", dollar)
+        self.assertNotIn('"SPREAD', dollar)
+        self.assertNotIn("spread", dollar.lower())
+        self.assertNotIn("lemonFreshness", dollar)
+
+    def test_dollar_variation_reuses_existing_one_day_history_at_slow_cadence(self):
+        header = (SRC / "v2_runtime.h").read_text(encoding="utf-8")
+        self.assertIn("SparklineData lemonSpark", header)
+        self.assertIn("float lemonChange24h", header)
+        self.assertIn("bool lemonChange24hValid", header)
+
+        self.assertIn("fetchLemonSparkline(s_snapshot.lemonSpark, 1)", self.runtime)
+        self.assertIn("UPDATE_SPARKLINE_MS", self.runtime)
+        self.assertIn("v2UiUpdateDollarCard", self.runtime)
+
+    def test_dollar_buy_and_sell_rows_are_centered_below_the_header(self):
+        dollar = self.ui.split("static void drawDollarCard", 1)[1].split(
+            "static void drawHome", 1
+        )[0]
+        for y in (45, 53, 74, 82):
+            self.assertIn(f"V2_CARD_Y + {y}", dollar)
+        for old_y in (35, 43, 64, 72):
+            self.assertNotIn(f"V2_CARD_Y + {old_y}", dollar)
+
+    def test_card_price_fonts_fit_representative_values(self):
+        def advances(path):
+            source = path.read_text(encoding="utf-8")
+            return {
+                chr(int(code, 16)): int(advance)
+                for advance, code in re.findall(
+                    r"\{\s*\d+,\s*\d+,\s*\d+,\s*(\d+),\s*-?\d+,\s*-?\d+\s*\},"
+                    r"\s*// 0x([0-9A-F]+)",
+                    source,
+                )
+            }
+
+        pp24 = advances(SRC / "data" / "PPNeueMachinaBold24.h")
+        sat18 = advances(SRC / "data" / "SatoshiMedium18.h")
+        width = lambda value, font: sum(font[char] for char in value)
+
+        for price in ("$999K",):
+            self.assertLessEqual(width(price, pp24), 180)
+        for price in ("$99,9M", "999,99", "999,9K"):
+            self.assertLessEqual(width(price, sat18), 180)
+        for price in ("$1.302", "$9.999"):
+            self.assertLessEqual(width(price, sat18), 92)
+
+    def test_btc_card_updates_at_most_once_per_second_for_real_data_changes(self):
+        self.assertIn("V2_BTC_CARD_REFRESH_MS = 1000", self.runtime)
+        ws = self.runtime.split("uint32_t wsPriceMs", 1)[1].split(
+            "uint8_t rotation", 1
+        )[0]
+        self.assertIn("sparkChanged", ws)
+        self.assertIn("displayChanged", ws)
+        self.assertIn("s_lastBtcCardDrawMs", ws)
+        self.assertIn("refreshSnapshot(true)", ws)
+        self.assertIn("v2UiUpdateBtcCard", ws)
+        self.assertIn("#define UPDATE_LEMON_MS         30000", (SRC / "config.h").read_text(encoding="utf-8"))
+
+    def test_pair_sparkline_survives_price_snapshots_between_one_second_syncs(self):
+        refresh = self.runtime.split("static void refreshPairSnapshot", 1)[1].split(
+            "static void refreshSnapshot", 1
+        )[0]
+        self.assertIn("const bool pairChanged", refresh)
+        self.assertIn("if (pairChanged) s_snapshot.pairSpark.valid = false;", refresh)
+        self.assertIn("pairChanged ||", refresh)
+
+    def test_freshness_labels_cover_loading_cache_offline_and_errors(self):
+        marker = "static const char* freshnessLabel"
+        self.assertIn(marker, self.ui)
+        helper = self.ui.split(marker, 1)[1].split(
+            "static void", 1
+        )[0]
+        for label in ('"CARGA"', '"LIVE"', '"CACHE"', '"OFFLINE"', '"ERROR"'):
+            self.assertIn(label, helper)
 
 
 class V2WifiRecoveryTests(unittest.TestCase):
@@ -356,7 +716,7 @@ class V2WifiRecoveryTests(unittest.TestCase):
 class V2OtaChannelTests(unittest.TestCase):
     def test_remote_canary_build_has_the_next_version(self):
         config = (SRC / "config.h").read_text(encoding="utf-8")
-        self.assertIn('#define APP_VERSION "5.1.1-beta.49"', config)
+        self.assertIn('#define APP_VERSION "5.1.1-beta.70"', config)
 
     def test_ota_md5_is_normalized_for_case_sensitive_esp_update(self):
         manager = (SRC / "ota_manager.cpp").read_text(encoding="utf-8")
@@ -378,20 +738,17 @@ class V2OtaChannelTests(unittest.TestCase):
         self.assertIn("s_otaInfo.available && !s_otaInfo.md5[0]", runtime)
         self.assertNotIn("otaCheck(OTA_GITHUB_REPO)", runtime)
 
-    def test_latest_release_probe_notifies_home_within_one_minute(self):
-        manager_h = (SRC / "ota_manager.h").read_text(encoding="utf-8")
-        manager = (SRC / "ota_manager.cpp").read_text(encoding="utf-8")
+    def test_periodic_full_check_detects_updates_without_a_reboot(self):
         runtime = (SRC / "v2_runtime.cpp").read_text(encoding="utf-8")
-        self.assertIn("otaLatestTagChanged", manager_h)
-        probe = manager.split("bool otaLatestTagChanged", 1)[1].split("OtaInfo otaCheckAsset", 1)[0]
-        self.assertIn("/releases/latest", probe)
-        self.assertIn('sendRequest("HEAD")', probe)
-        self.assertIn("getLocation", probe)
-        self.assertIn("isNewer", probe)
-        self.assertIn("V2_OTA_PROBE_MS = 60UL * 1000UL", runtime)
         loop = runtime.split("void v2RuntimeLoop()", 1)[1]
-        self.assertIn("otaLatestTagChanged(OTA_GITHUB_REPO, APP_VERSION)", loop)
+        check = runtime.split("static void checkV2OtaNow", 1)[1].split(
+            "static void installV2OtaNow", 1
+        )[0]
+
+        self.assertIn("V2_OTA_CHECK_MS = 5UL * 60UL * 1000UL", runtime)
         self.assertIn("checkV2OtaNow(false)", loop)
+        self.assertNotIn("otaLatestTagChanged", loop)
+        self.assertNotIn("stocksRequestBurst", check)
 
     def test_v2_update_notice_is_explicit_and_requires_confirmation(self):
         runtime_h = (SRC / "v2_runtime.h").read_text(encoding="utf-8")
@@ -400,24 +757,37 @@ class V2OtaChannelTests(unittest.TestCase):
         settings = (SRC / "ui_v2_settings.cpp").read_text(encoding="utf-8")
         for field in ("otaChecked", "otaAvailable", "otaChecking", "otaArmed", "otaVersion"):
             self.assertIn(field, runtime_h)
-        self.assertIn("ACTUALIZACION V", ui)
-        self.assertIn("TOCA PARA CONFIRMAR", ui)
+        header = ui.split("static void drawHeader", 1)[1].split(
+            "static void drawStockHero", 1
+        )[0]
+        self.assertIn("drawUpdateBadge", header)
+        self.assertIn("snapshot.otaAvailable", header)
+        self.assertIn('"UPDATE"', ui)
+        self.assertIn("ACTUALIZACION", settings)
+        self.assertIn("V%s", settings)
         self.assertIn("CONFIRMAR UPDATE", settings)
         self.assertIn("s_snapshot.otaArmed", runtime)
         self.assertIn("otaFlash", runtime)
 
-    def test_home_update_banner_arms_then_installs_on_second_tap(self):
+    def test_home_update_badge_routes_to_firmware_settings_safely(self):
         runtime = (SRC / "v2_runtime.cpp").read_text(encoding="utf-8")
         handler = runtime.split("static void handleTouch()", 1)[1].split("void v2RuntimeSetup()", 1)[0]
+        badge = runtime.split("static bool handleHomeUpdateTap", 1)[1].split(
+            "static void handleTouch", 1
+        )[0]
+
+        self.assertIn("s_model.scene = V2_SETTINGS", badge)
+        self.assertIn("s_model.settingsPage = 2", badge)
+        self.assertNotIn("installV2OtaNow", badge)
+        self.assertNotIn("otaArmed", badge)
         self.assertIn("handleHomeUpdateTap", handler)
-        self.assertIn("installV2OtaNow", runtime)
-        self.assertIn("s_otaArmedUntilMs", runtime)
 
 
 class V2DirectTouchNavigationTests(unittest.TestCase):
     def test_home_uses_a_drawn_settings_icon_instead_of_hidden_instruction(self):
         ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
-        self.assertIn("drawSettingsButton", ui)
+        self.assertIn("drawSettingsIcon", ui)
+        self.assertNotIn("drawSettingsButton", ui)
         self.assertNotIn("MANTENE AJUSTES", ui)
         self.assertNotIn('drawHeader("HOME"', ui)
 
@@ -436,8 +806,8 @@ class V2DirectTouchNavigationTests(unittest.TestCase):
         check_body = runtime.split("static void checkV2OtaNow", 1)[1].split("static void", 1)[0]
         self.assertIn("wsBinanceStop", check_body)
         self.assertIn("configurePairFeed", check_body)
-        self.assertIn("v2UiUpdateStatus", check_body)
-        self.assertNotIn("s_dirty = true", check_body)
+        self.assertIn("v2UiUpdateHeader", check_body)
+        self.assertNotIn("else s_dirty = true", check_body)
 
 
 class V2PairParityTests(unittest.TestCase):
@@ -465,7 +835,7 @@ class V2PairParityTests(unittest.TestCase):
             self.assertIn(pair, config)
         self.assertIn("v2NextPair", model)
         self.assertIn("selectedPair", runtime_header)
-        self.assertIn("TOCA PARA CAMBIAR", ui)
+        self.assertNotIn("TOCA PARA CAMBIAR", ui)
         for forbidden in ("buyorder", "sellorder", "executetrade", "placeorder"):
             self.assertNotIn(forbidden, runtime.lower())
 

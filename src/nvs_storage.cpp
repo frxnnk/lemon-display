@@ -614,6 +614,14 @@ void nvsSetV2Pair(uint8_t pair) {
     prefs.putUChar("v2_pair", pair < BTC_PAIR_COUNT ? pair : 0);
 }
 
+uint8_t nvsGetV2Theme() {
+    return prefs.getUChar("v2_theme", 1);
+}
+
+void nvsSetV2Theme(uint8_t theme) {
+    prefs.putUChar("v2_theme", theme);
+}
+
 void nvsFactoryReset() {
     prefs.clear();
     Serial.println("[NVS] Factory reset — all keys erased");

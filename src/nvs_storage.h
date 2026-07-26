@@ -95,5 +95,7 @@ uint8_t  nvsGetV2RotationSeconds();
 void     nvsSetV2RotationSeconds(uint8_t seconds);
 uint8_t  nvsGetV2Pair();
 void     nvsSetV2Pair(uint8_t pair);
+uint8_t  nvsGetV2Theme();
+void     nvsSetV2Theme(uint8_t theme);
 
 void     nvsFactoryReset();
