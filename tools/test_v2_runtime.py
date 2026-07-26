@@ -425,6 +425,25 @@ class V2RenderStabilityTests(unittest.TestCase):
         panel = (SRC / "lgfx_matouch_40.h").read_text(encoding="utf-8")
         self.assertIn("cfg.freq_write = 12000000;", panel)
 
+    def test_stock_rotation_splits_the_large_hero_across_vsync_frames(self):
+        ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
+        runtime = (SRC / "v2_runtime.cpp").read_text(encoding="utf-8")
+        update = ui.split("void v2UiUpdateStockHero", 1)[1].split(
+            "void v2UiUpdateStockPrice", 1
+        )[0]
+
+        for clip in ("V2_HERO_TEXT_CLIP", "V2_HERO_GRAPH_CLIP"):
+            self.assertIn(f"pushClip({clip}_X", update)
+        self.assertNotIn("pushClip(V2_HERO_CLIP_X", update)
+
+        rotation = runtime.split("if (rotation > 0", 1)[1].split(
+            "if (v2ApplyTimeout", 1
+        )[0]
+        self.assertLess(
+            rotation.index("v2UiUpdateStockHero"),
+            rotation.index("requestNewsFetch"),
+        )
+
     def test_live_price_updates_have_their_own_clipped_render_path(self):
         header = (SRC / "ui_v2_runtime.h").read_text(encoding="utf-8")
         ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
@@ -716,7 +735,7 @@ class V2WifiRecoveryTests(unittest.TestCase):
 class V2OtaChannelTests(unittest.TestCase):
     def test_remote_canary_build_has_the_next_version(self):
         config = (SRC / "config.h").read_text(encoding="utf-8")
-        self.assertIn('#define APP_VERSION "5.1.1-beta.70"', config)
+        self.assertIn('#define APP_VERSION "5.1.1-beta.71"', config)
 
     def test_ota_md5_is_normalized_for_case_sensitive_esp_update(self):
         manager = (SRC / "ota_manager.cpp").read_text(encoding="utf-8")
