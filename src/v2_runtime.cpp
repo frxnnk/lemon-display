@@ -47,6 +47,11 @@ static int s_lastAskInt = -1;
 static int s_lastStockPriceCents = -1;
 static uint8_t s_lastFocusedStock = 255;
 static bool s_newsFetchPending = false;
+static bool s_newsForceRefresh = false;
+static uint32_t s_newsRetryAtMs = 0;
+static uint32_t s_newsRetryDelayMs = 0;
+static constexpr uint32_t V2_NEWS_RETRY_FIRST_MS = 5000;
+static constexpr uint32_t V2_NEWS_RETRY_MAX_MS = 60000;
 static float s_geckoPairPrice = 0.0f;
 static uint32_t s_geckoPairLastUpdate = 0;
 static ApiResult s_pairAuxResult = API_NETWORK_ERROR;
@@ -183,6 +188,10 @@ static void refreshSnapshot(bool syncSpark = true) {
     s_snapshot.stockCount = stocksGetWatchlistCount();
     if (s_snapshot.stockCount > V2_TAPE_ROWS) s_snapshot.stockCount = V2_TAPE_ROWS;
     s_snapshot.focusedStock = stocksGetFocusedIdx();
+    const char* focusedSymbol = stocksGetFocusedSymbol();
+    strncpy(s_snapshot.focusedSymbol, focusedSymbol ? focusedSymbol : "",
+            sizeof(s_snapshot.focusedSymbol) - 1);
+    s_snapshot.focusedSymbol[sizeof(s_snapshot.focusedSymbol) - 1] = '\0';
     for (uint8_t i = 0; i < s_snapshot.stockCount; i++) {
         stocksGetSnapshotAt(i, s_snapshot.stocks[i]);
     }
@@ -214,11 +223,12 @@ static void refreshSnapshot(bool syncSpark = true) {
     strncpy(s_snapshot.ip, ip.c_str(), sizeof(s_snapshot.ip) - 1);
     s_snapshot.ip[sizeof(s_snapshot.ip) - 1] = '\0';
     s_snapshot.rssi = wifiConnected() ? wifiRSSI() : 0;
-    s_snapshot.brightness = nvsGetBrightness();
+    s_snapshot.theme = nvsGetV2Theme();
     s_snapshot.rotationSeconds = nvsGetV2RotationSeconds();
     s_snapshot.use24h = nvsGet24hFormat();
     s_snapshot.soundEnabled = audioIsEnabled();
     s_snapshot.wifiResetArmed = s_model.wifiResetArmed;
+    s_snapshot.deviceRestartArmed = s_model.deviceRestartArmed;
     s_snapshot.otaArmed = s_otaArmedUntilMs != 0 && nowMs < s_otaArmedUntilMs;
     s_snapshot.uptimeSeconds = nowMs / 1000;
     s_snapshot.freeHeap = ESP.getFreeHeap();
@@ -268,10 +278,13 @@ static void fetchLemonHistoryNow() {
     updateLemonChange24h();
 }
 
-static void requestNewsFetch() {
+static void requestNewsFetch(bool forceRefresh = false) {
     const char* sym = stocksGetFocusedSymbol();
     if (!sym || !sym[0]) {
         s_newsFetchPending = false;
+        s_newsForceRefresh = false;
+        s_newsRetryAtMs = 0;
+        s_newsRetryDelayMs = 0;
         s_snapshot.newsFetching = false;
         s_snapshot.newsCount = 0;
         return;
@@ -283,8 +296,11 @@ static void requestNewsFetch() {
     if (cachedCount == 0) s_snapshot.newsCount = 0;
 
     const bool cacheFresh = newsCacheIsFresh(sym);
-    s_newsFetchPending = !cacheFresh;
-    s_snapshot.newsFetching = !cacheFresh;
+    s_newsFetchPending = forceRefresh || !cacheFresh;
+    s_newsForceRefresh = forceRefresh;
+    s_newsRetryAtMs = 0;
+    s_newsRetryDelayMs = V2_NEWS_RETRY_FIRST_MS;
+    s_snapshot.newsFetching = s_newsFetchPending && cachedCount == 0;
     if (s_model.scene == V2_HOME && s_bootComplete) {
         v2UiUpdateNews(s_snapshot, s_model);
     }
@@ -295,16 +311,37 @@ static void fetchNewsNow() {
     const char* sym = stocksGetFocusedSymbol();
     if (!sym || !sym[0]) {
         s_newsFetchPending = false;
+        s_newsForceRefresh = false;
+        s_newsRetryAtMs = 0;
         s_snapshot.newsFetching = false;
         return;
     }
-    s_newsFetchPending = false;
     apiStop();
     delay(100);
     uint8_t count = 0;
-    newsFetch(sym, s_snapshot.news, NEWS_MAX_ITEMS, count);
+    NewsFetchResult result = newsFetch(
+        sym, s_snapshot.news, NEWS_MAX_ITEMS, count, s_newsForceRefresh);
     s_snapshot.newsCount = count;
     s_snapshot.newsFetching = false;
+    if (result == NEWS_FETCH_UPDATED || result == NEWS_FETCH_FRESH_CACHE) {
+        s_newsFetchPending = false;
+        s_newsForceRefresh = false;
+        s_newsRetryAtMs = 0;
+        s_newsRetryDelayMs = V2_NEWS_RETRY_FIRST_MS;
+    } else {
+        if (s_newsRetryDelayMs == 0) {
+            s_newsRetryDelayMs = V2_NEWS_RETRY_FIRST_MS;
+        }
+        s_newsFetchPending = true;
+        s_newsForceRefresh = true;
+        s_newsRetryAtMs = millis() + s_newsRetryDelayMs;
+        uint32_t nextRetryDelayMs = s_newsRetryDelayMs * 2U;
+        s_newsRetryDelayMs = nextRetryDelayMs > V2_NEWS_RETRY_MAX_MS
+            ? V2_NEWS_RETRY_MAX_MS : nextRetryDelayMs;
+        Serial.printf("[News] retry queued in %lus\n",
+                      static_cast<unsigned long>(
+                          (s_newsRetryAtMs - millis()) / 1000UL));
+    }
     if (s_model.scene == V2_HOME) {
         refreshSnapshot();
         v2UiUpdateNews(s_snapshot, s_model);
@@ -442,8 +479,9 @@ static void startNetworkServices() {
     if (!s_bootComplete) v2UiDrawLoading("CARGANDO WATCHLIST", 90);
     stocksSetActive(true);
     scheduler.enable(taskStocks, true);
-    stocksRequestBurst();
     requestNewsFetch();
+    if (s_newsFetchPending) fetchNewsNow();
+    stocksRequestBurst();
     if (s_bootComplete) {
         refreshSnapshot();
         v2UiUpdateData(s_snapshot, s_model);
@@ -509,10 +547,9 @@ static void handleSettingsAction(const TouchEvent& event) {
     uint8_t row = static_cast<uint8_t>((event.y - 126) / 58);
     if (event.gesture == TOUCH_TAP && s_model.settingsPage == 0) {
         if (row == 0) {
-            uint8_t current = nvsGetBrightness();
-            uint8_t next = current < 96 ? 128 : current < 160 ? 192 : current < 224 ? 255 : 64;
-            nvsSetBrightness(next);
-            displaySetBrightness(next);
+            uint8_t next = nvsGetV2Theme() == 1 ? 0 : 1;
+            nvsSetV2Theme(next);
+            v2UiSetTheme(next);
         } else if (row == 1) {
             nvsSet24hFormat(!nvsGet24hFormat());
         } else if (row == 2) {
@@ -529,10 +566,14 @@ static void handleSettingsAction(const TouchEvent& event) {
         s_dirty = true;
     }
     if (s_model.settingsPage == 1 && row == 0 && event.gesture == TOUCH_TAP) {
-        stocksAdvanceFocused();
+        stocksRequestBurst();
         s_dirty = true;
     }
-    if (s_model.settingsPage == 1 && row == 1 && event.gesture == TOUCH_LONG_PRESS) {
+    if (s_model.settingsPage == 1 && row == 1 && event.gesture == TOUCH_TAP) {
+        requestNewsFetch(true);
+        s_dirty = true;
+    }
+    if (s_model.settingsPage == 1 && row == 2 && event.gesture == TOUCH_LONG_PRESS) {
         uint32_t nowMs = millis();
         if (s_model.wifiResetArmed && nowMs < s_model.wifiResetUntilMs) {
             nvsForgetWifi();
@@ -540,6 +581,13 @@ static void handleSettingsAction(const TouchEvent& event) {
         }
         s_model.wifiResetArmed = true;
         s_model.wifiResetUntilMs = nowMs + 5000;
+        s_dirty = true;
+    }
+    if (s_model.settingsPage == 1 && row == 3 && event.gesture == TOUCH_TAP) {
+        stocksAdvanceFocused();
+        s_lastFocusedStock = 255;
+        s_lastStockPriceCents = -1;
+        requestNewsFetch();
         s_dirty = true;
     }
     if (s_model.settingsPage == 2 && row == 2 &&
@@ -556,6 +604,20 @@ static void handleSettingsAction(const TouchEvent& event) {
                 s_dirty = true;
             }
         }
+    }
+    if (s_model.settingsPage == 2 && row == 4 &&
+        event.gesture == TOUCH_TAP) {
+        uint32_t nowMs = millis();
+        if (s_model.deviceRestartArmed &&
+            nowMs < s_model.deviceRestartUntilMs) {
+            v2UiDrawLoading("REINICIANDO", 100);
+            delay(150);
+            ESP.restart();
+            return;
+        }
+        s_model.deviceRestartArmed = true;
+        s_model.deviceRestartUntilMs = millis() + 5000;
+        s_dirty = true;
     }
 }
 
@@ -590,6 +652,13 @@ static void handleTouch() {
             if (audioIsEnabled()) playTap();
             return;
         }
+    }
+    if (event.gesture == TOUCH_TAP && s_model.scene == V2_HOME &&
+        event.y >= 228 && event.y < 300 && s_snapshot.newsCount == 0) {
+        requestNewsFetch(true);
+        s_dirty = true;
+        if (audioIsEnabled()) playTap();
+        return;
     }
     if (event.gesture == TOUCH_TAP && s_model.scene == V2_NEWS_READER) {
         if (event.y >= 120) {
@@ -703,11 +772,14 @@ void v2RuntimeLoop() {
         if (s_model.scene == V2_HOME) v2UiUpdateStockPrice(s_snapshot, s_model);
         else v2UiUpdateData(s_snapshot, s_model);
     }
-    if (s_newsFetchPending && online && !stocksIsFetching()) {
+    uint32_t nowMs = millis();
+    if (s_newsFetchPending && online && !stocksIsFetching() &&
+        (s_newsRetryAtMs == 0 ||
+         static_cast<int32_t>(nowMs - s_newsRetryAtMs) >= 0)) {
         fetchNewsNow();
+        nowMs = millis();
     }
 
-    uint32_t nowMs = millis();
     if (online && !stocksIsFetching() && !s_snapshot.newsFetching &&
         (s_lastLemonSparkAttemptMs == 0 ||
          nowMs - s_lastLemonSparkAttemptMs >= UPDATE_SPARKLINE_MS)) {
@@ -811,6 +883,11 @@ void v2RuntimeLoop() {
     if (v2ApplyTimeout(s_model, nowMs)) s_dirty = true;
     if (s_model.wifiResetArmed && nowMs >= s_model.wifiResetUntilMs) {
         s_model.wifiResetArmed = false;
+        s_dirty = true;
+    }
+    if (s_model.deviceRestartArmed &&
+        nowMs >= s_model.deviceRestartUntilMs) {
+        s_model.deviceRestartArmed = false;
         s_dirty = true;
     }
     if (s_otaArmedUntilMs != 0 && nowMs >= s_otaArmedUntilMs) {

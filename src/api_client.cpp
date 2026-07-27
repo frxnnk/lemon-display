@@ -148,7 +148,8 @@ public:
 // ── Helper: perform HTTPS GET with 1 retry, response in PSRAM buffer ──
 // Exposed as apiHttpGet() via api_client.h so sibling clients (stocks, poly)
 // can reuse the hardened TLS / chunked / WDT logic.
-const char* apiHttpGet(const char* url, bool addCoinGeckoKey, ApiResult& result, int timeoutMs) {
+const char* apiHttpGet(const char* url, bool addCoinGeckoKey, ApiResult& result,
+                       int timeoutMs, uint32_t maxBodyBytes) {
     // Allocate PSRAM buffer once (persists for device lifetime)
     if (!_rspBuf) {
         _rspBuf = (char*)ps_malloc(RSP_BUF_SIZE);
@@ -188,6 +189,10 @@ const char* apiHttpGet(const char* url, bool addCoinGeckoKey, ApiResult& result,
         static HTTPClient http;   // static: ~700 bytes off the 8KB stack
         http.setConnectTimeout(5000);
         http.setTimeout(timeoutMs);
+        // Prefix reads use HTTP/1.0 so the body arrives as a close-delimited
+        // stream instead of chunk framing. This lets callers stop cleanly
+        // after the useful prefix without downloading the full document.
+        http.useHTTP10(maxBodyBytes > 0);
 
         static char fullUrl[512]; // static: 512 bytes off the stack
         if (addCoinGeckoKey) {
@@ -216,8 +221,42 @@ const char* apiHttpGet(const char* url, bool addCoinGeckoKey, ApiResult& result,
         if (code == 200) {
             int contentLen = http.getSize();  // -1 if chunked / unknown
             int bytesRead = 0;
+            const int bodyLimit =
+                maxBodyBytes > 0 && maxBodyBytes < (RSP_BUF_SIZE - 1)
+                    ? static_cast<int>(maxBodyBytes)
+                    : static_cast<int>(RSP_BUF_SIZE - 1);
 
-            if (contentLen > 0 && contentLen < (int)(RSP_BUF_SIZE - 1)) {
+            if (maxBodyBytes > 0) {
+                WiFiClient* stream = http.getStreamPtr();
+                const int targetBytes =
+                    contentLen > 0 && contentLen < bodyLimit ? contentLen : bodyLimit;
+                unsigned long readStart = millis();
+                while (bytesRead < targetBytes) {
+                    if (millis() - readStart > static_cast<unsigned long>(timeoutMs)) {
+                        Serial.printf("[API] Prefix read timeout after %dms (%d/%d bytes)\n",
+                                      timeoutMs, bytesRead, targetBytes);
+                        break;
+                    }
+                    int avail = stream->available();
+                    if (avail > 0) {
+                        int toRead = avail;
+                        if (toRead > targetBytes - bytesRead) {
+                            toRead = targetBytes - bytesRead;
+                        }
+                        int n = stream->readBytes(_rspBuf + bytesRead, toRead);
+                        if (n <= 0) break;
+                        bytesRead += n;
+                        esp_task_wdt_reset();
+                    } else if (!stream->connected()) {
+                        break;
+                    } else {
+                        delay(10);
+                        esp_task_wdt_reset();
+                    }
+                }
+                Serial.printf("[API] Prefix read %d bytes (limit=%d) %s\n",
+                              bytesRead, bodyLimit, url);
+            } else if (contentLen > 0 && contentLen < (int)(RSP_BUF_SIZE - 1)) {
                 // Known length — raw stream read, WDT-safe
                 WiFiClient* stream = http.getStreamPtr();
                 unsigned long readStart = millis();

@@ -27,9 +27,7 @@ static void drawSettingRow(LGFX_Sprite& sprite, int y,
 }
 
 static void drawDisplayPage(LGFX_Sprite& sprite, const V2RuntimeSnapshot& snapshot) {
-    char brightness[20];
-    snprintf(brightness, sizeof(brightness), "%u / 255", snapshot.brightness);
-    drawSettingRow(sprite, 126, "BRILLO", brightness);
+    drawSettingRow(sprite, 126, "TEMA", snapshot.theme == 1 ? "CLARO" : "OSCURO");
     drawSettingRow(sprite, 184, "FORMATO DE HORA", snapshot.use24h ? "24H" : "12H");
     drawSettingRow(sprite, 242, "SONIDO", snapshot.soundEnabled ? "ACTIVO" : "APAGADO");
     char rotation[24];
@@ -41,16 +39,27 @@ static void drawDisplayPage(LGFX_Sprite& sprite, const V2RuntimeSnapshot& snapsh
 }
 
 static void drawDataPage(LGFX_Sprite& sprite, const V2RuntimeSnapshot& snapshot) {
-    char watchlist[32];
-    snprintf(watchlist, sizeof(watchlist), "%u ACTIVOS / TOCA", snapshot.stockCount);
-    drawSettingRow(sprite, 126, "WATCHLIST", watchlist);
-    drawSettingRow(sprite, 242, "NOTICIAS", "PROVIDER PENDIENTE", v2UiColorMuted());
-    drawSettingRow(sprite, 300, "FRECUENCIA DE DATOS", "BTC LIVE / META 5M");
-    drawSettingRow(sprite, 358, "STUDIO / WATCHLIST", snapshot.ip, v2UiColorHighlight());
+    drawSettingRow(sprite, 126, "COTIZACIONES",
+                   snapshot.stocksFetching ? "ACTUALIZANDO..." : "TOCA ACTUALIZAR");
+
+    char news[28];
+    if (snapshot.newsFetching) snprintf(news, sizeof(news), "CARGANDO...");
+    else if (snapshot.newsCount > 0) {
+        snprintf(news, sizeof(news), "%u LISTAS / TOCA", snapshot.newsCount);
+    } else {
+        snprintf(news, sizeof(news), "TOCA REINTENTAR");
+    }
+    drawSettingRow(sprite, 184, "NOTICIAS", news,
+                   snapshot.newsCount > 0 ? v2UiColorAccent() : v2UiColorHighlight());
+
     uint16_t wifiColor = snapshot.online ? v2UiColorAccent() : v2UiColorHighlight();
-    drawSettingRow(sprite, 184, "WI-FI",
+    drawSettingRow(sprite, 242, "WI-FI",
                    snapshot.wifiResetArmed ? "MANTENE PARA CONFIRMAR" : snapshot.ssid,
                    wifiColor);
+    drawSettingRow(sprite, 300, "ACTIVO VISIBLE",
+                   snapshot.focusedSymbol[0] ? snapshot.focusedSymbol : "--");
+    drawSettingRow(sprite, 358, "STUDIO / WATCHLIST", snapshot.ip,
+                   v2UiColorHighlight());
 }
 
 static void drawDevicePage(LGFX_Sprite& sprite, const V2RuntimeSnapshot& snapshot) {
@@ -78,7 +87,9 @@ static void drawDevicePage(LGFX_Sprite& sprite, const V2RuntimeSnapshot& snapsho
              static_cast<unsigned long>(snapshot.uptimeSeconds / 3600),
              static_cast<unsigned long>((snapshot.uptimeSeconds / 60) % 60));
     drawSettingRow(sprite, 300, "UPTIME", uptime);
-    drawSettingRow(sprite, 358, "ROLLBACK", "BINARIO LOCAL PRE-FLASH", v2UiColorHighlight());
+    drawSettingRow(sprite, 358, "REINICIAR",
+                   snapshot.deviceRestartArmed ? "CONFIRMAR / TOCA" : "DOBLE TOQUE",
+                   v2UiColorHighlight());
 }
 
 void v2DrawSettings(LGFX_Sprite& sprite,
@@ -104,5 +115,8 @@ void v2DrawSettings(LGFX_Sprite& sprite,
     else drawDevicePage(sprite, snapshot);
     sprite.setTextColor(muted, bg);
     sprite.setTextDatum(lgfx::bottom_center);
-    sprite.drawString("TOCA UNA SECCION O DESLIZA", 240, 466, &Satoshi9);
+    const char* footer = model.settingsPage == 1
+        ? "MANTENE WI-FI PARA OLVIDAR"
+        : "TOCA UNA SECCION O DESLIZA";
+    sprite.drawString(footer, 240, 466, &Satoshi9);
 }

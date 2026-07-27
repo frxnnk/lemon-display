@@ -4,6 +4,7 @@
 #include <cstring>
 
 static const uint32_t NEWS_CACHE_TTL_MS = 10UL * 60UL * 1000UL;
+static const uint32_t NEWS_HTTP_PREFIX_BYTES = 16 * 1024;
 
 struct NewsCacheEntry {
     char symbol[STOCK_SYMBOL_LEN];
@@ -165,13 +166,14 @@ static void stripHtml(char* s) {
     while (dst > s && (dst[-1] == ' ' || dst[-1] == '\n')) *--dst = '\0';
 }
 
-bool newsFetch(const char* symbol, StockNews* out, uint8_t maxItems, uint8_t& count) {
+NewsFetchResult newsFetch(const char* symbol, StockNews* out, uint8_t maxItems,
+                          uint8_t& count, bool forceRefresh) {
     count = 0;
-    if (!symbol || !symbol[0]) return false;
+    if (!symbol || !symbol[0]) return NEWS_FETCH_FAILED;
 
-    if (newsCacheIsFresh(symbol)) {
+    if (!forceRefresh && newsCacheIsFresh(symbol)) {
         newsGetCached(symbol, out, maxItems, count);
-        return count > 0;
+        return count > 0 ? NEWS_FETCH_FRESH_CACHE : NEWS_FETCH_FAILED;
     }
 
     char url[192];
@@ -180,12 +182,13 @@ bool newsFetch(const char* symbol, StockNews* out, uint8_t maxItems, uint8_t& co
              symbol);
 
     ApiResult result = API_NETWORK_ERROR;
-    const char* xml = apiHttpGet(url, false, result, 12000);
+    const char* xml =
+        apiHttpGet(url, false, result, 12000, NEWS_HTTP_PREFIX_BYTES);
     if (result != API_OK || !xml || !xml[0]) {
         Serial.printf("[News] request failed (%d); keeping cache\n",
                       static_cast<int>(result));
         newsGetCached(symbol, out, maxItems, count);
-        return count > 0;
+        return count > 0 ? NEWS_FETCH_STALE_CACHE : NEWS_FETCH_FAILED;
     }
 
     uint8_t found = 0;
@@ -220,7 +223,7 @@ bool newsFetch(const char* symbol, StockNews* out, uint8_t maxItems, uint8_t& co
 
     if (found == 0) {
         newsGetCached(symbol, out, maxItems, count);
-        return count > 0;
+        return count > 0 ? NEWS_FETCH_STALE_CACHE : NEWS_FETCH_FAILED;
     }
 
     count = found;
@@ -233,5 +236,5 @@ bool newsFetch(const char* symbol, StockNews* out, uint8_t maxItems, uint8_t& co
     for (uint8_t i = 0; i < found; i++) cache->news[i] = out[i];
 
     Serial.printf("[News] %s: %d headlines\n", symbol, found);
-    return found > 0;
+    return NEWS_FETCH_UPDATED;
 }

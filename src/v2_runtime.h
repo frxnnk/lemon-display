@@ -33,6 +33,7 @@ struct V2RuntimeSnapshot {
     bool lemonFetching = false;
     bool stocksFetching = false;
     bool wifiResetArmed = false;
+    bool deviceRestartArmed = false;
     bool otaChecked = false;
     bool otaAvailable = false;
     bool otaChecking = false;
@@ -41,8 +42,9 @@ struct V2RuntimeSnapshot {
     char time[12] = "--:--:--";
     char ssid[33] = {};
     char ip[20] = {};
+    char focusedSymbol[STOCK_SYMBOL_LEN] = {};
     int32_t rssi = 0;
-    uint8_t brightness = 0;
+    uint8_t theme = 0;
     uint8_t rotationSeconds = 0;
     bool use24h = true;
     bool soundEnabled = true;
