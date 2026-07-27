@@ -349,7 +349,7 @@ static void drawHeader(bool back, const char* title, const V2RuntimeSnapshot& sn
     drawLogo();
     s_v2Sprite.setTextDatum(lgfx::top_center);
     s_v2Sprite.setTextColor(pal->accent, pal->bg);
-    s_v2Sprite.drawString(snapshot.time, SCREEN_W / 2, 36, &Satoshi12);
+    s_v2Sprite.drawString(snapshot.time, SCREEN_W / 2, 32, &SatoshiMedium18);
     s_v2Sprite.setTextDatum(lgfx::top_left);
     if (back) {
         drawChevron(42, 88, false, pal->accent);
@@ -373,7 +373,7 @@ static void drawStockHero(const V2RuntimeSnapshot& snapshot) {
     }
     char price[40] = "--";
     if (stock && stock->hasQuote) {
-        snprintf(price, sizeof(price), "$%.2f", stock->quote.price);
+        snprintf(price, sizeof(price), "$%.0f", stock->quote.price);
     }
     s_v2Sprite.setTextDatum(lgfx::middle_left);
     s_v2Sprite.setTextColor(stock && stock->hasQuote ? trendColor(stock->quote.changePct) : pal->muted,
@@ -519,6 +519,14 @@ static void drawBtcCard(const V2RuntimeSnapshot& snapshot) {
                                    V2_CARD_H, 8, cardBg);
     s_v2Sprite.drawRoundRect(V2_BTC_X, V2_CARD_Y, V2_CARD_W, V2_CARD_H, 8, pal->accent);
     drawTokenIcon(btc_token_32, V2_BTC_X + 10, V2_CARD_Y + 7);
+    if (pairIndex > 0) {
+        char pairLabel[16];
+        snprintf(pairLabel, sizeof(pairLabel), "VS %s", pair.label);
+        s_v2Sprite.setTextDatum(lgfx::top_left);
+        s_v2Sprite.setTextColor(pal->muted, cardBg);
+        s_v2Sprite.drawString(pairLabel, V2_BTC_X + 50,
+                              V2_CARD_Y + 14, &Satoshi12);
+    }
 
     s_v2Sprite.setTextDatum(lgfx::top_right);
     if (pairIndex == 0 && snapshot.btc.valid) {
@@ -614,7 +622,7 @@ static void drawContext(const V2RuntimeSnapshot& snapshot, uint8_t selected) {
     if (stock && stock->hasQuote) {
         s_v2Sprite.setTextColor(trendColor(stock->quote.changePct), pal->bg);
         char price[36];
-        snprintf(price, sizeof(price), "$ %.2f", stock->quote.price);
+        snprintf(price, sizeof(price), "$ %.0f", stock->quote.price);
         s_v2Sprite.drawString(price, V2_SAFE_INSET, 190, &PPNeueMachinaBold24);
         char move[36];
         snprintf(move, sizeof(move), "%+.2f%% HOY", stock->quote.changePct);
@@ -785,11 +793,11 @@ void v2UiDraw(const V2RuntimeSnapshot& snapshot, const V2RuntimeModel& model, bo
 void v2UiUpdateClock(const char* time, V2Scene scene) {
     if (!s_spriteReady || scene == V2_SETTINGS) return;
     if (strcmp(time, s_lastDrawnTime) == 0) return;
-    constexpr int x = 180, y = 30, w = 120, h = 30;
+    constexpr int x = 170, y = 24, w = 140, h = 38;
     s_v2Sprite.fillRect(x, y, w, h, pal->bg);
     s_v2Sprite.setTextColor(pal->accent, pal->bg);
     s_v2Sprite.setTextDatum(lgfx::top_center);
-    s_v2Sprite.drawString(time, SCREEN_W / 2, 36, &Satoshi12);
+    s_v2Sprite.drawString(time, SCREEN_W / 2, 32, &SatoshiMedium18);
     pushClip(x, y, w, h);
     strncpy(s_lastDrawnTime, time, sizeof(s_lastDrawnTime) - 1);
     s_lastDrawnTime[sizeof(s_lastDrawnTime) - 1] = '\0';
@@ -830,7 +838,7 @@ void v2UiUpdateStockPrice(const V2RuntimeSnapshot& snapshot, const V2RuntimeMode
     uint8_t focus = snapshot.stockCount ? snapshot.focusedStock % snapshot.stockCount : 0;
     const StockFocusedSnapshot* stock = snapshot.stockCount ? &snapshot.stocks[focus] : nullptr;
     char price[40] = "--";
-    if (stock && stock->hasQuote) snprintf(price, sizeof(price), "$%.2f", stock->quote.price);
+    if (stock && stock->hasQuote) snprintf(price, sizeof(price), "$%.0f", stock->quote.price);
     s_v2Sprite.setTextDatum(lgfx::middle_left);
     s_v2Sprite.setTextColor(stock && stock->hasQuote ? trendColor(stock->quote.changePct) : pal->muted,
                             pal->bg);
