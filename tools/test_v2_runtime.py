@@ -66,13 +66,16 @@ class V2NewsRuntimeTests(unittest.TestCase):
     def setUp(self):
         self.runtime = (SRC / "v2_runtime.cpp").read_text(encoding="utf-8")
 
-    def test_news_is_queued_at_boot_and_only_fetched_after_stocks_are_idle(self):
+    def test_news_is_fetched_before_the_full_stock_burst_at_boot(self):
         start = self.runtime.split("static void startNetworkServices() {", 1)[1].split(
             "static void startProvisioning", 1
         )[0]
         loop = self.runtime.split("void v2RuntimeLoop()", 1)[1]
 
         self.assertIn("requestNewsFetch();", start)
+        self.assertIn("fetchNewsNow();", start)
+        self.assertLess(start.index("requestNewsFetch();"), start.index("fetchNewsNow();"))
+        self.assertLess(start.index("fetchNewsNow();"), start.index("stocksRequestBurst();"))
         self.assertRegex(
             loop,
             r"s_newsFetchPending\s*&&\s*online\s*&&\s*!stocksIsFetching\(\)",
@@ -107,19 +110,56 @@ class V2NewsRuntimeTests(unittest.TestCase):
 
     def test_news_reuses_the_hardened_chunked_http_pipeline(self):
         client = (SRC / "news_client.cpp").read_text(encoding="utf-8")
+        api_header = (SRC / "api_client.h").read_text(encoding="utf-8")
         api = (SRC / "api_client.cpp").read_text(encoding="utf-8")
-        fetch = client.split("bool newsFetch", 1)[1]
+        fetch = client.split("NewsFetchResult newsFetch", 1)[1]
 
+        self.assertIn("NEWS_HTTP_PREFIX_BYTES = 16 * 1024", client)
+        self.assertRegex(
+            fetch,
+            r"apiHttpGet\(url,\s*false,\s*result,\s*12000,\s*NEWS_HTTP_PREFIX_BYTES\)",
+        )
+        self.assertIn("uint32_t maxBodyBytes = 0", api_header)
+        self.assertIn("http.useHTTP10(maxBodyBytes > 0);", api)
+        self.assertIn("bodyLimit", api)
         self.assertIn("apiHttpGet(url, false, result", fetch)
         self.assertIn("result != API_OK", fetch)
         self.assertIn("writeToStream(&bufStream)", api)
         self.assertNotIn("getStreamPtr", client)
         self.assertNotIn("WiFiClientSecure", client)
 
+    def test_failed_news_fetch_keeps_a_pending_retry_with_backoff(self):
+        fetch = self.runtime.split("static void fetchNewsNow()", 1)[1].split(
+            "static void fetchPairAuxNow", 1
+        )[0]
+        loop = self.runtime.split("void v2RuntimeLoop()", 1)[1]
+
+        self.assertIn("V2_NEWS_RETRY_FIRST_MS = 5000", self.runtime)
+        self.assertIn("V2_NEWS_RETRY_MAX_MS = 60000", self.runtime)
+        self.assertIn("s_newsRetryAtMs", fetch)
+        self.assertIn("s_newsFetchPending = true", fetch)
+        self.assertIn("NEWS_FETCH_UPDATED", fetch)
+        self.assertRegex(
+            loop,
+            r"s_newsRetryAtMs\s*==\s*0\s*\|\|\s*static_cast<int32_t>\(nowMs\s*-\s*s_newsRetryAtMs\)\s*>=\s*0",
+        )
+
+    def test_tapping_empty_news_queues_an_immediate_retry_instead_of_opening_reader(self):
+        touch = self.runtime.split("static void handleTouch()", 1)[1].split(
+            "void v2RuntimeSetup", 1
+        )[0]
+        self.assertIn("s_snapshot.newsCount == 0", touch)
+        empty_news = touch.split("s_snapshot.newsCount == 0", 1)[1].split(
+            "if (event.gesture == TOUCH_TAP && s_model.scene == V2_HOME)", 1
+        )[0]
+
+        self.assertIn("requestNewsFetch(true);", empty_news)
+        self.assertIn("return;", empty_news)
+
     def test_switching_stock_reuses_fresh_symbol_cache_without_loading_or_tls(self):
         header = (SRC / "news_client.h").read_text(encoding="utf-8")
         client = (SRC / "news_client.cpp").read_text(encoding="utf-8")
-        request = self.runtime.split("static void requestNewsFetch()", 1)[1].split(
+        request = self.runtime.split("static void requestNewsFetch(", 1)[1].split(
             "static void fetchNewsNow", 1
         )[0]
 
@@ -260,23 +300,57 @@ class V2RealUiContractTests(unittest.TestCase):
         )
         for fixture in forbidden:
             self.assertNotIn(fixture, source)
-        self.assertIn("PROVIDER PENDIENTE", settings)
+        self.assertNotIn("PROVIDER PENDIENTE", settings)
 
-    def test_settings_surface_keeps_canary_controls_shallow(self):
+    def test_settings_surface_exposes_shallow_actionable_controls(self):
         source = (SRC / "ui_v2_settings.cpp").read_text(encoding="utf-8")
         for label in (
-            "BRILLO",
+            "TEMA",
             "FORMATO DE HORA",
             "SONIDO",
             "ROTACION",
-            "WATCHLIST",
+            "COTIZACIONES",
             "WI-FI",
             "NOTICIAS",
+            "ACTIVO VISIBLE",
+            "STUDIO / WATCHLIST",
             "FIRMWARE",
             "DIAGNOSTICO",
             "ACTUALIZACION",
+            "REINICIAR",
         ):
             self.assertIn(label, source)
+        for obsolete in ("BRILLO", "FRECUENCIA DE DATOS", "ROLLBACK"):
+            self.assertNotIn(obsolete, source)
+
+    def test_settings_actions_toggle_theme_and_queue_network_work(self):
+        runtime = (SRC / "v2_runtime.cpp").read_text(encoding="utf-8")
+        action = runtime.split("static void handleSettingsAction", 1)[1].split(
+            "static bool handleHomeUpdateTap", 1
+        )[0]
+
+        self.assertIn("nvsSetV2Theme(next);", action)
+        self.assertIn("v2UiSetTheme(next);", action)
+        self.assertIn("s_model.settingsPage == 1 && row == 0", action)
+        self.assertIn("stocksRequestBurst();", action)
+        self.assertIn("s_model.settingsPage == 1 && row == 1", action)
+        self.assertIn("requestNewsFetch(true);", action)
+        self.assertNotIn("fetchNewsNow();", action)
+
+    def test_device_restart_requires_two_taps_inside_a_short_window(self):
+        model = (SRC / "v2_runtime_model.h").read_text(encoding="utf-8")
+        runtime = (SRC / "v2_runtime.cpp").read_text(encoding="utf-8")
+        settings = (SRC / "ui_v2_settings.cpp").read_text(encoding="utf-8")
+        action = runtime.split("static void handleSettingsAction", 1)[1].split(
+            "static bool handleHomeUpdateTap", 1
+        )[0]
+
+        self.assertIn("deviceRestartArmed", model)
+        self.assertIn("deviceRestartUntilMs", model)
+        self.assertIn("s_model.settingsPage == 2 && row == 4", action)
+        self.assertIn("ESP.restart();", action)
+        self.assertIn("millis() + 5000", action)
+        self.assertIn("CONFIRMAR / TOCA", settings)
 
 
 class V2RenderStabilityTests(unittest.TestCase):
@@ -784,7 +858,7 @@ class V2WifiRecoveryTests(unittest.TestCase):
 class V2OtaChannelTests(unittest.TestCase):
     def test_remote_canary_build_has_the_next_version(self):
         config = (SRC / "config.h").read_text(encoding="utf-8")
-        self.assertIn('#define APP_VERSION "5.1.1-beta.73"', config)
+        self.assertIn('#define APP_VERSION "5.1.1-beta.74"', config)
 
     def test_ota_md5_is_normalized_for_case_sensitive_esp_update(self):
         manager = (SRC / "ota_manager.cpp").read_text(encoding="utf-8")

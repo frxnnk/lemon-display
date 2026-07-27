@@ -46,6 +46,8 @@ struct V2RuntimeModel {
     uint32_t lastInteractionMs = 0;
     bool wifiResetArmed = false;
     uint32_t wifiResetUntilMs = 0;
+    bool deviceRestartArmed = false;
+    uint32_t deviceRestartUntilMs = 0;
 };
 
 constexpr uint8_t v2NextPair(uint8_t selectedPair, uint8_t pairCount) {
@@ -119,6 +121,7 @@ inline bool v2ApplyTimeout(V2RuntimeModel& model, uint32_t nowMs) {
     model.sceneEnteredMs = nowMs;
     model.lastInteractionMs = nowMs;
     model.wifiResetArmed = false;
+    model.deviceRestartArmed = false;
     return true;
 }
 
