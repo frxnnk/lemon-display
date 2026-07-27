@@ -330,6 +330,27 @@ class V2RenderStabilityTests(unittest.TestCase):
         self.assertIn("V2_HERO_CENTER_Y", pair)
         self.assertIn("V2_HERO_LABEL_Y", pair)
 
+    def test_stock_main_prices_drop_cents_but_keep_percentage_precision(self):
+        ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
+        hero = ui.split("static void drawStockHero", 1)[1].split(
+            "static constexpr uint8_t NEWS_READER_MAX_LINES", 1
+        )[0]
+        context = ui.split("static void drawContext", 1)[1].split(
+            "static void drawNewsReader", 1
+        )[0]
+        live_update = ui.split("void v2UiUpdateStockPrice", 1)[1].split(
+            "void v2UiUpdateBtcCard", 1
+        )[0]
+
+        self.assertIn('snprintf(price, sizeof(price), "$%.0f"', hero)
+        self.assertIn('snprintf(price, sizeof(price), "$ %.0f"', context)
+        self.assertIn('snprintf(price, sizeof(price), "$%.0f"', live_update)
+        self.assertNotIn('snprintf(price, sizeof(price), "$%.2f"', hero)
+        self.assertNotIn('snprintf(price, sizeof(price), "$ %.2f"', context)
+        self.assertNotIn('snprintf(price, sizeof(price), "$%.2f"', live_update)
+        for section in (hero, context, live_update):
+            self.assertIn("%+.2f%% HOY", section)
+
     def test_home_settings_lives_in_the_header_with_a_drawn_controls_icon(self):
         ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
         header = ui.split("static void drawHeader", 1)[1].split("static void drawStockHero", 1)[0]
@@ -355,6 +376,25 @@ class V2RenderStabilityTests(unittest.TestCase):
         self.assertIn("s_v2Sprite.setClipRect", push)
         self.assertIn("s_v2Sprite.clearClipRect", push)
         self.assertIn("tft.setClipRect", push)
+
+    def test_clock_is_prominent_in_full_and_clipped_header_draws(self):
+        ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
+        header = ui.split("static void drawHeader", 1)[1].split(
+            "static void drawStockHero", 1
+        )[0]
+        update = ui.split("void v2UiUpdateClock", 1)[1].split(
+            "void v2UiUpdateHeader", 1
+        )[0]
+
+        self.assertIn(
+            "drawString(snapshot.time, SCREEN_W / 2, 32, &SatoshiMedium18)",
+            header,
+        )
+        self.assertIn(
+            "drawString(time, SCREEN_W / 2, 32, &SatoshiMedium18)",
+            update,
+        )
+        self.assertIn("constexpr int x = 170, y = 24, w = 140, h = 38", update)
 
     def test_clock_skips_identical_text_before_touching_the_rgb_framebuffer(self):
         ui = (SRC / "ui_v2_runtime.cpp").read_text(encoding="utf-8")
@@ -605,12 +645,21 @@ class V2MarketCardTests(unittest.TestCase):
         self.assertIn("btc_token_32", btc)
         self.assertIn("usdc_token_32", dollar)
         self.assertNotIn("pair.pairLabel", btc)
-        self.assertNotIn("pair.label", btc)
         self.assertNotIn('"Dolar Digital"', dollar)
 
         for asset in ("btc_token_32.h", "usdc_token_32.h"):
             source = (SRC / "data" / asset).read_text(encoding="utf-8")
             self.assertIn("[1024]", source)
+
+    def test_btc_card_labels_only_alternative_pairs_next_to_the_icon(self):
+        btc = self.ui.split("static void drawBtcCard", 1)[1].split(
+            "static void drawDollarCard", 1
+        )[0]
+
+        self.assertIn("if (pairIndex > 0)", btc)
+        self.assertIn('"VS %s"', btc)
+        self.assertIn("pair.label", btc)
+        self.assertNotIn("pair.pairLabel", btc)
 
     def test_btc_and_dollar_cards_make_24h_variation_prominent(self):
         btc = self.ui.split("static void drawBtcCard", 1)[1].split(
@@ -735,7 +784,7 @@ class V2WifiRecoveryTests(unittest.TestCase):
 class V2OtaChannelTests(unittest.TestCase):
     def test_remote_canary_build_has_the_next_version(self):
         config = (SRC / "config.h").read_text(encoding="utf-8")
-        self.assertIn('#define APP_VERSION "5.1.1-beta.71"', config)
+        self.assertIn('#define APP_VERSION "5.1.1-beta.72"', config)
 
     def test_ota_md5_is_normalized_for_case_sensitive_esp_update(self):
         manager = (SRC / "ota_manager.cpp").read_text(encoding="utf-8")
