@@ -53,11 +53,14 @@ static ApiResult s_pairAuxResult = API_NETWORK_ERROR;
 static bool s_bootComplete = false;
 static OtaInfo s_otaInfo = {};
 static uint32_t s_lastOtaCheckMs = 0;
+static uint32_t s_lastOtaProbeMs = 0;
+static bool s_otaCheckPending = false;
 static uint32_t s_otaArmedUntilMs = 0;
 static char s_pendingWifiSsid[33] = {};
 static char s_pendingWifiPass[65] = {};
 static bool s_hasPendingWifi = false;
 static constexpr uint32_t V2_OTA_CHECK_MS = 5UL * 60UL * 1000UL;
+static constexpr uint32_t V2_OTA_PROBE_MS = 60UL * 1000UL;
 
 static void startNetworkServices();
 
@@ -347,7 +350,13 @@ static void configurePairFeed() {
 }
 
 static void checkV2OtaNow(bool bootCheck) {
-    if (!wifiConnected() || stocksIsFetching()) return;
+    if (!wifiConnected()) return;
+    if (stocksIsFetching()) {
+        s_otaCheckPending = true;
+        s_snapshot.otaChecking = true;
+        return;
+    }
+    s_otaCheckPending = false;
     s_snapshot.otaChecking = true;
     if (bootCheck) v2UiDrawLoading("BUSCANDO ACTUALIZACIONES", 38);
 
@@ -363,6 +372,7 @@ static void checkV2OtaNow(bool bootCheck) {
         s_otaInfo.url[0] = '\0';
     }
     s_lastOtaCheckMs = millis();
+    s_lastOtaProbeMs = s_lastOtaCheckMs;
     s_snapshot.otaChecked = true;
     s_snapshot.otaChecking = false;
     s_snapshot.otaAvailable = s_otaInfo.available;
@@ -532,8 +542,12 @@ static void handleSettingsAction(const TouchEvent& event) {
         s_model.wifiResetUntilMs = nowMs + 5000;
         s_dirty = true;
     }
-    if (s_model.settingsPage == 2 && row == 2 && s_snapshot.otaAvailable) {
-        if (event.gesture == TOUCH_TAP) {
+    if (s_model.settingsPage == 2 && row == 2 &&
+        event.gesture == TOUCH_TAP) {
+        if (!s_snapshot.otaAvailable) {
+            checkV2OtaNow(false);
+            s_dirty = true;
+        } else {
             if (s_snapshot.otaArmed) {
                 installV2OtaNow();
             } else {
@@ -705,7 +719,22 @@ void v2RuntimeLoop() {
             v2UiUpdateData(s_snapshot, s_model);
         }
     }
+    if (online && s_otaCheckPending && !stocksIsFetching()) {
+        checkV2OtaNow(false);
+        nowMs = millis();
+    }
     if (online && s_snapshot.otaChecked && !s_snapshot.otaChecking &&
+        !s_snapshot.otaAvailable &&
+        nowMs - s_lastOtaProbeMs >= V2_OTA_PROBE_MS &&
+        !stocksIsFetching()) {
+        s_lastOtaProbeMs = nowMs;
+        if (otaLatestTagChanged(OTA_GITHUB_REPO, APP_VERSION)) {
+            checkV2OtaNow(false);
+            nowMs = millis();
+        }
+    }
+    if (online && s_snapshot.otaChecked && !s_snapshot.otaChecking &&
+        !s_snapshot.otaAvailable &&
         nowMs - s_lastOtaCheckMs >= V2_OTA_CHECK_MS && !stocksIsFetching()) {
         checkV2OtaNow(false);
     }

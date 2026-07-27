@@ -784,7 +784,7 @@ class V2WifiRecoveryTests(unittest.TestCase):
 class V2OtaChannelTests(unittest.TestCase):
     def test_remote_canary_build_has_the_next_version(self):
         config = (SRC / "config.h").read_text(encoding="utf-8")
-        self.assertIn('#define APP_VERSION "5.1.1-beta.72"', config)
+        self.assertIn('#define APP_VERSION "5.1.1-beta.73"', config)
 
     def test_ota_md5_is_normalized_for_case_sensitive_esp_update(self):
         manager = (SRC / "ota_manager.cpp").read_text(encoding="utf-8")
@@ -815,8 +815,68 @@ class V2OtaChannelTests(unittest.TestCase):
 
         self.assertIn("V2_OTA_CHECK_MS = 5UL * 60UL * 1000UL", runtime)
         self.assertIn("checkV2OtaNow(false)", loop)
-        self.assertNotIn("otaLatestTagChanged", loop)
         self.assertNotIn("stocksRequestBurst", check)
+
+    def test_lightweight_probe_detects_updates_within_one_minute_without_reboot(self):
+        manager_h = (SRC / "ota_manager.h").read_text(encoding="utf-8")
+        manager = (SRC / "ota_manager.cpp").read_text(encoding="utf-8")
+        runtime = (SRC / "v2_runtime.cpp").read_text(encoding="utf-8")
+        loop = runtime.split("void v2RuntimeLoop()", 1)[1]
+        probe = manager.split("bool otaLatestTagChanged", 1)[1].split(
+            "OtaInfo otaCheckAsset", 1
+        )[0]
+
+        self.assertIn("otaLatestTagChanged", manager_h)
+        self.assertIn('sendRequest("HEAD")', probe)
+        self.assertIn("getLocation", probe)
+        self.assertIn("isNewer", probe)
+        self.assertIn("V2_OTA_PROBE_MS = 60UL * 1000UL", runtime)
+        self.assertIn("s_lastOtaProbeMs", runtime)
+        self.assertIn(
+            "otaLatestTagChanged(OTA_GITHUB_REPO, APP_VERSION)",
+            loop,
+        )
+        self.assertIn("checkV2OtaNow(false)", loop)
+        changed = loop.split(
+            "if (otaLatestTagChanged(OTA_GITHUB_REPO, APP_VERSION))", 1
+        )[1].split(
+            "if (online && s_snapshot.otaChecked", 1
+        )[0]
+        self.assertIn("nowMs = millis();", changed)
+
+    def test_device_update_row_can_force_a_check_when_no_badge_is_visible(self):
+        runtime = (SRC / "v2_runtime.cpp").read_text(encoding="utf-8")
+        settings = (SRC / "ui_v2_settings.cpp").read_text(encoding="utf-8")
+        action = runtime.split("static void handleSettingsAction", 1)[1].split(
+            "static bool handleHomeUpdateTap", 1
+        )[0]
+
+        self.assertIn("s_model.settingsPage == 2 && row == 2", action)
+        self.assertIn("if (!s_snapshot.otaAvailable)", action)
+        self.assertIn("checkV2OtaNow(false)", action)
+        self.assertIn('"AL DIA / TOCA BUSCAR"', settings)
+
+    def test_update_checks_queue_instead_of_disappearing_while_stocks_are_busy(self):
+        runtime = (SRC / "v2_runtime.cpp").read_text(encoding="utf-8")
+        check = runtime.split("static void checkV2OtaNow", 1)[1].split(
+            "static void installV2OtaNow", 1
+        )[0]
+        loop = runtime.split("void v2RuntimeLoop()", 1)[1]
+
+        self.assertIn("s_otaCheckPending = true", check)
+        self.assertIn("s_otaCheckPending = false", check)
+        self.assertIn("s_otaCheckPending && !stocksIsFetching()", loop)
+
+    def test_queued_check_refreshes_now_before_interval_arithmetic(self):
+        runtime = (SRC / "v2_runtime.cpp").read_text(encoding="utf-8")
+        loop = runtime.split("void v2RuntimeLoop()", 1)[1]
+        pending = loop.split(
+            "if (online && s_otaCheckPending && !stocksIsFetching())", 1
+        )[1].split(
+            "if (online && s_snapshot.otaChecked", 1
+        )[0]
+
+        self.assertIn("nowMs = millis();", pending)
 
     def test_v2_update_notice_is_explicit_and_requires_confirmation(self):
         runtime_h = (SRC / "v2_runtime.h").read_text(encoding="utf-8")

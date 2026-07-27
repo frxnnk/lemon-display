@@ -67,7 +67,7 @@ static void drawDevicePage(LGFX_Sprite& sprite, const V2RuntimeSnapshot& snapsho
     if (snapshot.otaChecking) snprintf(update, sizeof(update), "BUSCANDO...");
     else if (snapshot.otaAvailable && snapshot.otaArmed) snprintf(update, sizeof(update), "CONFIRMAR UPDATE / TOCA");
     else if (snapshot.otaAvailable) snprintf(update, sizeof(update), "V%s / TOCA", snapshot.otaVersion);
-    else if (snapshot.otaChecked) snprintf(update, sizeof(update), "AL DIA");
+    else if (snapshot.otaChecked) snprintf(update, sizeof(update), "AL DIA / TOCA BUSCAR");
     else {
         snprintf(update, sizeof(update), "BUSQUEDA AUTOMATICA");
         updateColor = v2UiColorMuted();
