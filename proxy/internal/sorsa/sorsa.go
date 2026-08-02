@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/fcedeirajoaquin/ferced-display/proxy/internal/feed"
@@ -17,17 +18,20 @@ const (
 	maxText  = 180
 )
 
-// OJO: este shape esta asumido, no verificado contra la API real. El fixture
-// de testdata/list_tweets.json es el que manda; si no coincide, ajustar aca.
+// Shape verificado contra https://api.sorsa.io/v3/swagger.json
+// (common.TweetsResponse -> common.Tweet -> common.User).
 type rawResp struct {
-	Tweets []struct {
+	NextCursor string `json:"next_cursor"`
+	Tweets     []struct {
 		ID        string `json:"id"`
-		Text      string `json:"text"`
+		FullText  string `json:"full_text"`
 		CreatedAt string `json:"created_at"`
-		Author    struct {
-			Name     string `json:"name"`
-			Username string `json:"username"`
-		} `json:"author"`
+		Lang      string `json:"lang"`
+		IsReply   bool   `json:"is_reply"`
+		User      struct {
+			Username    string `json:"username"`
+			DisplayName string `json:"display_name"`
+		} `json:"user"`
 	} `json:"tweets"`
 }
 
@@ -46,6 +50,8 @@ func parseDate(s string) time.Time {
 	return time.Time{}
 }
 
+// parse descarta respuestas sueltas: fuera del hilo se leen sin contexto y en
+// una pantalla de escritorio quedan como frases al aire.
 func parse(raw []byte) ([]feed.Item, error) {
 	var rr rawResp
 	if err := json.Unmarshal(raw, &rr); err != nil {
@@ -53,7 +59,10 @@ func parse(raw []byte) ([]feed.Item, error) {
 	}
 	out := make([]feed.Item, 0, len(rr.Tweets))
 	for _, tw := range rr.Tweets {
-		text := norm.Truncate(norm.Clean(tw.Text), maxText)
+		if tw.IsReply {
+			continue
+		}
+		text := norm.Truncate(norm.Clean(tw.FullText), maxText)
 		if text == "" {
 			continue
 		}
@@ -61,8 +70,8 @@ func parse(raw []byte) ([]feed.Item, error) {
 		out = append(out, feed.Item{
 			ID:     "x:" + tw.ID,
 			Text:   text,
-			Author: norm.Clean(tw.Author.Name),
-			Handle: "@" + tw.Author.Username,
+			Author: norm.Clean(tw.User.DisplayName),
+			Handle: "@" + tw.User.Username,
 			At:     at,
 			Epoch:  at.Unix(),
 			From:   feed.OriginX,
@@ -80,17 +89,21 @@ type Source struct {
 
 func (s *Source) Name() string { return "sorsa:list" }
 
+// Fetch ignora n: /list-tweets no acepta tamano de pagina, solo list_id y
+// next_cursor. Se recorta del lado del mezclador.
 func (s *Source) Fetch(n int) ([]feed.Item, error) {
 	c := s.HTTP
 	if c == nil {
 		c = &http.Client{Timeout: 12 * time.Second}
 	}
-	url := fmt.Sprintf("%s?list_id=%s&count=%d", endpoint, s.ListID, n)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+
+	req, err := http.NewRequest(http.MethodGet,
+		fmt.Sprintf("%s?list_id=%s", endpoint, url.QueryEscape(s.ListID)), nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("ApiKey", s.APIKey)
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.Do(req)
 	if err != nil {
@@ -104,5 +117,13 @@ func (s *Source) Fetch(n int) ([]feed.Item, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parse(raw)
+
+	items, err := parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	if n > 0 && len(items) > n {
+		items = items[:n]
+	}
+	return items, nil
 }
