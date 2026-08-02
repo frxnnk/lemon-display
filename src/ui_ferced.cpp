@@ -1,4 +1,4 @@
-#include "ui_ferced.h"
+﻿#include "ui_ferced.h"
 #include "display_manager.h"
 #include "config.h"
 #include "design_system.h"
@@ -146,6 +146,16 @@ static void drawDots(uint8_t index, uint8_t total) {
     }
 }
 
+// El panel RGB tiene un solo framebuffer: empujar mientras esta barriendo
+// produce tearing visible. Sincronizar es lo que hace la UI V2 y lo que le
+// faltaba a esta.
+static void present() {
+    displayWaitVSync();
+    const uint32_t t0 = micros();
+    s_sprite.pushSprite(0, 0);
+    displayRecordPush(SCREEN_W * SCREEN_H * 2, micros() - t0);
+}
+
 static void drawFrame(bool offline) {
     s_sprite.fillScreen(CANVAS);
     drawMark(SCREEN_W - MARGIN - MARK_W, CHIP_Y);
@@ -155,9 +165,54 @@ static void drawFrame(bool offline) {
     }
 }
 
+// Una tendencia es una sola palabra. Metida en el molde de un titular deja la
+// tarjeta vacia; asi se muestra como lo que es: un tema, en grande y centrado.
+static void drawTrendCard(const FeedItem* item, uint8_t index, uint8_t total,
+                          bool offline) {
+    drawFrame(offline);
+
+    char chip[64];
+    snprintf(chip, sizeof(chip), "TENDENCIA  %s",
+             item->author[0] ? item->author : "");
+    for (char* c = chip; *c; c++) *c = toupper((unsigned char)*c);
+    drawChip(chip);
+
+    // La fuente se elige por ancho medido: un hashtag largo no entra en 40px.
+    const lgfx::IFont* font = DS::fontHero();
+    s_sprite.setFont(font);
+    const int maxW = SCREEN_W - 2 * MARGIN - 16;
+    if (s_sprite.textWidth(item->text) > maxW) {
+        font = DS::fontDisplay();
+        s_sprite.setFont(font);
+        if (s_sprite.textWidth(item->text) > maxW) {
+            font = DS::fontHeading();
+            s_sprite.setFont(font);
+        }
+    }
+
+    s_sprite.setTextDatum(lgfx::middle_center);
+    s_sprite.setTextColor(FG, CANVAS);
+    s_sprite.drawString(item->text, SCREEN_W / 2, SCREEN_H / 2 - 10);
+
+    s_sprite.drawFastHLine(SCREEN_W / 2 - 30, SCREEN_H / 2 + 46, 60, LINE);
+
+    s_sprite.setFont(DS::fontCaption());
+    s_sprite.setTextDatum(lgfx::top_center);
+    s_sprite.setTextColor(FG_3, CANVAS);
+    s_sprite.drawString("de que se habla ahora", SCREEN_W / 2, SCREEN_H / 2 + 62);
+
+    drawDots(index, total);
+    present();
+}
+
 void uiFercedDrawItem(const FeedItem* item, uint8_t index, uint8_t total,
                       uint32_t nowEpoch, bool offline) {
     if (!s_ready || !item) return;
+
+    if (item->origin == FEED_FROM_TREND) {
+        drawTrendCard(item, index, total, offline);
+        return;
+    }
 
     drawFrame(offline);
 
@@ -193,7 +248,7 @@ void uiFercedDrawItem(const FeedItem* item, uint8_t index, uint8_t total,
     s_sprite.drawString(when, CARD_X + CARD_PAD, footY + 24);
 
     drawDots(index, total);
-    s_sprite.pushSprite(0, 0);
+    present();
 }
 
 void uiFercedDrawStatus(const char* eyebrow, const char* message) {
@@ -217,5 +272,6 @@ void uiFercedDrawStatus(const char* eyebrow, const char* message) {
         s_sprite.drawString(lines[i], CARD_X + CARD_PAD, y0 + i * TEXT_LH);
     }
 
-    s_sprite.pushSprite(0, 0);
+    present();
 }
+
