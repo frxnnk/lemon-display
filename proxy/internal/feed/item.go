@@ -21,6 +21,12 @@ type Item struct {
 	At     time.Time `json:"-"`
 	Epoch  int64     `json:"ts"`
 	From   Origin    `json:"o"`
+
+	// ImgURL es la fuente original; nunca sale al firmware. El proxy la
+	// resuelve y publica solo ImgKey, asi el aparato no puede pedir una URL
+	// arbitraria.
+	ImgURL string `json:"-"`
+	ImgKey string `json:"k,omitempty"`
 }
 
 func Sort(items []Item) {
