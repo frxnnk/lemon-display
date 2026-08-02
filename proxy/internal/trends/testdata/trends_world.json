@@ -1,0 +1,64 @@
+{
+  "trends": [
+    {
+      "name": "#weloveyouariana",
+      "query": "%23weloveyouariana",
+      "url": "http://twitter.com/search?q=%23weloveyouariana"
+    },
+    {
+      "name": "#وش_يحتاج_خاطرك",
+      "query": "%23%D9%88%D8%B4_%D9%8A%D8%AD%D8%AA%D8%A7%D8%AC_%D8%AE%D8%A7%D8%B7%D8%B1%D9%83",
+      "url": "http://twitter.com/search?q=%23%D9%88%D8%B4_%D9%8A%D8%AD%D8%AA%D8%A7%D8%AC_%D8%AE%D8%A7%D8%B7%D8%B1%D9%83"
+    },
+    {
+      "name": "#daha17",
+      "query": "%23daha17",
+      "url": "http://twitter.com/search?q=%23daha17"
+    },
+    {
+      "name": "#جزاء_القحطاني",
+      "query": "%23%D8%AC%D8%B2%D8%A7%D8%A1_%D8%A7%D9%84%D9%82%D8%AD%D8%B7%D8%A7%D9%86%D9%8A",
+      "url": "http://twitter.com/search?q=%23%D8%AC%D8%B2%D8%A7%D8%A1_%D8%A7%D9%84%D9%82%D8%AD%D8%B7%D8%A7%D9%86%D9%8A"
+    },
+    {
+      "name": "#GSvREN",
+      "query": "%23GSvREN",
+      "url": "http://twitter.com/search?q=%23GSvREN"
+    },
+    {
+      "name": "Chad Williams",
+      "query": "%22Chad+Williams%22",
+      "url": "http://twitter.com/search?q=%22Chad+Williams%22"
+    },
+    {
+      "name": "Gorosito",
+      "query": "Gorosito",
+      "url": "http://twitter.com/search?q=Gorosito"
+    },
+    {
+      "name": "Nyoni",
+      "query": "Nyoni",
+      "url": "http://twitter.com/search?q=Nyoni"
+    },
+    {
+      "name": "Flores",
+      "query": "Flores",
+      "url": "http://twitter.com/search?q=Flores"
+    },
+    {
+      "name": "Dodgers",
+      "query": "Dodgers",
+      "url": "http://twitter.com/search?q=Dodgers"
+    },
+    {
+      "name": "Yankees",
+      "query": "Yankees",
+      "url": "http://twitter.com/search?q=Yankees"
+    },
+    {
+      "name": "Tim Payne",
+      "query": "%22Tim+Payne%22",
+      "url": "http://twitter.com/search?q=%22Tim+Payne%22"
+    }
+  ]
+}
