@@ -133,29 +133,56 @@ rebranding se reduce a color, layout, logo y copy.
 
 ## La pantalla
 
-480x480. Identidad Ferced: negro casi puro, todo el resto blanco translúcido,
-cero color de marca.
+480x480. **Se conserva el lenguaje visual de la UI V2 actual** y se rebrandea:
+no se reemplaza por una pantalla de texto plano. Lo que hace que la UI de hoy
+se vea moderna son sus primitivas, y esas se reusan tal cual.
+
+| Primitiva | Dónde está hoy | Para qué |
+|---|---|---|
+| `LGFX_Sprite` de pantalla completa en PSRAM | `ui_v2_runtime.cpp:88` | Doble buffer, cero parpadeo |
+| `pushSprite` con `setClipRect` | `:224-250` | Redibujar sólo lo que cambia |
+| `fillSmoothRoundRect` | `:273` | Píldoras y tarjetas antialiaseadas |
+| `drawWideLine` con ancho float | `:165, 255-262` | Líneas y glifos suaves |
+| `drawBitmapTransparent` | `data/market_icons.h:22` | Logo |
 
 ```
-┌─────────────────────────────────┐
-│  AHORA · @handle           ferced│  eyebrow mono 10px MAYÚS, tracking .17em
-│                                  │
-│  El texto del ítem, en Satoshi,  │  cuerpo grande, ~180 chars
-│  cuerpo grande, hasta cinco      │
-│  líneas.                         │
-│                                  │
-│  Nombre Apellido                 │  blanco 75%
-│  hace 12 min                     │  blanco 55%
-└─────────────────────────────────┘
+┌──────────────────────────────────────┐
+│  ╭─────────────╮            ferced   │  chip píldora + wordmark 120x28
+│  │ AHORA · @han│                     │
+│  ╰─────────────╯                     │
+│  ╭────────────────────────────────╮  │  tarjeta radio 16, bgCard
+│  │  El texto del item, en         │  │  SatoshiMedium18, blanco
+│  │  Satoshi, hasta cinco lineas.  │  │  wrap por ancho real
+│  │                                │  │
+│  │  Nombre Apellido               │  │  blanco 75%
+│  │  hace 12 min                   │  │  blanco 55%
+│  ╰────────────────────────────────╯  │
+│         ● ● ○ ○ ○ ○ ○ ○              │  posición en el pool
+└──────────────────────────────────────┘
 ```
 
-Tokens: `--canvas #0e1011`, `--card #0a0a0a`, `--fg #fff`, secundario
-`rgba(255,255,255,.55)`. Verde `#34d399` y rojo `#f87171` **sólo para estado**,
-nunca decorativos. El grano de la marca se hornea en el fondo estático:
-animarlo en un MCU cuesta y no se nota.
+### Marca
 
-En paneles angostos el tracking del eyebrow baja a `.17em`; con `.25em` las
-etiquetas largas se parten en dos líneas.
+El firmware ya dibuja el wordmark de Lemon como bitmap RGB565 de 120x28
+(`src/data/lemon_v2_logo_light_120.h`). Ferced ocupa el mismo lugar: se genera
+`ferced_logo_white_120.h` desde `logo-white.png` con `tools/png_to_rgb565.py`,
+que compositea sobre negro y usa `0x0000` como clave de transparencia — justo
+el formato de ese PNG, que es blanco sólido sobre transparente.
+
+### Color
+
+`src/colors.h` ya tiene `struct ThemePalette` con ~55 tokens y
+`Colors::setTheme()`. Ferced entra como **tercer tema**, no como reescritura:
+`--canvas #0e1011` → `bgBase`, `--card #0a0a0a` → `bgCard`, `--fg #fff` →
+`textPrimary`, secundario `rgba(255,255,255,.55)` → `textTertiary`.
+
+Regla de la marca: no inventar grises, todo gris es blanco con alpha. Donde la
+paleta Lemon usa `lemonGreen` de acento, Ferced usa blanco. Verde `#34d399` y
+rojo `#f87171` quedan **sólo para estado**, nunca decorativos.
+
+El grano de la marca se hornea en el fondo estático: animarlo en un MCU cuesta
+y no se nota. El tracking del eyebrow va en `.17em`; con `.25em` las etiquetas
+largas se parten en dos líneas.
 
 ## Cadencia
 
