@@ -234,18 +234,29 @@ void uiFercedDrawItem(const FeedItem* item, uint8_t index, uint8_t total,
         s_sprite.drawString(lines[i], CARD_X + CARD_PAD, CARD_Y + CARD_PAD + i * TEXT_LH);
     }
 
-    const int footY = CARD_Y + CARD_H - CARD_PAD - 44;
+    const int footY = CARD_Y + CARD_H - CARD_PAD - FEED_IMG_SIDE;
+    int textX = CARD_X + CARD_PAD;
+
+    const uint16_t* img = feedFetchImage(item->imgKey);
+    if (img) {
+        s_sprite.pushImage(CARD_X + CARD_PAD, footY,
+                           FEED_IMG_SIDE, FEED_IMG_SIDE, img);
+        s_sprite.drawRoundRect(CARD_X + CARD_PAD - 1, footY - 1,
+                               FEED_IMG_SIDE + 2, FEED_IMG_SIDE + 2, 6, LINE);
+        textX += FEED_IMG_SIDE + 16;
+    }
+
     if (item->author[0]) {
         s_sprite.setFont(DS::fontBody());
         s_sprite.setTextColor(FG_2, CARD);
-        s_sprite.drawString(item->author, CARD_X + CARD_PAD, footY);
+        s_sprite.drawString(item->author, textX, footY + 14);
     }
 
     char when[32];
     relativeTime(when, sizeof(when), item->epoch, nowEpoch);
     s_sprite.setFont(DS::fontCaption());
     s_sprite.setTextColor(FG_3, CARD);
-    s_sprite.drawString(when, CARD_X + CARD_PAD, footY + 24);
+    s_sprite.drawString(when, textX, footY + 38);
 
     drawDots(index, total);
     present();

@@ -29,8 +29,9 @@ type rawResp struct {
 		Lang      string `json:"lang"`
 		IsReply   bool   `json:"is_reply"`
 		User      struct {
-			Username    string `json:"username"`
-			DisplayName string `json:"display_name"`
+			Username        string `json:"username"`
+			DisplayName     string `json:"display_name"`
+			ProfileImageURL string `json:"profile_image_url"`
 		} `json:"user"`
 	} `json:"tweets"`
 }
@@ -75,6 +76,7 @@ func parse(raw []byte) ([]feed.Item, error) {
 			At:     at,
 			Epoch:  at.Unix(),
 			From:   feed.OriginX,
+			ImgURL: tw.User.ProfileImageURL,
 		})
 	}
 	feed.Sort(out)

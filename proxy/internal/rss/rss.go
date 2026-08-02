@@ -18,9 +18,12 @@ const (
 
 type rawFeed struct {
 	Items []struct {
-		Title   string `xml:"title"`
-		Link    string `xml:"link"`
-		PubDate string `xml:"pubDate"`
+		Title     string `xml:"title"`
+		Link      string `xml:"link"`
+		PubDate   string `xml:"pubDate"`
+		Thumbnail struct {
+			URL string `xml:"url,attr"`
+		} `xml:"thumbnail"`
 	} `xml:"channel>item"`
 }
 
@@ -57,6 +60,7 @@ func parse(raw []byte, label string) ([]feed.Item, error) {
 			At:     at,
 			Epoch:  at.Unix(),
 			From:   feed.OriginRSS,
+			ImgURL: it.Thumbnail.URL,
 		})
 	}
 	feed.Sort(out)

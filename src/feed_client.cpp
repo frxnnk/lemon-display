@@ -31,6 +31,51 @@ static FeedOrigin originFrom(const char* o) {
     return FEED_FROM_RSS;
 }
 
+// Un solo buffer: se rota un item cada 17 s, asi que no hace falta cachear
+// varias. La key evita rebajar la misma imagen si el item se repite.
+static uint16_t _imgBuf[FEED_IMG_PIXELS];
+static char     _imgBufKey[FEED_IMGKEY_LEN] = {0};
+
+const uint16_t* feedFetchImage(const char* key) {
+    if (!key || !key[0]) return nullptr;
+    if (strncmp(_imgBufKey, key, FEED_IMGKEY_LEN) == 0) return _imgBuf;
+
+    char url[192];
+    const char* base = FEED_ENDPOINT;
+    const char* slash = strstr(base, "/v1/feed");
+    if (!slash) return nullptr;
+    snprintf(url, sizeof(url), "%.*s/v1/img?k=%s", (int)(slash - base), base, key);
+
+    const bool secure = strncmp(url, "https://", 8) == 0;
+    WiFiClient plain;
+    WiFiClientSecure tls;
+    if (secure) tls.setInsecure();
+
+    HTTPClient http;
+    http.setTimeout(8000);
+    if (!(secure ? http.begin(tls, url) : http.begin(plain, url))) return nullptr;
+
+    if (http.GET() != HTTP_CODE_OK) { http.end(); return nullptr; }
+
+    const int expected = FEED_IMG_PIXELS * 2;
+    if (http.getSize() != expected) {
+        Serial.printf("[Feed] imagen de %d bytes, esperaba %d\n", http.getSize(), expected);
+        http.end();
+        return nullptr;
+    }
+
+    const int got = http.getStream().readBytes((uint8_t*)_imgBuf, expected);
+    http.end();
+    if (got != expected) {
+        _imgBufKey[0] = '\0';
+        return nullptr;
+    }
+
+    strncpy(_imgBufKey, key, FEED_IMGKEY_LEN - 1);
+    _imgBufKey[FEED_IMGKEY_LEN - 1] = '\0';
+    return _imgBuf;
+}
+
 FeedResult feedFetch() {
     const char* url = FEED_ENDPOINT;
     const bool secure = strncmp(url, "https://", 8) == 0;
@@ -91,6 +136,7 @@ FeedResult feedFetch() {
         copyField(_items[n].text, FEED_TEXT_LEN, text);
         copyField(_items[n].author, FEED_AUTHOR_LEN, it["a"] | "");
         copyField(_items[n].handle, FEED_HANDLE_LEN, it["h"] | "");
+        copyField(_items[n].imgKey, FEED_IMGKEY_LEN, it["k"] | "");
         _items[n].epoch = it["ts"] | 0UL;
         _items[n].origin = originFrom(it["o"]);
         n++;
