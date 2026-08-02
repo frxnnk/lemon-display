@@ -512,8 +512,16 @@ git commit -m "proxy: fuente RSS"
 - Create: `proxy/internal/sorsa/testdata/list_tweets.json` (viene de T0)
 - Test: `proxy/internal/sorsa/sorsa_test.go`
 
-> **Ojo:** el struct de abajo asume un shape de respuesta. Ajustalo contra el
-> fixture real que capturaste en T0. El test es el que manda.
+> **Corregido el 2026-08-02** contra `https://api.sorsa.io/v3/swagger.json`
+> (público, sin auth). El struct que figuraba abajo estaba mal en tres puntos:
+>
+> - el texto es **`full_text`**, no `text`
+> - el autor va en **`user`** (`username` + `display_name`), no en `author`
+> - `/list-tweets` **no acepta `count`**: sólo `list_id` y `next_cursor`
+>
+> Además el tweet trae `is_reply`, que conviene usar para descartar respuestas
+> sueltas: fuera del hilo se leen sin contexto. Ver el código ya implementado
+> en `proxy/internal/sorsa/sorsa.go`.
 
 **Step 1: Test que falla**
 
