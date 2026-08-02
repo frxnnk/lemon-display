@@ -12,7 +12,9 @@ import (
 )
 
 const (
-	maxBody  = 256 << 10
+	// Truncar un feed a la mitad de un bloque CDATA produce XML invalido y se
+	// pierde la fuente entera. 2 MB cubre feeds grandes como Xataka.
+	maxBody  = 2 << 20
 	maxTitle = 180
 )
 
@@ -61,6 +63,7 @@ func parse(raw []byte, label string) ([]feed.Item, error) {
 			Epoch:  at.Unix(),
 			From:   feed.OriginRSS,
 			ImgURL: it.Thumbnail.URL,
+			Src:    "rss:" + label,
 		})
 	}
 	feed.Sort(out)

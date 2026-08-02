@@ -116,6 +116,43 @@ func TestInterleaveSingleOriginIsUnchanged(t *testing.T) {
 	}
 }
 
+// Cuatro feeds RSS son cuatro fuentes distintas aunque compartan Origin. Si
+// se agrupara por Origin contarian como una sola y el feed mas nuevo coparia
+// toda la rotacion.
+func TestInterleaveSeparatesSourcesWithinSameOrigin(t *testing.T) {
+	mkSrc := func(id, src string, h int) Item {
+		it := mk(id, OriginRSS, h)
+		it.Src = src
+		return it
+	}
+	in := []Item{
+		mkSrc("bbc1", "rss:BBC", 20),
+		mkSrc("bbc2", "rss:BBC", 19),
+		mkSrc("bbc3", "rss:BBC", 18),
+		mkSrc("xat1", "rss:Xataka", 17),
+		mkSrc("xat2", "rss:Xataka", 16),
+	}
+	got := ids(Interleave(in))
+	want := []string{"bbc1", "xat1", "bbc2", "xat2", "bbc3"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("ids = %v, quiero %v", got, want)
+		}
+	}
+}
+
+func TestInterleaveFallsBackToOriginWhenSrcEmpty(t *testing.T) {
+	in := []Item{
+		mk("t1", OriginTrend, 20),
+		mk("r1", OriginRSS, 19),
+		mk("t2", OriginTrend, 18),
+	}
+	got := origins(Interleave(in))
+	if got[0] != OriginTrend || got[1] != OriginRSS {
+		t.Fatalf("origenes = %v, quiero alternancia sin Src", got)
+	}
+}
+
 func TestInterleaveEmptyIsEmpty(t *testing.T) {
 	if got := Interleave(nil); len(got) != 0 {
 		t.Fatalf("quiero vacio, tengo %v", got)

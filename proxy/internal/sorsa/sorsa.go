@@ -77,6 +77,7 @@ func parse(raw []byte) ([]feed.Item, error) {
 			Epoch:  at.Unix(),
 			From:   feed.OriginX,
 			ImgURL: tw.User.ProfileImageURL,
+			Src:    "sorsa:list",
 		})
 	}
 	feed.Sort(out)

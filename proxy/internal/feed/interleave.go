@@ -16,13 +16,17 @@ func Interleave(items []Item) []Item {
 		return append([]Item(nil), items...)
 	}
 
-	var order []Origin
-	groups := make(map[Origin][]Item)
+	var order []string
+	groups := make(map[string][]Item)
 	for _, it := range items {
-		if _, ok := groups[it.From]; !ok {
-			order = append(order, it.From)
+		k := it.Src
+		if k == "" {
+			k = string(it.From)
 		}
-		groups[it.From] = append(groups[it.From], it)
+		if _, ok := groups[k]; !ok {
+			order = append(order, k)
+		}
+		groups[k] = append(groups[k], it)
 	}
 
 	if len(order) == 1 {
