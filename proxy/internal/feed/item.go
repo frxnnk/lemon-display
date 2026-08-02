@@ -8,8 +8,9 @@ import (
 type Origin string
 
 const (
-	OriginX   Origin = "x"
-	OriginRSS Origin = "rss"
+	OriginX     Origin = "x"
+	OriginRSS   Origin = "rss"
+	OriginTrend Origin = "trend"
 )
 
 type Item struct {
