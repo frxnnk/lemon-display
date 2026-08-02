@@ -50,7 +50,7 @@ func (m *Mixer) Feed(n int) []feed.Item {
 	}
 
 	feed.Sort(merged)
-	m.pool = feed.Dedup(merged)
+	m.pool = feed.Interleave(feed.Dedup(merged))
 	m.fetched = time.Now()
 	m.hasPool = true
 	return m.take(n)
