@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -43,6 +44,9 @@ func (h *Handler) serveFeed(w http.ResponseWriter, r *http.Request) {
 	for i := range items {
 		items[i].Epoch = items[i].At.Unix()
 	}
+
+	log.Printf("[feed] %s pidio n=%d, sirvo %d items (%s)",
+		r.RemoteAddr, n, len(items), r.UserAgent())
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=60")
