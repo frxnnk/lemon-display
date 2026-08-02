@@ -27,6 +27,11 @@ type Item struct {
 	// arbitraria.
 	ImgURL string `json:"-"`
 	ImgKey string `json:"k,omitempty"`
+
+	// Src identifica la fuente concreta ("rss:BBC Mundo"), no su tipo. El
+	// intercalado agrupa por esto: si agrupara por Origin, cuatro feeds RSS
+	// contarian como uno solo y el mas nuevo coparia la rotacion.
+	Src string `json:"-"`
 }
 
 func Sort(items []Item) {

@@ -76,6 +76,7 @@ func parse(raw []byte, region string, at time.Time) ([]feed.Item, error) {
 			At:     at,
 			Epoch:  at.Unix(),
 			From:   feed.OriginTrend,
+			Src:    "trends:" + region,
 		})
 	}
 	return out, nil
