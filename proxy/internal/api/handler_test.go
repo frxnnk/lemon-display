@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -119,6 +120,29 @@ func TestFeedDefaultsNWhenMissingOrJunk(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Errorf("%s: status = %d", path, rec.Code)
 		}
+	}
+}
+
+// Sin Content-Length, Go pasa a Transfer-Encoding: chunked cuando la respuesta
+// supera ~4KB. El HTTPClient del ESP32 entrega el stream crudo CON el framing
+// de chunks, y ArduinoJson no lo puede parsear. El cliente embebido necesita
+// tamaño declarado.
+func TestFeedDeclaresContentLength(t *testing.T) {
+	rec := get(t, "/v1/feed?n=20", fake{n: 20})
+
+	cl := rec.Header().Get("Content-Length")
+	if cl == "" {
+		t.Fatal("falta Content-Length: la respuesta saldria chunked")
+	}
+	n, err := strconv.Atoi(cl)
+	if err != nil {
+		t.Fatalf("Content-Length no numerico: %q", cl)
+	}
+	if n != rec.Body.Len() {
+		t.Errorf("Content-Length = %d, cuerpo = %d", n, rec.Body.Len())
+	}
+	if te := rec.Header().Get("Transfer-Encoding"); te != "" {
+		t.Errorf("Transfer-Encoding = %q, quiero vacio", te)
 	}
 }
 
