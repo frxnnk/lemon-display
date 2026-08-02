@@ -27,6 +27,11 @@ static uint32_t s_retryMs = FEED_RETRY_MIN_MS;
 static uint32_t s_nextRetry = 0;
 static bool     s_offline = false;
 
+#define WIFI_RETRY_MIN_MS  5000UL
+#define WIFI_RETRY_MAX_MS 60000UL
+static uint32_t s_wifiRetryMs = WIFI_RETRY_MIN_MS;
+static uint32_t s_nextWifiRetry = 0;
+
 // NTP deja el reloj del sistema en epoch UTC, igual que el campo ts del feed.
 // Sin sincronizar devuelve 0 y la UI cae en "recien".
 static uint32_t nowEpoch() {
@@ -137,7 +142,34 @@ void loop() {
     }
 
     if (s_phase == PHASE_CONNECTING) {
-        if (touchLoop().gesture == TOUCH_TAP) startProvisioning();
+        // Reintenta solo. Un aparato de escritorio no puede quedarse esperando
+        // que alguien lo toque porque el router tardo en levantar.
+        if (touchLoop().gesture == TOUCH_TAP) {
+            startProvisioning();
+            return;
+        }
+        const uint32_t nowMs = millis();
+        if (nowMs >= s_nextWifiRetry) {
+            char ssid[33] = {};
+            char pass[65] = {};
+            nvsLoadWifi(ssid, sizeof(ssid), pass, sizeof(pass));
+
+            char msg[96];
+            snprintf(msg, sizeof(msg), "Reintentando con %s.", ssid);
+            uiFercedDrawStatus("SIN RED", msg);
+            wifiSetup(ssid, pass);
+
+            if (wifiConnected()) {
+                s_wifiRetryMs = WIFI_RETRY_MIN_MS;
+                enterRunning();
+                return;
+            }
+            uiFercedDrawStatus("SIN RED", "No conecta. Tocar para reconfigurar.");
+            s_nextWifiRetry = millis() + s_wifiRetryMs;
+            s_wifiRetryMs = s_wifiRetryMs * 2 > WIFI_RETRY_MAX_MS
+                                ? WIFI_RETRY_MAX_MS
+                                : s_wifiRetryMs * 2;
+        }
         delay(20);
         return;
     }
