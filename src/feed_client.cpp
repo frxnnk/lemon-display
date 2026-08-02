@@ -56,9 +56,20 @@ FeedResult feedFetch() {
         return _count > 0 ? FEED_STALE_CACHE : FEED_FAILED;
     }
 
-    JsonDocument doc;
-    const DeserializationError err = deserializeJson(doc, http.getStream());
+    // getString() decodifica el framing de chunks; getStream() entrega el
+    // stream crudo y ArduinoJson se atraganta si el servidor responde
+    // chunked. El proxy ya manda Content-Length, pero esto lo deja a salvo
+    // de cualquier servidor.
+    const String payload = http.getString();
     http.end();
+
+    if (payload.isEmpty()) {
+        Serial.println("[Feed] cuerpo vacio");
+        return _count > 0 ? FEED_STALE_CACHE : FEED_FAILED;
+    }
+
+    JsonDocument doc;
+    const DeserializationError err = deserializeJson(doc, payload);
 
     if (err) {
         Serial.printf("[Feed] JSON invalido: %s\n", err.c_str());

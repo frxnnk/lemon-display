@@ -48,9 +48,20 @@ func (h *Handler) serveFeed(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[feed] %s pidio n=%d, sirvo %d items (%s)",
 		r.RemoteAddr, n, len(items), r.UserAgent())
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "public, max-age=60")
-	json.NewEncoder(w).Encode(struct {
+	// Se serializa a buffer para poder declarar Content-Length. Con un encoder
+	// en streaming, Go pasa a Transfer-Encoding: chunked al superar ~4KB, y el
+	// HTTPClient del ESP32 entrega ese stream con el framing de chunks adentro,
+	// que ArduinoJson no sabe parsear.
+	body, err := json.Marshal(struct {
 		Items []feed.Item `json:"items"`
 	}{items})
+	if err != nil {
+		http.Error(w, "no se pudo serializar el feed", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	w.Header().Set("Cache-Control", "public, max-age=60")
+	w.Write(body)
 }
