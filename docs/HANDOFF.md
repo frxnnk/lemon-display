@@ -36,7 +36,8 @@ automático, corriendo como `NT AUTHORITY\LocalService`, escuchando **sólo en
 **Cuatro fuentes RSS** intercaladas: BBC Mundo, La Nación, BBC Tech, Xataka.
 
 **Firmware** con animación escalonada, miniaturas de 64x64 y reconexión
-automática de WiFi. 16,6% de flash, 19% de RAM.
+automática de WiFi. 16,6% de flash, 19% de RAM. Animación a 35,5 fps medidos
+sobre un techo de panel de 42.
 
 **Simulador** que corre el mismo `src/ui_ferced.cpp` con la misma LovyanGFX
 sobre SDL, reproduciendo el costo de frame medido en el aparato.
@@ -67,6 +68,33 @@ python -m esptool --chip esp32s3 --port COM3 --baud 921600 --before default-rese
 ```
 
 **Siempre `--flash-mode keep --flash-size keep`.** Forzar `qio` causa boot loop.
+
+### Leer la telemetría
+
+Al terminar cada transición (una cada 17 s) el firmware imprime por serie:
+
+```
+[anim] frames=45 cost=22.7ms max=35.4ms period=28.0ms fps=35.7 waits=48 timeouts=0
+```
+
+`cost` es lo que tarda `uiFercedTick()`; `period` es el reloj de pared entre
+frames y **de ahí sale el FPS de verdad**. `timeouts` es el dato que delata si
+`displayWaitVSync()` está sincronizando o agotando su timeout: si `timeouts`
+iguala a `waits`, la ISR de VSync no está registrada (ver trampas).
+
+El aparato retiene el USB nativo, así que `platformio device monitor` pelea con
+esptool. Para capturar sin bloquear la terminal:
+
+```powershell
+$p = New-Object System.IO.Ports.SerialPort 'COM3',115200,'None',8,'one'
+$p.ReadTimeout = 1500; $p.DtrEnable = $true; $p.Open()
+$fin = (Get-Date).AddSeconds(60)
+while ((Get-Date) -lt $fin) { try { $p.ReadLine() } catch { } }
+$p.Close()
+```
+
+Resetear con esptool cierra y reabre el puerto (re-enumera), así que para ver el
+arranque hay que reabrir en bucle hasta que aparezca de nuevo.
 
 ### Operar el proxy
 
@@ -104,6 +132,11 @@ ficha de Makerfabs dice "FPS > 50" porque asume un pclk más alto. Subirlo a
 16 MHz daría 56 Hz pero aumenta la contención de PSRAM, que es el cuello de
 botella real. **Sin medir, no lo toques.**
 
+Desde el 2026-08-03 ya no es una deducción: `displaySetupVSync()` cuenta ticks
+de VSync durante 500 ms al arrancar e imprime `[Display] ... panel at 42.0 Hz
+(21 ticks / 500 ms)`. Con 21 ticks la cuantización es de ±2 Hz, así que
+confirma la cuenta de arriba sin contradecirla.
+
 **Un frame a pantalla completa cuesta ~99 ms.** El sprite vive en PSRAM;
 componer + empujar son ~920 KB de tráfico. La ecuación medida es
 `costo(ms) = 23,4 + 0,1575 × filas`. De ahí sale todo el diseño de bandas.
@@ -128,6 +161,22 @@ serializa a buffer y declara el largo; hay un test que falla si eso se pierde.
 
 **El `vsync.h` del repo no funciona** — lo dice en su propia primera línea.
 Incluirlo rompe el build.
+
+**Compartir un vector de interrupción exige coincidir en el flag de IRAM.**
+Costó 12 fps y estuvo escondido desde el principio. `displaySetupVSync()` pedía
+`ESP_INTR_FLAG_SHARED | ESP_INTR_FLAG_IRAM`, pero LovyanGFX registra ese mismo
+vector con `ESP_INTR_FLAG_INTRDISABLED | ESP_INTR_FLAG_SHARED`, **sin** IRAM
+(`Bus_RGB.cpp`, esp32s3). ESP-IDF exige que todos los handlers de un vector
+compartido coincidan en ese flag; como no coincidían y la fuente ya estaba
+ruteada, no quedaba slot y devolvía `ESP_ERR_NOT_FOUND` (261). El resultado era
+silencioso y caro: `_vsync_count` congelado en cero y **cada**
+`displayWaitVSync()` agotando sus 25 ms de timeout. El handler sigue con
+`IRAM_ATTR` —eso es lo que pone el código en IRAM—; el flag sólo declaraba un
+requisito que rompía el sharing.
+
+Moraleja general: un `esp_err_t` que se imprime y se sigue de largo puede costar
+un tercio del framerate. Si algo devuelve error al arrancar, no lo dejes pasar
+porque "igual anda".
 
 **Los includes con comillas resuelven primero en el directorio del archivo.**
 Por eso el simulador no podía sombrear `display_manager.h` y hubo que meter un
@@ -174,27 +223,63 @@ de las otras cosas que corren en ese VPS.
 **El BOM de UTF-8 rompe la primera línea** de un script mandado por stdin a
 `powershell -Command -`. Poner una línea vacía al principio.
 
+**Invocar `powershell` remoto por ssh al VPS no devuelve salida.** Verificado el
+2026-08-03: `ssh ... hostname` anda perfecto y devuelve `vmi3426337`, pero
+cualquier `ssh ... "powershell -NoProfile -Command ..."` termina en
+`Terminate batch job (Y/N)?` sin imprimir nada. Falla igual con `-n -T`, con
+`-EncodedCommand` (que descarta el problema de comillas) y con un wrapper `.bat`
+local redirigiendo a archivo — o sea que es del lado remoto, no del quoting.
+El mensaje llega **por el canal de ssh**, así que lo emite el VPS. Sin
+diagnosticar. Mientras tanto, para medir el framerate usá la telemetría por
+serie en vez del log del proxy.
+
 ---
 
 ## Pendiente
 
 ### Inmediato: el framerate
 
-Es lo que estaba en curso. Medido con telemetría real del aparato:
+Historial de optimizaciones, medido con telemetría real del aparato:
 
-| Cambio | Por frame | FPS |
+| Cambio | Costo por frame | FPS (1000/costo) |
 |---|---|---|
 | Original | 98,8 ms | 10 |
 | Empujar sólo la banda sucia | 78,4 ms | 13 |
 | Un slot por renglón | 45,6 ms | 22 |
 | Slots en secuencia | 69,4 ms | 14 ↓ |
-| Arreglar el hueco entre slots | **36,0 ms** | **28** |
+| Arreglar el hueco entre slots | 36,0 ms | 28 |
+| **Registrar la ISR de VSync** | **22,7 ms** | — |
 
-El techo del panel son 42 fps. Faltan dos palancas: **acortar la animación**
-para que entre en menos frames, y **subir `freq_write` a 16 MHz**.
+**Cuidado con esa columna de FPS: está inflada.** Sale de `1000/costo`, y el
+costo mide sólo lo que pasa dentro de `uiFercedTick()`: deja afuera el
+`delay(1)` del loop, el sondeo del táctil y `wifiLoop()`. Desde el 2026-08-03 el
+instrumento reporta las dos cosas por separado —`cost` y `period`— y el FPS sale
+del período real de reloj de pared.
 
-El firmware manda `fr`, `avg` y `max` como parámetros en cada pedido de imagen
-(cada ~35 s), y el proxy los registra como `[anim]`. Ahí se mide.
+Con la vara nueva, A/B sobre el mismo firmware reintroduciendo el flag roto a
+propósito (5 muestras contra 4, dispersión ±0,3 fps):
+
+| | cost | period | FPS | timeouts |
+|---|---|---|---|---|
+| ISR de VSync fallando | 36,4 ms | 43,1 ms | 23,2 | 100 % |
+| ISR de VSync andando | 22,7 ms | 28,0 ms | **35,5** | 0 % |
+
+O sea que el "28 fps" que figuraba acá como mejor marca en realidad eran 23,2.
+
+**La palanca que queda.** El período es 28,0 ms y el del panel 23,6 ms. Como
+ahora toda espera termina en un flanco real, el período debería ser un múltiplo
+exacto de 23,6 — y no lo es. La lectura: ~18 % de los frames se pasan del
+presupuesto y esperan al flanco siguiente (`28,0 / 23,6 = 1,18`). Recortar un
+par de ms del trabajo por vuelta —los ~5,4 ms que viven fuera del tick, o el
+push— mete esos frames en el balde de un período y empuja hacia los 42 fps del
+techo. Es inferencia sobre las medias; la distribución por frame no está medida.
+
+Subir `freq_write` a 16 MHz sigue siendo la otra palanca, con la misma
+advertencia de siempre: sin medir, no.
+
+El firmware manda `fr`, `avg` y `max` en cada pedido de feed y el proxy los
+registra como `[anim]`, pero **no hace falta el log remoto**: la misma línea sale
+por serie al terminar cada transición. Ver "Leer la telemetría".
 
 ### Funcionalidad
 
@@ -233,6 +318,12 @@ desincroniza y el simulador empieza a mentir.
 
 **Medir antes de optimizar.** El paso "slots en secuencia" empeoró el framerate
 y sólo se supo por la telemetría. Sin medir se habría quedado el bug adentro.
+
+**Y desconfiá del instrumento también.** Al arreglar la ISR de VSync el
+instrumento marcó 45 fps sobre un panel de 42: imposible, y la pista de que
+medía mal. Medía sólo el costo dentro del tick. El número real era 35,5. Un
+resultado que **supera** el techo teórico es tan sospechoso como uno que no
+llega — en los dos casos, andá a buscar el dato crudo.
 
 ---
 

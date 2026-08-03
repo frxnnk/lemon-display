@@ -95,6 +95,12 @@ static uint32_t s_lastProgressPaint = 0;
 static uint32_t s_frameCount = 0;
 static uint32_t s_frameSumUs = 0;
 static uint32_t s_frameWorstUs = 0;
+// El costo dentro del tick no es el framerate: afuera quedan el delay() del
+// loop, el sondeo del tactil y wifiLoop(). Para no inflar el numero, se mide
+// tambien el periodo real entre arranques de frame.
+static uint32_t s_lastFrameUs = 0;
+static uint32_t s_framePeriodSumUs = 0;
+static uint32_t s_framePeriodCount = 0;
 static UiFrameStats s_stats = {0, 0, 0};
 
 UiFrameStats uiFercedStats() { return s_stats; }
@@ -421,6 +427,11 @@ bool uiFercedTick(uint32_t nowEpoch, float progress01) {
             s_frameCount++;
             s_frameSumUs += frameUs;
             if (frameUs > s_frameWorstUs) s_frameWorstUs = frameUs;
+            if (s_lastFrameUs != 0) {
+                s_framePeriodSumUs += t0 - s_lastFrameUs;
+                s_framePeriodCount++;
+            }
+            s_lastFrameUs = t0;
         }
 
         if (elapsed >= (uint32_t)ENTER_MS + (uint32_t)STAGGER_MS * SLOTS) {
@@ -430,10 +441,30 @@ bool uiFercedTick(uint32_t nowEpoch, float progress01) {
                 s_stats.frames = (uint16_t)s_frameCount;
                 s_stats.avgUs100 = (uint16_t)((s_frameSumUs / s_frameCount) / 100);
                 s_stats.worstUs100 = (uint16_t)(s_frameWorstUs / 100);
+
+                // El mismo dato que viaja al proxy como [anim], pero por serie:
+                // medir no puede depender de leer un log remoto. waitTimeouts
+                // delata si displayWaitVSync() esta agotando su timeout en vez
+                // de sincronizar de verdad con el panel.
+                const DisplayDiagnostics d = displayGetDiagnostics();
+                const float costMs = (float)s_frameSumUs / (float)s_frameCount / 1000.0f;
+                const float periodMs = s_framePeriodCount > 0
+                    ? (float)s_framePeriodSumUs / (float)s_framePeriodCount / 1000.0f
+                    : 0.0f;
+                Serial.printf(
+                    "[anim] frames=%lu cost=%.1fms max=%.1fms period=%.1fms "
+                    "fps=%.1f waits=%lu timeouts=%lu\n",
+                    (unsigned long)s_frameCount, costMs,
+                    (float)s_frameWorstUs / 1000.0f, periodMs,
+                    periodMs > 0.0f ? 1000.0f / periodMs : 0.0f,
+                    (unsigned long)d.waitCalls, (unsigned long)d.waitTimeouts);
             }
             s_frameCount = 0;
             s_frameSumUs = 0;
             s_frameWorstUs = 0;
+            s_lastFrameUs = 0;
+            s_framePeriodSumUs = 0;
+            s_framePeriodCount = 0;
         }
         return true;
     }
