@@ -101,6 +101,9 @@ static uint32_t s_frameWorstUs = 0;
 static uint32_t s_lastFrameUs = 0;
 static uint32_t s_framePeriodSumUs = 0;
 static uint32_t s_framePeriodCount = 0;
+// 250 ms son diez veces el periodo del panel: por encima de eso no hubo un
+// frame lento, hubo otra cosa ocupando el loop.
+static constexpr uint32_t MAX_PERIOD_US = 250000;
 static UiFrameStats s_stats = {0, 0, 0};
 
 UiFrameStats uiFercedStats() { return s_stats; }
@@ -428,8 +431,16 @@ bool uiFercedTick(uint32_t nowEpoch, float progress01) {
             s_frameSumUs += frameUs;
             if (frameUs > s_frameWorstUs) s_frameWorstUs = frameUs;
             if (s_lastFrameUs != 0) {
-                s_framePeriodSumUs += t0 - s_lastFrameUs;
-                s_framePeriodCount++;
+                const uint32_t periodUs = t0 - s_lastFrameUs;
+                // Un hueco enorme no es un frame lento: es el loop bloqueado en
+                // otra cosa. El refresco del feed hace HTTPS y puede tardar
+                // segundos, y si cae en medio de una animacion se lleva puesta
+                // la media — se midio un period de 1542 ms, o sea 0,6 fps,
+                // mientras la pantalla iba a 35. Esos huecos no se cuentan.
+                if (periodUs < MAX_PERIOD_US) {
+                    s_framePeriodSumUs += periodUs;
+                    s_framePeriodCount++;
+                }
             }
             s_lastFrameUs = t0;
         }
