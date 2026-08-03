@@ -84,7 +84,7 @@ func (h *Handler) serveImg(w http.ResponseWriter, r *http.Request) {
 	}
 	key := r.URL.Query().Get("k")
 	raw, ok := h.imgs.Get(key)
-	log.Printf("[img] %s pidio k=%s -> %v", r.RemoteAddr, key, ok)
+	log.Printf("[img] %s pidio k=%s -> %v", clientIP(r), key, ok)
 	logAnim(r)
 	if !ok {
 		http.NotFound(w, r)
@@ -115,7 +115,7 @@ func (h *Handler) serveFeed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("[feed] %s pidio n=%d, sirvo %d items (%s)",
-		r.RemoteAddr, n, len(items), r.UserAgent())
+		clientIP(r), n, len(items), r.UserAgent())
 
 	logAnim(r)
 
