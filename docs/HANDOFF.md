@@ -208,6 +208,39 @@ lo sirve la API oficial (requiere user context OAuth) → USD 75-225/mes.
 OAuth. El swagger público está en `https://api.sorsa.io/v3/swagger.json` — usalo,
 la doc web pide login.
 
+**No hay forma de descubrir una Lista pública de X.** Verificado el 2026-08-03,
+por los tres caminos: el swagger de Sorsa expone 40 endpoints y ninguno busca
+Listas (sólo `/list-tweets`, `/list-members`, `/list-followers`, todos sobre un
+ID que ya tengas); `x.com/i/lists/<id>` devuelve 200 hasta con un ID inventado,
+pero el cuerpo es el shell de "JavaScript is not available", sin contenido; y los
+IDs no están indexados en la web. Si querés una Lista, hay que crearla.
+
+**`/search-tweets` reemplaza a la Lista y es mejor acá.** Acepta la sintaxis de
+búsqueda avanzada de X (`from:`, `OR`, frases, hashtags), ordena por `latest` o
+`popular`, y devuelve **el mismo `common.TweetsResponse`**. O sea que `parse()`
+se reusa tal cual; sólo cambia el request, que es POST con
+`{"query": "...", "order": "latest"}` en vez de GET con `list_id`. Se configura
+como string en el `.bat`, igual que `RSS_FEEDS`, sin ID que cazar.
+
+**El campo `entities` está sin documentar en el swagger** (figura como `array` a
+secas). Su forma real, sacada de una captura del 2026-08-03:
+
+```json
+{ "type": "photo", "link": "https://pbs.twimg.com/media/....jpg", "preview": "" }
+{ "type": "video", "link": "https://video.twimg.com/....mp4",     "preview": "https://pbs.twimg.com/....jpg" }
+```
+
+Regla de extracción: **`preview` si viene, si no `link`.** Hoy `parse()` mapea
+`ImgURL` al avatar del autor (`profile_image_url`), no a la media del tweet.
+
+**En X la mayoría de los tweets no traen imagen, y eso importa mucho acá.**
+Medido sobre dos consultas de 20 tweets: una selección con Ars Technica dio 4/20
+con media (Ars posteó 14 de los 20 y **ninguno** con imagen — son links pelados),
+y una de espacio/ciencia dio 8/20. Para un aparato que muestra foto + titular,
+conviene **filtrar a los que traen media** en vez de caer al avatar. Ojo también
+con el volumen: `order: latest` hace que la cuenta que más postea se coma los
+slots. `CERN` y `NASAHubble` no devolvieron nada.
+
 **El límite de body del RSS tiene que ser ≥ 1 MB.** Xataka pesa 316 KB y La
 Nación 763 KB; truncarlos parte un bloque CDATA y se pierde la fuente entera.
 

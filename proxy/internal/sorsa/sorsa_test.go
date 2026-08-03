@@ -12,8 +12,11 @@ import (
 // documentado.
 const schemaFixture = "testdata/schema_example.json"
 
-// list_tweets.json es una captura REAL de la API. Cuando exista, confirma que
-// el shape documentado coincide con el que la API devuelve de verdad.
+// list_tweets.json es una captura REAL de la API, tomada el 2026-08-03 contra
+// /v3/search-tweets y no contra /list-tweets, porque la Lista publica todavia
+// no existe. Vale igual: los dos endpoints devuelven common.TweetsResponse, que
+// es exactamente lo que este fixture valida — que el shape documentado coincida
+// con el que la API devuelve de verdad.
 const realFixture = "testdata/list_tweets.json"
 
 func parseFile(t *testing.T, path string) []feed.Item {
