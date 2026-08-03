@@ -2,6 +2,7 @@ package rss
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/fcedeirajoaquin/ferced-display/proxy/internal/feed"
@@ -70,6 +71,47 @@ func TestParseSetsEpochFromDate(t *testing.T) {
 	}
 	if items[0].Epoch <= 0 {
 		t.Errorf("epoch = %d, no parseo la fecha", items[0].Epoch)
+	}
+}
+
+// Caso real: BBC Tech titula sus programas "Tech Now" y deja la historia en
+// la descripcion. Con solo el titulo la tarjeta queda vacia.
+func TestShortTitleUsesDescription(t *testing.T) {
+	got := bodyText("Tech Now",
+		"New technologies measuring forests and exclusive access to a hacker rehab programme.")
+	if len(got) < 40 {
+		t.Fatalf("texto = %q, esperaba que sumara la descripcion", got)
+	}
+	if !strings.HasPrefix(got, "Tech Now.") {
+		t.Errorf("el titulo corto deberia encabezar: %q", got)
+	}
+	if !strings.Contains(got, "forests") {
+		t.Errorf("falta el contenido de la descripcion: %q", got)
+	}
+}
+
+func TestLongTitleIgnoresDescription(t *testing.T) {
+	title := "Espana tacha de egoista la respuesta de algunos paises de la UE"
+	got := bodyText(title, "Una descripcion larguisima que no deberia aparecer aca para nada.")
+	if strings.Contains(got, "descripcion") {
+		t.Errorf("no deberia sumar la descripcion: %q", got)
+	}
+}
+
+func TestDescriptionHTMLIsStripped(t *testing.T) {
+	got := bodyText("Corto", "<p>Hola <b>mundo</b> &amp; algo mas para llenar</p>")
+	if strings.ContainsAny(got, "<>") {
+		t.Errorf("quedo HTML: %q", got)
+	}
+	if !strings.Contains(got, "Hola mundo & algo") {
+		t.Errorf("texto mal decodificado: %q", got)
+	}
+}
+
+func TestEmptyTitleFallsBackToDescription(t *testing.T) {
+	got := bodyText("", "Solo hay descripcion en este item del feed.")
+	if !strings.HasPrefix(got, "Solo hay descripcion") {
+		t.Errorf("got %q", got)
 	}
 }
 
