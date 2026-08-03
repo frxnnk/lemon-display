@@ -117,6 +117,27 @@ Es Windows. Logs en `C:\ferced\feedproxy\out.log`. Config en
 `C:\ferced\feedproxy\start-feedproxy.bat` (wrapper `.bat`, no variables de
 NSSM — ver trampas). Servicio: `ferced-feedproxy`.
 
+Variables que lee el proxy:
+
+| Variable | Qué hace |
+|---|---|
+| `FEED_ADDR` | Dónde escucha. Default `127.0.0.1:9110` |
+| `FEED_TOKEN` | Exigido en `Authorization: Bearer` |
+| `RSS_FEEDS` | `url\|etiqueta` separados por coma |
+| `SORSA_KEY` | Clave de Sorsa. Sin ella no hay ninguna fuente de X |
+| `SORSA_QUERY` | Consulta de búsqueda avanzada, ej. `from:NASA OR from:esa` |
+| `SORSA_ORDER` | `latest` (default) o `popular` |
+| `SORSA_MEDIA_ONLY` | `0` deja pasar tweets sin imagen. Default: los filtra |
+| `SORSA_LIST_ID` | ID de una Lista pública, si alguna vez existe |
+| `TRENDS_WOEID` | `woeid\|región` separados por coma |
+
+Acordate de entrecomillar toda la asignación cuando el valor lleve `|`
+(`set "RSS_FEEDS=a|b"`), o el `.bat` lo parte como tubería.
+
+**Para correr algo remoto usá `cmd`, no `powershell`.** `ssh ... "cmd /c ..."`
+funciona; invocar `powershell` remoto devuelve `Terminate batch job` sin salida.
+Para scripts más largos, `scp` un `.bat` y ejecutalo con `cmd /c`.
+
 ---
 
 ## Secretos
@@ -327,11 +348,28 @@ por serie al terminar cada transición. Ver "Leer la telemetría".
 
 ### Funcionalidad
 
-**La Lista de X.** Era el pedido original. El código está escrito y testeado
-contra el esquema oficial (`proxy/internal/sorsa/`), en `SKIP` hasta que exista
-`testdata/list_tweets.json`. Falta que el usuario cree una Lista **pública** y
-pase el ID numérico. Se enchufa con `SORSA_LIST_ID` en el `.bat` del VPS, sin
-reflashear.
+**El contenido de X: implementado, falta desplegarlo.** Era el pedido original.
+Ya no depende de que exista una Lista: `sorsa.SearchSource` trae tweets por
+consulta contra `/v3/search-tweets`, con extracción de la imagen del tweet desde
+`entities` y filtro que descarta los que no traen ninguna. 14 tests, incluido
+uno que valida el body del POST — armarlo mal no da error, devuelve vacío.
+
+Falta sólo poner las variables en el `.bat` del VPS y reiniciar el servicio. La
+selección medida y recomendada:
+
+```bat
+set "SORSA_QUERY=from:NASA OR from:esa OR from:NASAWebb"
+```
+
+Por qué esas: se midió la proporción de tweets con imagen, y es lo que decide
+si el aparato muestra una foto o el avatar del autor. NASA 5/10, NASAWebb 1/1,
+esa 1/2; `NatGeo` sólo 1/6 y `CERN`/`NASAHubble` no devolvieron nada. Ars
+Technica quedó afuera por lo mismo: 0 de 14, y por volumen se comía la mayoría
+de los slots. Complementa a los RSS —que ya cubren titulares generales y tech—
+con imágenes de ciencia, y al ser en inglés esquiva el bug de Latin-1.
+
+`SORSA_LIST_ID` sigue funcionando si alguna vez existe una Lista; las dos
+fuentes conviven y el mezclador las intercala por separado.
 
 **Modo Archillect.** Pedido: al tocar el logo, mostrar contenido de
 archillect.com hasta que el usuario cierre.

@@ -1,7 +1,12 @@
 package sorsa
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/fcedeirajoaquin/ferced-display/proxy/internal/feed"
@@ -21,11 +26,16 @@ const realFixture = "testdata/list_tweets.json"
 
 func parseFile(t *testing.T, path string) []feed.Item {
 	t.Helper()
+	return parseFileOpts(t, path, false)
+}
+
+func parseFileOpts(t *testing.T, path string, mediaOnly bool) []feed.Item {
+	t.Helper()
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Skipf("falta %s", path)
 	}
-	items, err := parse(raw)
+	items, err := parse(raw, "sorsa:list", mediaOnly)
 	if err != nil {
 		t.Fatalf("parse fallo: %v", err)
 	}
@@ -113,8 +123,170 @@ func TestSortedNewestFirst(t *testing.T) {
 }
 
 func TestParseRejectsGarbage(t *testing.T) {
-	if _, err := parse([]byte("no soy json")); err == nil {
+	if _, err := parse([]byte("no soy json"), "sorsa:list", false); err == nil {
 		t.Error("quiero error con JSON invalido")
+	}
+}
+
+// mediaURL prefiere el preview porque en un video el link es un mp4: si se
+// devolviera, el pipeline de imagenes recibiria un video para escalar.
+func TestMediaURLPrefersPreviewAndRejectsVideoLink(t *testing.T) {
+	casos := []struct {
+		nombre string
+		ents   []rawEntity
+		quiero string
+	}{
+		{"foto usa link porque no trae preview",
+			[]rawEntity{{Type: "photo", Link: "http://x/f.jpg"}},
+			"http://x/f.jpg"},
+		{"video usa preview, nunca el mp4",
+			[]rawEntity{{Type: "video", Link: "http://x/v.mp4", Preview: "http://x/v.jpg"}},
+			"http://x/v.jpg"},
+		{"video sin preview no aporta imagen",
+			[]rawEntity{{Type: "video", Link: "http://x/v.mp4"}},
+			""},
+		{"sin entities no hay imagen",
+			nil,
+			""},
+	}
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			if got := mediaURL(c.ents); got != c.quiero {
+				t.Errorf("mediaURL = %q, quiero %q", got, c.quiero)
+			}
+		})
+	}
+}
+
+// La captura real tiene tweets con y sin media, asi que sirve para comprobar
+// que el filtro efectivamente recorta.
+func TestMediaOnlyDropsTweetsWithoutImage(t *testing.T) {
+	todos := parseFileOpts(t, realFixture, false)
+	soloMedia := parseFileOpts(t, realFixture, true)
+
+	if len(soloMedia) == 0 {
+		t.Fatal("con MediaOnly no quedo ningun tweet: revisar la forma de entities")
+	}
+	if len(soloMedia) >= len(todos) {
+		t.Fatalf("MediaOnly no filtro nada: %d de %d", len(soloMedia), len(todos))
+	}
+	for _, it := range soloMedia {
+		if it.ImgURL == "" {
+			t.Error("quedo un item sin imagen")
+		}
+		// El avatar del autor no es media del tweet: si se cuela, el filtro
+		// no esta mirando entities.
+		if strings.Contains(it.ImgURL, "profile_images") {
+			t.Errorf("se colo un avatar como media: %s", it.ImgURL)
+		}
+	}
+}
+
+// Sin MediaOnly el avatar sigue siendo el fallback, que es lo que hacia antes.
+func TestFallsBackToAvatarWhenNoMedia(t *testing.T) {
+	var conAvatar int
+	for _, it := range parseFileOpts(t, realFixture, false) {
+		if strings.Contains(it.ImgURL, "profile_images") {
+			conAvatar++
+		}
+	}
+	if conAvatar == 0 {
+		t.Error("ningun item cayo al avatar: la captura deberia tener tweets sin media")
+	}
+}
+
+// El mezclador agrupa por Src, asi que la busqueda tiene que declararse
+// distinta de la Lista o las dos contarian como una sola fuente.
+func TestSourcesDeclareDistinctNames(t *testing.T) {
+	lista := (&Source{}).Name()
+	busqueda := (&SearchSource{}).Name()
+	if lista == busqueda {
+		t.Fatalf("ambas fuentes se llaman %q", lista)
+	}
+	raw, err := os.ReadFile(realFixture)
+	if err != nil {
+		t.Skipf("falta %s", realFixture)
+	}
+	items, err := parse(raw, busqueda, false)
+	if err != nil {
+		t.Fatalf("parse fallo: %v", err)
+	}
+	if items[0].Src != busqueda {
+		t.Errorf("Src = %q, quiero %q", items[0].Src, busqueda)
+	}
+}
+
+// stubRT intercepta el pedido sin salir a la red y guarda lo que se mando.
+type stubRT struct {
+	got  *http.Request
+	body []byte
+	resp []byte
+}
+
+func (s *stubRT) RoundTrip(r *http.Request) (*http.Response, error) {
+	s.got = r
+	if r.Body != nil {
+		s.body, _ = io.ReadAll(r.Body)
+	}
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewReader(s.resp)),
+		Header:     make(http.Header),
+	}, nil
+}
+
+// Armar mal el body del POST no da error: la API responde vacio y el feed se
+// queda sin items en silencio. Por eso se comprueba el request, no solo la
+// respuesta.
+func TestSearchSourceBuildsRequest(t *testing.T) {
+	raw, err := os.ReadFile(realFixture)
+	if err != nil {
+		t.Skipf("falta %s", realFixture)
+	}
+	rt := &stubRT{resp: raw}
+	s := &SearchSource{
+		APIKey:    "clave-de-prueba",
+		Query:     "from:NASA OR from:esa",
+		MediaOnly: true,
+		HTTP:      &http.Client{Transport: rt},
+	}
+
+	items, err := s.Fetch(0)
+	if err != nil {
+		t.Fatalf("Fetch fallo: %v", err)
+	}
+
+	if rt.got.Method != http.MethodPost {
+		t.Errorf("metodo = %s, quiero POST", rt.got.Method)
+	}
+	if h := rt.got.Header.Get("ApiKey"); h != "clave-de-prueba" {
+		t.Errorf("header ApiKey = %q", h)
+	}
+	if ct := rt.got.Header.Get("Content-Type"); ct != "application/json" {
+		t.Errorf("Content-Type = %q", ct)
+	}
+
+	var enviado map[string]string
+	if err := json.Unmarshal(rt.body, &enviado); err != nil {
+		t.Fatalf("el body no es JSON valido: %v", err)
+	}
+	if enviado["query"] != s.Query {
+		t.Errorf("query = %q, quiero %q", enviado["query"], s.Query)
+	}
+	if enviado["order"] != defaultOrder {
+		t.Errorf("order = %q, quiero %q por defecto", enviado["order"], defaultOrder)
+	}
+
+	if len(items) == 0 {
+		t.Fatal("no volvio ningun item")
+	}
+	for _, it := range items {
+		if it.Src != "sorsa:search" {
+			t.Errorf("Src = %q", it.Src)
+		}
+		if it.ImgURL == "" {
+			t.Error("con MediaOnly no deberia haber items sin imagen")
+		}
 	}
 }
 
