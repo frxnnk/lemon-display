@@ -5,6 +5,9 @@
 #include "config.h"
 #include "design_system.h"
 #include "data/lemon_logo.h"
+#ifdef FERCED_DISPLAY
+#include "ferced_config.h"
+#endif
 
 #include <WiFi.h>
 #include <DNSServer.h>
@@ -13,8 +16,17 @@
 #include <Arduino.h>
 
 // ── AP Configuration ──
+// Unica fuente del SSID y la clave: el softAP, el QR y los dos carteles de la
+// pantalla salen de aca. Estaban escritos a mano en cuatro lugares distintos, y
+// desincronizarlos rompe el provisioning en silencio — el QR manda el telefono
+// a una red que no existe y no hay ningun error que lo delate.
+#ifdef FERCED_DISPLAY
+static const char* AP_SSID = FERCED_AP_SSID;
+static const char* AP_PASS = FERCED_AP_PASS;
+#else
 static const char* AP_SSID = "Lemon-Setup";
 static const char* AP_PASS = "lemon1234";
+#endif
 static const int   DNS_PORT = 53;
 
 // ── State ──
@@ -247,7 +259,8 @@ bool provisionTick() {
 
 void provisionDrawQR() {
     // QR content: WiFi config string
-    const char* qrData = "WIFI:S:Lemon-Setup;T:WPA;P:lemon1234;;";
+    char qrData[96];
+    snprintf(qrData, sizeof(qrData), "WIFI:S:%s;T:WPA;P:%s;;", AP_SSID, AP_PASS);
 
     // Create QR code (version 6 = 41x41 modules)
     QRCode qrcode;
@@ -316,9 +329,12 @@ void provisionDrawQR() {
     // Credentials in caption style
     textY += 32;
     tft.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-    tft.drawString("Red: Lemon-Setup", SCREEN_W / 2, textY, &Satoshi9);
+    char cred[64];
+    snprintf(cred, sizeof(cred), "Red: %s", AP_SSID);
+    tft.drawString(cred, SCREEN_W / 2, textY, &Satoshi9);
     textY += 14;
-    tft.drawString("Clave: lemon1234", SCREEN_W / 2, textY, &Satoshi9);
+    snprintf(cred, sizeof(cred), "Clave: %s", AP_PASS);
+    tft.drawString(cred, SCREEN_W / 2, textY, &Satoshi9);
 }
 
 bool provisionHasCredentials() {
