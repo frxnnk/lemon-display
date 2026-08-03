@@ -219,6 +219,31 @@ porque "igual anda".
 Por eso el simulador no podía sombrear `display_manager.h` y hubo que meter un
 `#ifdef FERCED_SIM` en el firmware.
 
+**Los acentos andan desde el 2026-08-03, y el mecanismo no es Latin-1.** El
+aparato recibe **UTF-8** y LovyanGFX lo decodifica solo (`TextStyle::utf8` viene
+en `true`), así que `ñ` le llega como el codepoint `0xF1`. Las fuentes se
+regeneraron con rango contiguo `0x20–0xFF`, que es como las indexa
+`GFXfont::getGlyph()` cuando `range_num` es 0. No hay conversión de encoding en
+ningún lado: el proxy emite UTF-8 y la fuente tiene el glifo.
+
+Para regenerar una fuente hay que sacar el TTF de `tools/fonts/satoshi.zip`
+(están en `Satoshi_Complete/Fonts/WEB/fonts/`) y correr:
+
+```powershell
+python tools\ttf_to_gfx.py Satoshi-Regular.ttf 6  src\data\Satoshi9.h        Satoshi9        FF
+python tools\ttf_to_gfx.py Satoshi-Regular.ttf 9  src\data\Satoshi12.h       Satoshi12       FF
+python tools\ttf_to_gfx.py Satoshi-Medium.ttf  12 src\data\SatoshiMedium18.h SatoshiMedium18 FF
+```
+
+Los tamaños en puntos no son arbitrarios: salen del encabezado de cada `.h`
+generado. Antes de cambiar algo, regenerá con los parámetros actuales y
+compará — si el header sale idéntico, identificaste bien el origen. Cuesta
++21,5 KB de flash las tres juntas, sobre 6,5 MB.
+
+LovyanGFX además soporta rangos **no contiguos** (`range_num`/`range` en
+`GFXfont`), que ahorrarían los ~455 bytes del tramo muerto `0x7F–0xBF` por
+fuente. No se usó: no justifica tocar el formato del generador.
+
 ### De las fuentes de datos
 
 **La API de sindicación de X está muerta para timelines.** Verificado el
@@ -431,8 +456,8 @@ prefetch — y no por casualidad el `/tv` te entrega el `buffer` del siguiente.
 MB/s a 10 fps: no entra por WiFi. Para v1 conviene stills de `/last/` y GIF
 resuelto como primer cuadro (o salteado); `/tv` queda para v2.
 
-**Fuente Latin-1.** Hoy el proxy translitera y se lee "anos" en vez de "años".
-Arreglo real: regenerar la fuente con `tools/ttf_to_gfx.py`.
+**Rebrandear el portal cautivo** (ver más abajo) y **cerrar la brecha de
+framerate** son los que quedan del lado del firmware.
 
 **Rebrandear el portal cautivo.** El AP ya se llama `Ferced-Setup` y sale de una
 sola constante, pero la pantalla de provisioning y el HTML del portal siguen
