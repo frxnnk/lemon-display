@@ -89,7 +89,8 @@ NSSM — ver trampas). Servicio: `ferced-feedproxy`.
 | Token del feed | `output/FEED_TOKEN.txt` (ignorado) → inyectado por `tools/inject_secrets.py` |
 | Clave de Sorsa | Sólo en el `.bat` del VPS |
 
-La clave de Sorsa (`554c2c96-…`) se pasó por chat: **conviene rotarla**.
+La clave de Sorsa se pasó por chat en algún momento: **conviene rotarla**. Vive
+sólo en el `.bat` del VPS.
 
 ---
 
