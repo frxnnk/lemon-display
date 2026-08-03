@@ -16,6 +16,20 @@ static uint32_t s_lastRotate = 0;
 static bool     s_paused = false;
 static uint32_t s_rotateMs = 17000;
 
+// Configuracion por linea de comandos. El teclado no sirve para automatizar:
+// Panel_sdl corre su propio bucle de eventos en el hilo principal y consume
+// las teclas antes de que las vea este loop.
+int      g_startIndex = 0;
+bool     g_still      = false;   // sin rotacion, para capturas estables
+
+static void applyArgs() {
+    if (g_startIndex > 0) {
+        const uint8_t total = feedCount();
+        if (total > 0) s_index = (uint8_t)(g_startIndex % total);
+    }
+    if (g_still) s_paused = true;
+}
+
 // El firmware usa millis(); aca lo replico sobre el reloj del sistema.
 static uint32_t millisNow() {
     using namespace std::chrono;
@@ -75,6 +89,7 @@ void setup() {
     banner();
 
     feedFetch();
+    applyArgs();
     show();
     s_lastRotate = millisNow();
 }

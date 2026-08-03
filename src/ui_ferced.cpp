@@ -283,8 +283,12 @@ static Band paintFrame(uint32_t elapsed, uint32_t nowEpoch) {
             // pushImage copia por filas; el fundido pixel a pixel costaba 4096
             // llamadas a drawPixel por frame. La imagen entra por movimiento,
             // que es igual de elegante y practicamente gratis.
+            // El cast es necesario: con un uint16_t* pelado LovyanGFX asume
+            // orden intercambiado (el de SPI) y la imagen sale con los colores
+            // rotos. El proxy escribe RGB565 en orden nativo.
             s_sprite.pushImage(MARGIN, FOOT_Y + dy,
-                               FEED_IMG_SIDE, FEED_IMG_SIDE, s_cur.img);
+                               FEED_IMG_SIDE, FEED_IMG_SIDE,
+                               (const lgfx::rgb565_t*)s_cur.img);
             textX += FEED_IMG_SIDE + 18;
         }
 

@@ -92,9 +92,12 @@ FeedResult feedFetch(uint16_t, uint16_t, uint16_t) {
                   : parts[4] == "trend" ? FEED_FROM_TREND
                   : FEED_FROM_RSS;
 
+        // El fixture guarda la key pelada, sin extension: con ".bin" son 20
+        // caracteres y FEED_IMGKEY_LEN los trunca, con lo cual despues no
+        // coincide con nada y la imagen no aparece.
         if (parts.size() >= 6 && !parts[5].empty()) {
             std::vector<uint16_t> px;
-            if (loadImage("data/" + parts[5], px)) {
+            if (loadImage("data/" + parts[5] + ".bin", px)) {
                 setField(it.imgKey, FEED_IMGKEY_LEN, parts[5]);
                 _imgKeys.push_back(parts[5]);
                 _imgs.push_back(std::move(px));

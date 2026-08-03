@@ -49,7 +49,7 @@ for it in items:
             name = key + ".bin"
             with open(os.path.join(OUT, name), "wb") as fh:
                 fh.write(raw)
-            img = name
+            img = key  # sin extension: el firmware trunca a 20 chars
             imgs += 1
         except Exception as e:
             print("  imagen %s fallo: %s" % (key, e))
