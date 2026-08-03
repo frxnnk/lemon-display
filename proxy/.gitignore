@@ -1,3 +1,6 @@
-feedproxy
-feedproxy.exe
+# Anclados con / a proposito. Sin la barra, "feedproxy" es un patron suelto que
+# matchea a cualquier profundidad, e ignoraba tambien el directorio del paquete
+# main (cmd/feedproxy/) — con lo cual main.go nunca llego a versionarse.
+/feedproxy
+/feedproxy.exe
 *.log
