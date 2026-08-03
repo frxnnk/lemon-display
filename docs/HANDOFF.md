@@ -69,6 +69,17 @@ python -m esptool --chip esp32s3 --port COM3 --baud 921600 --before default-rese
 
 **Siempre `--flash-mode keep --flash-size keep`.** Forzar `qio` causa boot loop.
 
+**El env Lemon original (`matouch_esp32s3_40`) ya no linkea.** Verificado el
+2026-08-03 sobre HEAD limpio: falla con `multiple definition of setup()` y
+`loop()` entre `main.cpp` y `ferced_main.cpp`. La causa es que ese env no tiene
+`build_src_filter`, así que compila todo `src/` — incluido el `ferced_main.cpp`
+que se agregó después. Está roto desde que existe el firmware de Ferced, no es
+una regresión reciente. Se arregla excluyendo `ferced_main.cpp` de ese env; no se
+hizo porque nadie lo estaba usando. Tenelo en cuenta si tocás código compartido
+(`display_manager.cpp`, `wifi_provision.cpp`, `ui_components.cpp`): el gate
+`#ifdef FERCED_DISPLAY` es correcto, pero la rama Lemon no se puede compilar para
+probarla.
+
 ### Leer la telemetría
 
 Al terminar cada transición (una cada 17 s) el firmware imprime por serie:
@@ -340,8 +351,15 @@ resuelto como primer cuadro (o salteado); `/tv` queda para v2.
 **Fuente Latin-1.** Hoy el proxy translitera y se lee "anos" en vez de "años".
 Arreglo real: regenerar la fuente con `tools/ttf_to_gfx.py`.
 
-**Renombrar el AP de provisioning.** Sigue diciendo `Lemon-Setup` hardcodeado en
-`wifi_provision.cpp:16`; `FERCED_AP_SSID` está definido pero sin cablear.
+**Rebrandear el portal cautivo.** El AP ya se llama `Ferced-Setup` y sale de una
+sola constante, pero la pantalla de provisioning y el HTML del portal siguen
+siendo de Lemon: el imagotipo (`drawLemonImagotipo244`, de `data/lemon_logo.h`),
+el título "Lemon · WiFi" y el verde `#00F068` de la paleta. Es trabajo de assets
+y paleta, no de cableado.
+
+No está verificado en pantalla: el aparato tiene credenciales guardadas y arranca
+directo a RUNNING, así que para ver el provisioning hay que borrar la NVS y
+volver a aparearlo con el teléfono. Se verificó sobre el binario compilado.
 
 ---
 
