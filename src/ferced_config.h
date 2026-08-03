@@ -4,6 +4,8 @@
 // El aparato no sabe de dónde salen los datos: sólo pide esta URL.
 // Cambiar la fuente es cambiar el proxy, no reflashear.
 
+// El endpoint y el token se inyectan desde platformio.ini para no versionar
+// el secreto. Los valores de aca son solo el fallback de desarrollo por LAN.
 #ifndef FEED_ENDPOINT
 #define FEED_ENDPOINT "http://192.168.1.34:9110/v1/feed?n=20"
 #endif
