@@ -1,4 +1,4 @@
-﻿#include <Arduino.h>
+#include <Arduino.h>
 #include <ctime>
 #include <esp_task_wdt.h>
 
@@ -45,14 +45,14 @@ static void startProvisioning() {
     provisionDrawQR();
 }
 
-static void drawCurrent() {
+static void showCurrent() {
     const uint8_t total = feedCount();
     if (total == 0) {
-        uiFercedDrawStatus("SIN CONTENIDO", "No llego nada del feed. Tocar para reintentar.");
+        uiFercedShowStatus("Sin contenido", "No llego nada del feed. Tocar para reintentar.");
         return;
     }
     if (s_index >= total) s_index = 0;
-    uiFercedDrawItem(feedItem(s_index), s_index, total, nowEpoch(), s_offline);
+    uiFercedShowItem(feedItem(s_index), s_index, total, s_offline);
 }
 
 static void refreshFeed() {
@@ -64,7 +64,8 @@ static void refreshFeed() {
         s_retryMs = FEED_RETRY_MIN_MS;
         s_nextRetry = 0;
         s_index = 0;
-        drawCurrent();
+        showCurrent();
+        s_lastRotate = millis();
         return;
     }
 
@@ -73,14 +74,22 @@ static void refreshFeed() {
     s_offline = true;
     s_nextRetry = millis() + s_retryMs;
     s_retryMs = s_retryMs * 2 > FEED_RETRY_MAX_MS ? FEED_RETRY_MAX_MS : s_retryMs * 2;
-    drawCurrent();
+    showCurrent();
 }
 
 static void enterRunning() {
     s_phase = PHASE_RUNNING;
     timeSetup();
-    uiFercedDrawStatus("CONECTADO", "Buscando contenido.");
+    uiFercedShowStatus("Conectado", "Buscando contenido.");
     refreshFeed();
+    s_lastRotate = millis();
+}
+
+static void advance() {
+    const uint8_t total = feedCount();
+    if (total == 0) { refreshFeed(); return; }
+    s_index = (s_index + 1) % total;
+    showCurrent();
     s_lastRotate = millis();
 }
 
@@ -97,7 +106,7 @@ void setup() {
     uiFercedSetup();
 
     if (!nvsHasWifi()) {
-        uiFercedDrawStatus("CONFIGURAR", "Escanea el codigo para conectar el equipo a tu red.");
+        uiFercedShowStatus("Configurar", "Escanea el codigo para conectar el equipo a tu red.");
         startProvisioning();
         return;
     }
@@ -106,11 +115,11 @@ void setup() {
     char pass[65] = {};
     nvsLoadWifi(ssid, sizeof(ssid), pass, sizeof(pass));
 
-    uiFercedDrawStatus("CONECTANDO", ssid);
+    uiFercedShowStatus("Conectando", ssid);
     wifiSetup(ssid, pass);
 
     if (!wifiConnected()) {
-        uiFercedDrawStatus("SIN RED", "No se pudo conectar. Tocar para reconfigurar.");
+        uiFercedShowStatus("Sin red", "Reintentando sola.");
         s_phase = PHASE_CONNECTING;
         return;
     }
@@ -119,6 +128,7 @@ void setup() {
 
 void loop() {
     esp_task_wdt_reset();
+    const uint32_t now = millis();
 
     if (s_phase == PHASE_PROVISION) {
         if (provisionTick()) {
@@ -127,13 +137,13 @@ void loop() {
             provisionGetCredentials(ssid, sizeof(ssid), pass, sizeof(pass));
             provisionStop();
 
-            uiFercedDrawStatus("PROBANDO", ssid);
+            uiFercedShowStatus("Probando", ssid);
             wifiSetup(ssid, pass);
             if (wifiConnected()) {
                 nvsSaveWifi(ssid, pass);
                 enterRunning();
             } else {
-                uiFercedDrawStatus("NO ANDUVO", "Esa red no conecto. Probemos de nuevo.");
+                uiFercedShowStatus("No anduvo", "Esa red no conecto. Probemos de nuevo.");
                 startProvisioning();
             }
         }
@@ -142,21 +152,16 @@ void loop() {
     }
 
     if (s_phase == PHASE_CONNECTING) {
-        // Reintenta solo. Un aparato de escritorio no puede quedarse esperando
+        // Reintenta sola. Un aparato de escritorio no puede quedarse esperando
         // que alguien lo toque porque el router tardo en levantar.
         if (touchLoop().gesture == TOUCH_TAP) {
             startProvisioning();
             return;
         }
-        const uint32_t nowMs = millis();
-        if (nowMs >= s_nextWifiRetry) {
+        if (now >= s_nextWifiRetry) {
             char ssid[33] = {};
             char pass[65] = {};
             nvsLoadWifi(ssid, sizeof(ssid), pass, sizeof(pass));
-
-            char msg[96];
-            snprintf(msg, sizeof(msg), "Reintentando con %s.", ssid);
-            uiFercedDrawStatus("SIN RED", msg);
             wifiSetup(ssid, pass);
 
             if (wifiConnected()) {
@@ -164,43 +169,31 @@ void loop() {
                 enterRunning();
                 return;
             }
-            uiFercedDrawStatus("SIN RED", "No conecta. Tocar para reconfigurar.");
+            uiFercedShowStatus("Sin red", "No conecta. Tocar para reconfigurar.");
             s_nextWifiRetry = millis() + s_wifiRetryMs;
             s_wifiRetryMs = s_wifiRetryMs * 2 > WIFI_RETRY_MAX_MS
                                 ? WIFI_RETRY_MAX_MS
                                 : s_wifiRetryMs * 2;
         }
-        delay(20);
+        uiFercedTick(nowEpoch(), 0.0f);
+        delay(8);
         return;
     }
 
     wifiLoop();
-    const uint32_t now = millis();
 
-    if (touchLoop().gesture == TOUCH_TAP) {
-        const uint8_t total = feedCount();
-        if (total == 0) {
-            refreshFeed();
-        } else {
-            s_index = (s_index + 1) % total;
-            drawCurrent();
-        }
-        s_lastRotate = now;
-    }
+    if (touchLoop().gesture == TOUCH_TAP) advance();
 
-    if (now - s_lastRotate >= FEED_ROTATE_MS) {
-        const uint8_t total = feedCount();
-        if (total > 0) {
-            s_index = (s_index + 1) % total;
-            drawCurrent();
-        }
-        s_lastRotate = now;
-    }
+    const uint32_t sinceRotate = now - s_lastRotate;
+    if (sinceRotate >= FEED_ROTATE_MS) advance();
 
     const bool dueRefresh = now - s_lastFetch >= FEED_REFRESH_MS;
     const bool dueRetry = s_offline && s_nextRetry != 0 && now >= s_nextRetry;
     if (dueRefresh || dueRetry) refreshFeed();
 
-    delay(10);
+    // La animacion la marca el VSync dentro de uiFercedTick; el delay solo
+    // evita que el loop queme CPU cuando no hay nada que repintar.
+    const bool busy = uiFercedTick(nowEpoch(),
+                                   (float)sinceRotate / (float)FEED_ROTATE_MS);
+    delay(busy ? 1 : 8);
 }
-
