@@ -1,5 +1,6 @@
-#include "feed_client.h"
+﻿#include "feed_client.h"
 #include "ferced_config.h"
+#include "ui_ferced.h"
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
@@ -7,6 +8,8 @@
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
 #include <cstring>
+
+static void addAuth(HTTPClient& http);
 
 static FeedItem _items[FEED_MAX_ITEMS];
 static uint8_t  _count = 0;
@@ -44,7 +47,12 @@ const uint16_t* feedFetchImage(const char* key) {
     const char* base = FEED_ENDPOINT;
     const char* slash = strstr(base, "/v1/feed");
     if (!slash) return nullptr;
-    snprintf(url, sizeof(url), "%.*s/v1/img?k=%s", (int)(slash - base), base, key);
+    // Las metricas de animacion viajan tambien aca: una imagen se pide cada
+    // ~35 s, contra los 10 min del feed. Sirve para iterar el rendimiento.
+    const UiFrameStats st = uiFercedStats();
+    snprintf(url, sizeof(url), "%.*s/v1/img?k=%s&fr=%u&avg=%u&max=%u",
+             (int)(slash - base), base, key,
+             st.frames, st.avgUs100, st.worstUs100);
 
     const bool secure = strncmp(url, "https://", 8) == 0;
     WiFiClient plain;
@@ -54,6 +62,7 @@ const uint16_t* feedFetchImage(const char* key) {
     HTTPClient http;
     http.setTimeout(8000);
     if (!(secure ? http.begin(tls, url) : http.begin(plain, url))) return nullptr;
+    addAuth(http);
 
     if (http.GET() != HTTP_CODE_OK) { http.end(); return nullptr; }
 
@@ -76,8 +85,18 @@ const uint16_t* feedFetchImage(const char* key) {
     return _imgBuf;
 }
 
-FeedResult feedFetch() {
-    const char* url = FEED_ENDPOINT;
+static void addAuth(HTTPClient& http) {
+    if (sizeof(FEED_TOKEN) > 1) {
+        http.addHeader("Authorization", "Bearer " FEED_TOKEN);
+    }
+}
+
+FeedResult feedFetch(uint16_t frames, uint16_t avgUs100, uint16_t worstUs100) {
+    // Las metricas de animacion viajan en el pedido del feed: no hace falta
+    // consola serie para saber a que framerate corre el aparato.
+    char url[256];
+    snprintf(url, sizeof(url), "%s&fr=%u&avg=%u&max=%u",
+             FEED_ENDPOINT, frames, avgUs100, worstUs100);
     const bool secure = strncmp(url, "https://", 8) == 0;
 
     WiFiClient plain;
@@ -89,6 +108,7 @@ FeedResult feedFetch() {
     http.setUserAgent("ferced-display/1.0");
 
     bool begun = secure ? http.begin(tls, url) : http.begin(plain, url);
+    if (begun) addAuth(http);
     if (!begun) {
         Serial.println("[Feed] no se pudo abrir la conexion");
         return _count > 0 ? FEED_STALE_CACHE : FEED_FAILED;
@@ -151,3 +171,4 @@ FeedResult feedFetch() {
     Serial.printf("[Feed] %u items\n", _count);
     return FEED_UPDATED;
 }
+

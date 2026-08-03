@@ -56,7 +56,8 @@ static void showCurrent() {
 }
 
 static void refreshFeed() {
-    const FeedResult r = feedFetch();
+    const UiFrameStats st = uiFercedStats();
+    const FeedResult r = feedFetch(st.frames, st.avgUs100, st.worstUs100);
     s_lastFetch = millis();
 
     if (r == FEED_UPDATED) {

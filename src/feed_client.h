@@ -29,14 +29,17 @@ struct FeedItem {
 };
 
 enum FeedResult : uint8_t {
-    FEED_UPDATED,       // llegó contenido nuevo
-    FEED_STALE_CACHE,   // falló la red, se conserva lo anterior
-    FEED_FAILED,        // falló y no hay nada cacheado
+    FEED_UPDATED,       // llego contenido nuevo
+    FEED_STALE_CACHE,   // fallo la red, se conserva lo anterior
+    FEED_FAILED,        // fallo y no hay nada cacheado
 };
 
-// Baja el feed y lo deja en el caché interno. Ante fallo conserva el caché
-// anterior: la pantalla nunca se queda vacía por un corte de red.
-FeedResult feedFetch();
+// Baja el feed y lo deja en el cache interno. Ante fallo conserva el cache
+// anterior: la pantalla nunca se queda vacia por un corte de red.
+// Los tres parametros son metricas de animacion que viajan de paso, para
+// poder medir el framerate real sin consola serie.
+FeedResult feedFetch(uint16_t frames = 0, uint16_t avgUs100 = 0,
+                     uint16_t worstUs100 = 0);
 
 uint8_t         feedCount();
 const FeedItem* feedItem(uint8_t index);
