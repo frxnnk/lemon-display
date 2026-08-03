@@ -45,6 +45,34 @@ func TestCleanIsAlwaysASCII(t *testing.T) {
 	}
 }
 
+func TestStripHTML(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"parrafo", "<p>Hola <b>mundo</b></p>", "Hola mundo"},
+		{"link", `Mira <a href="http://x.com">esto</a> ahora`, "Mira esto ahora"},
+		{"imagen suelta", `<img src="foo.jpg"/>Texto`, "Texto"},
+		{"entidad amp", "Uno &amp; dos", "Uno & dos"},
+		{"entidad comillas", "Dijo &quot;hola&quot;", `Dijo "hola"`},
+		{"entidad numerica", "caf&#233;", "caf"},
+		{"salto de linea", "uno<br/>dos", "uno dos"},
+		{"sin html", "texto plano", "texto plano"},
+		{"vacio", "", ""},
+		{"solo tags", "<div><span></span></div>", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := StripHTML(c.in); got != c.want {
+				t.Errorf("StripHTML(%q) = %q, quiero %q", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+func TestStripHTMLHandlesUnclosedTag(t *testing.T) {
+	if got := StripHTML("texto <b sin cerrar"); got != "texto" {
+		t.Errorf("got %q", got)
+	}
+}
+
 func TestTruncateShortStringUntouched(t *testing.T) {
 	in := "texto corto"
 	if got := Truncate(in, 100); got != in {

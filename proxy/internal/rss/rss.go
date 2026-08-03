@@ -20,13 +20,35 @@ const (
 
 type rawFeed struct {
 	Items []struct {
-		Title     string `xml:"title"`
-		Link      string `xml:"link"`
-		PubDate   string `xml:"pubDate"`
-		Thumbnail struct {
+		Title       string `xml:"title"`
+		Description string `xml:"description"`
+		Link        string `xml:"link"`
+		PubDate     string `xml:"pubDate"`
+		Thumbnail   struct {
 			URL string `xml:"url,attr"`
 		} `xml:"thumbnail"`
 	} `xml:"channel>item"`
+}
+
+// Debajo de esto un titulo no llena una tarjeta de 480x480. Feeds como el de
+// BBC Tech usan el nombre del programa de titulo ("Tech Now") y ponen la
+// historia en la descripcion.
+const minTitleChars = 34
+
+// bodyText elige que mostrar: el titulo si dice algo por si solo, y si no la
+// descripcion, que es donde esos feeds guardan el contenido real.
+func bodyText(title, desc string) string {
+	t := norm.Clean(norm.StripHTML(title))
+	d := norm.Clean(norm.StripHTML(desc))
+
+	if len(t) >= minTitleChars || d == "" {
+		return norm.Truncate(t, maxTitle)
+	}
+	if t == "" {
+		return norm.Truncate(d, maxTitle)
+	}
+	// El titulo corto igual aporta contexto, asi que encabeza.
+	return norm.Truncate(t+". "+d, maxTitle)
 }
 
 var dateLayouts = []string{
@@ -49,7 +71,7 @@ func parse(raw []byte, label string) ([]feed.Item, error) {
 	}
 	out := make([]feed.Item, 0, len(rf.Items))
 	for _, it := range rf.Items {
-		title := norm.Truncate(norm.Clean(it.Title), maxTitle)
+		title := bodyText(it.Title, it.Description)
 		if title == "" {
 			continue
 		}
