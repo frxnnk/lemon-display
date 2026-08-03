@@ -290,10 +290,52 @@ pase el ID numérico. Se enchufa con `SORSA_LIST_ID` en el `.bat` del VPS, sin
 reflashear.
 
 **Modo Archillect.** Pedido: al tocar el logo, mostrar contenido de
-archillect.com hasta que el usuario cierre. Son imágenes a pantalla completa, o
-sea 480x480 RGB565 = 460 KB por imagen, contra los 8 KB de las miniaturas. Otro
-pipeline. **Verificar primero si la API existe** — con X nos salvó de construir
-sobre algo muerto.
+archillect.com hasta que el usuario cierre.
+
+**La API existe y está viva.** Verificado el 2026-08-03, y a diferencia de X:
+los endpoints responden `application/json` con `{"error":"Token missing."}`, que
+es una API sana pidiendo credenciales, no un cadáver devolviendo cuerpo vacío.
+Documentada en `archillect.com/api`.
+
+**Pero está detrás de Patreon**, tier "Contributor o superior", en
+`patreon.com/pak`. Sin token no se avanza. Los precios están tras JS y no se
+verificaron.
+
+Endpoints documentados (todos GET, `?token=`):
+
+| Endpoint | Devuelve |
+|---|---|
+| `/last/[count]` | hasta 288 posts recientes, con imagen en varios tamaños |
+| `/post/[index]` | un post: index, imágenes multi-tamaño, captions, sources |
+| `/tv` | contenido actual + `buffer` (el siguiente), refresca cada 6 s |
+| `/date/`, `/keyword/`, `/filter/`, `/relatives/` | búsqueda y relacionados |
+
+Lo que se aprendió del spike, más allá de la API:
+
+- Los índices son **secuenciales** (el último era 410187) y `archillect.com/<id>`
+  es la página del post. Direccionamiento simple y estable.
+- Las imágenes viven en el **CDN de Tumblr** (`66.media.tumblr.com`) con sufijos
+  de tamaño estándar (`_250`, `s250x400`). Como la API expone varios tamaños, el
+  proxy puede pedir ~540 y bajar a 480: es exactamente lo que ya hace el
+  pipeline de miniaturas.
+- **~14 % del contenido son GIF** (5 de 36 en la portada). El `/tv` es GIF por
+  definición. Eso es otro problema, no el mismo más grande.
+- No hay `robots.txt`: 302 a la home.
+
+**Corrección al cálculo que estaba acá antes.** Decía que los 460 KB por imagen
+contra 8 KB de miniatura eran "otro pipeline", como si el problema fuera la
+pantalla. No lo es: en PSRAM 460 KB no es nada, y por la ecuación medida de este
+mismo documento un push de 480 filas cuesta `23,4 + 0,1575 × 480 = 99 ms`, que
+es justo lo que ya paga `beginSlide()` una vez por ítem. Para un pase de
+diapositivas cada varios segundos, 99 ms es irrelevante.
+
+**El costo real es la red:** 460 KB por imagen contra los 8 KB de hoy, o sea
+segundos por imagen sobre HTTPS. Eso fija la cadencia, no el panel. Se ataca con
+prefetch — y no por casualidad el `/tv` te entrega el `buffer` del siguiente.
+
+**Los GIF sí son otro pipeline.** Un 480x480 animado en RGB565 crudo son ~4,6
+MB/s a 10 fps: no entra por WiFi. Para v1 conviene stills de `/last/` y GIF
+resuelto como primer cuadro (o salteado); `/tv` queda para v2.
 
 **Fuente Latin-1.** Hoy el proxy translitera y se lee "anos" en vez de "años".
 Arreglo real: regenerar la fuente con `tools/ttf_to_gfx.py`.
