@@ -93,6 +93,11 @@ frames y **de ahí sale el FPS de verdad**. `timeouts` es el dato que delata si
 `displayWaitVSync()` está sincronizando o agotando su timeout: si `timeouts`
 iguala a `waits`, la ISR de VSync no está registrada (ver trampas).
 
+El `period` descarta los huecos de más de 250 ms a propósito. Sin ese filtro, un
+refresco del feed que caiga en medio de una animación se cuenta como si fuera un
+frame lentísimo: se midió `period=1542ms, fps=0.6` con la pantalla andando a 35.
+Un hueco así no es render, es el loop bloqueado en HTTPS.
+
 El aparato retiene el USB nativo, así que `platformio device monitor` pelea con
 esptool. Para capturar sin bloquear la terminal:
 
@@ -288,15 +293,22 @@ de las otras cosas que corren en ese VPS.
 **El BOM de UTF-8 rompe la primera línea** de un script mandado por stdin a
 `powershell -Command -`. Poner una línea vacía al principio.
 
-**Invocar `powershell` remoto por ssh al VPS no devuelve salida.** Verificado el
-2026-08-03: `ssh ... hostname` anda perfecto y devuelve `vmi3426337`, pero
-cualquier `ssh ... "powershell -NoProfile -Command ..."` termina en
-`Terminate batch job (Y/N)?` sin imprimir nada. Falla igual con `-n -T`, con
-`-EncodedCommand` (que descarta el problema de comillas) y con un wrapper `.bat`
-local redirigiendo a archivo — o sea que es del lado remoto, no del quoting.
-El mensaje llega **por el canal de ssh**, así que lo emite el VPS. Sin
-diagnosticar. Mientras tanto, para medir el framerate usá la telemetría por
-serie en vez del log del proxy.
+**`powershell` remoto por ssh hay que envolverlo en `cmd /c`.** Invocarlo
+directo —`ssh ... "powershell -NoProfile -Command ..."`— termina en
+`Terminate batch job (Y/N)?` sin imprimir nada, y falla igual con `-n -T` y con
+`-EncodedCommand`, o sea que no es un problema de comillas. Envuelto anda:
+
+```powershell
+ssh ... "cmd /c powershell -NoProfile -Command Get-Date -Format o"
+```
+
+`cmd` solo también funciona (`ssh ... "cmd /c dir"`). Para scripts largos,
+mandá un `.bat` con `scp` y corrélo con `cmd /c`: evita el infierno de escapar
+comillas a través de ssh.
+
+**Los logs del proxy van a `err.log`, no a `out.log`.** El paquete `log` de Go
+escribe a stderr. En `out.log` solo queda lo que imprime el wrapper `.bat`.
+Buscar las fuentes levantadas con `findstr fuente C:\ferced\feedproxy\err.log`.
 
 ---
 
