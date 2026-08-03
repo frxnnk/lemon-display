@@ -53,3 +53,8 @@ tools/__t.wav
 Lemon-box-with-screen.stl
 run_gen_script.py
 lemon-box-flasher.skill
+
+# simulador: artefactos, SDL2 y fixtures capturados
+sim/build/
+sim/vendor/
+sim/data/

@@ -338,6 +338,20 @@ static void present(int y, int h) {
 // â”€â”€ API â”€â”€
 
 static void beginSlide() {
+    // Un borrado completo al empezar cada item, y recien despues las bandas.
+    //
+    // Sin esto pasan dos cosas: los huecos entre bandas nunca reciben el color
+    // de fondo y quedan en el negro puro con el que nace el sprite, y si el
+    // item nuevo tiene menos renglones que el anterior, los de mas abajo
+    // quedan en pantalla porque su banda ya no se anima.
+    //
+    // Cuesta un frame caro (~99 ms) por item, o sea uno cada 17 s. A cambio,
+    // los ~30 frames de la animacion siguen siendo baratos.
+    s_sprite.fillScreen(CANVAS);
+    displayWaitVSync();
+    s_sprite.pushSprite(0, 0);
+    displayRecordPush(SCREEN_W * SCREEN_H * 2, 0);
+
     s_animStart = millis();
     s_animating = true;
     s_hasContent = true;
