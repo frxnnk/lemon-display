@@ -186,6 +186,23 @@ Solución: BOOT + RESET a mano. Con el firmware actual no pasa.
 necesita nada) y uno por CP2104, que pide el driver VCP de Silicon Labs. Si no
 está, aparece con código 28 y no enumera COM.
 
+**El CDC nativo se traba y COM3 deja de abrirse.** Pasó el 2026-08-03 después de
+muchos ciclos de flasheo. El síntoma es en dos etapas y conviene distinguirlas:
+
+- `Se agotó el tiempo de espera del semáforo` o un `SerialPort.Open()` que
+  **cuelga sin volver**: es el CDC del aparato, que dejó de responder. El puerto
+  sigue enumerando con `Status OK` y código de error 0, así que Windows no
+  ayuda a diagnosticarlo.
+- `PermissionError(13, Acceso denegado)`: ya es otro proceso del host reteniendo
+  el handle — típicamente un `Open()` colgado de un intento anterior.
+
+`tools/restart_usb.ps1` deshabilita y rehabilita el dispositivo, pero
+`Disable-PnpDevice` **necesita admin** y sin permisos falla en silencio (el
+script usa `-ErrorAction SilentlyContinue`). Lo único que destraba las dos
+etapas a la vez es **desenchufar y volver a enchufar el cable**. El aparato
+mientras tanto sigue funcionando perfecto: se confirma mirando los `[anim]` del
+log del proxy, que llegan igual porque van por WiFi.
+
 ### Del software
 
 **`pushImage` con `uint16_t*` asume orden intercambiado.** Las imágenes salían
@@ -459,15 +476,21 @@ resuelto como primer cuadro (o salteado); `/tv` queda para v2.
 **Rebrandear el portal cautivo** (ver más abajo) y **cerrar la brecha de
 framerate** son los que quedan del lado del firmware.
 
-**Rebrandear el portal cautivo.** El AP ya se llama `Ferced-Setup` y sale de una
-sola constante, pero la pantalla de provisioning y el HTML del portal siguen
-siendo de Lemon: el imagotipo (`drawLemonImagotipo244`, de `data/lemon_logo.h`),
-el título "Lemon · WiFi" y el verde `#00F068` de la paleta. Es trabajo de assets
-y paleta, no de cableado.
+**Un logo de Ferced en tamaño grande.** El portal cautivo y la pantalla de
+provisioning ya son de Ferced —título, paleta, pie, wordmark— pero el único
+asset de marca que existe es `data/ferced_mark_11.h`, de **11x28**, y el
+`logo_crop.png` del que salió no está versionado. Por eso el portal usa un
+wordmark tipográfico en vez de un logo, y la pantalla del aparato dibuja el mark
+a escala entera 2x al lado del texto. Agrandar 11x28 con suavizado lo ensucia.
+Con un SVG o un PNG grande del isotipo, se regenera con `tools/png_to_rgb565.py`
+y se reemplazan las dos cosas.
 
-No está verificado en pantalla: el aparato tiene credenciales guardadas y arranca
-directo a RUNNING, así que para ver el provisioning hay que borrar la NVS y
-volver a aparearlo con el teléfono. Se verificó sobre el binario compilado.
+**El provisioning no está verificado en pantalla.** El aparato tiene
+credenciales guardadas y arranca directo a RUNNING, así que para verlo hay que
+borrar la NVS y volver a aparearlo con el teléfono. Se verificó extrayendo el
+HTML del binario compilado. El simulador tampoco sirve: sólo compila
+`ui_ferced.cpp`, y sumar `wifi_provision.cpp` pediría stubear WiFi,
+AsyncWebServer y QRCode.
 
 ---
 
