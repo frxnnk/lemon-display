@@ -1,4 +1,4 @@
-#include "ui_ferced.h"
+﻿#include "ui_ferced.h"
 #include "display_manager.h"
 #include "config.h"
 #include "design_system.h"
@@ -13,7 +13,7 @@ using namespace FercedColors;
 static LGFX_Sprite s_sprite(&tft);
 static bool s_ready = false;
 
-// ── Geometría ──
+// â”€â”€ GeometrÃ­a â”€â”€
 static constexpr int MARK_W = 11;
 static constexpr int MARK_H = 28;
 
@@ -27,16 +27,29 @@ static constexpr int LINE_W    = 64;
 static constexpr int FOOT_Y    = 356;
 static constexpr int PROG_Y    = 452;
 
-// ── Animación ──
-// Duración corta y stagger chico: la sensación de "caro" viene de que los
+// â”€â”€ AnimaciÃ³n â”€â”€
+// DuraciÃ³n corta y stagger chico: la sensaciÃ³n de "caro" viene de que los
 // elementos no entren todos juntos, no de que tarde.
-static constexpr uint16_t ENTER_MS   = 460;
-static constexpr uint16_t STAGGER_MS = 55;
-static constexpr int      RISE_PX    = 26;
-static constexpr uint8_t  SLOTS      = 5;   // chip, texto(3 grupos), pie
+// El stagger tiene que ser del orden de la duracion, no mucho menor: si los
+// elementos se solapan, todos estan vivos a la vez, la banda sucia es la
+// pantalla entera y el frame vuelve a costar 80 ms. Casi en secuencia, cada
+// uno repinta ~70 px y el frame entra holgado en un VSync de 23,6 ms.
+// STAGGER > ENTER: estrictamente en secuencia. Con solapamiento la banda sucia
+// es la union de dos elementos (~180 px) y el frame cae en 2 VSync. Sin
+// solapamiento es un elemento (~70 px) y entra en uno solo.
+static constexpr uint16_t ENTER_MS   = 130;
+static constexpr uint16_t STAGGER_MS = 140;
+static constexpr int      RISE_PX    = 22;
+
+// 0 = chip y marca, 1..5 = renglones de texto, 6 = pie, 7 = progreso.
+static constexpr uint8_t  SLOT_CHIP  = 0;
+static constexpr uint8_t  SLOT_LINE0 = 1;
+static constexpr uint8_t  SLOT_FOOT  = 6;
+static constexpr uint8_t  SLOT_PROG  = 7;
+static constexpr uint8_t  SLOTS      = 8;
 
 // easeOutQuint aproxima cubic-bezier(.16, 1, .3, 1), el easing de la marca:
-// arranca rápido y frena largo. Barato de calcular en un MCU.
+// arranca rÃ¡pido y frena largo. Barato de calcular en un MCU.
 static inline float easeOut(float t) {
     if (t <= 0.0f) return 0.0f;
     if (t >= 1.0f) return 1.0f;
@@ -56,7 +69,7 @@ static uint16_t lerp565(uint16_t fg, uint16_t bg, float t) {
     return (uint16_t)((r << 11) | (g << 5) | b);
 }
 
-// ── Estado del ítem en pantalla ──
+// â”€â”€ Estado del Ã­tem en pantalla â”€â”€
 struct Slide {
     char     lines[MAX_LINES][64];
     int      lineCount;
@@ -78,6 +91,14 @@ static bool     s_hasContent = false;
 static float    s_progress = 0.0f;
 static uint32_t s_lastProgressPaint = 0;
 
+// Medicion del frame: sin esto el framerate es una suposicion.
+static uint32_t s_frameCount = 0;
+static uint32_t s_frameSumUs = 0;
+static uint32_t s_frameWorstUs = 0;
+static UiFrameStats s_stats = {0, 0, 0};
+
+UiFrameStats uiFercedStats() { return s_stats; }
+
 void uiFercedSetup() {
     if (s_ready) return;
     s_sprite.setPsram(true);
@@ -87,7 +108,7 @@ void uiFercedSetup() {
     s_ready = true;
 }
 
-// ── Primitivas ──
+// â”€â”€ Primitivas â”€â”€
 
 static void drawMark(int x, int y, float alpha) {
     for (int py = 0; py < MARK_H; py++) {
@@ -100,7 +121,7 @@ static void drawMark(int x, int y, float alpha) {
     }
 }
 
-// Corta por ancho real en píxeles: contar caracteres con fuente proporcional
+// Corta por ancho real en pÃ­xeles: contar caracteres con fuente proporcional
 // deja renglones desparejos.
 static int wrapText(const char* text, char lines[MAX_LINES][64], int maxW) {
     int count = 0;
@@ -138,7 +159,7 @@ static int wrapText(const char* text, char lines[MAX_LINES][64], int maxW) {
     return count;
 }
 
-// Se recalcula en cada dibujado: aunque el ítem se repita, el tiempo avanza y
+// Se recalcula en cada dibujado: aunque el Ã­tem se repita, el tiempo avanza y
 // la pantalla no se siente congelada.
 static void relativeTime(char* out, size_t len, uint32_t epoch, uint32_t now) {
     if (epoch == 0 || now == 0 || now < epoch) { snprintf(out, len, "recien"); return; }
@@ -162,17 +183,71 @@ static float slotT(uint32_t elapsed, uint8_t slot) {
     return easeOut((float)local / (float)ENTER_MS);
 }
 
-// ── Composición ──
+// â”€â”€ ComposiciÃ³n â”€â”€
 
-static void paintFrame(uint32_t elapsed, uint32_t nowEpoch) {
-    s_sprite.fillScreen(CANVAS);
+// Banda vertical que toca redibujar en este frame. Fuera de ella el sprite ya
+// tiene el contenido bueno del frame anterior y no hace falta ni limpiar ni
+// empujar.
+struct Band { int y, h; };
 
-    const float markT = slotT(elapsed, 0);
-    drawMark(SCREEN_W - MARGIN - MARK_W, CHIP_Y, markT);
+static Band dirtyBand(uint32_t elapsed) {
+    if (elapsed == 0xFFFF) {                 // repintado de reposo
+        return Band{PROG_Y - 4, 10};         // solo la linea de progreso
+    }
+    const uint32_t total = (uint32_t)ENTER_MS + (uint32_t)STAGGER_MS * SLOTS;
+    // Frame de cierre: todo lo anterior ya se empujo al llegar a su valor
+    // final. Repintar la pantalla entera aca costaba 99 ms para nada.
+    if (elapsed >= total) return Band{PROG_Y - 6, RISE_PX + 12};
+
+    int top = SCREEN_H, bottom = 0;
+    // Un elemento esta "vivo" mientras su t no llego a 1. Cada renglon tiene
+    // banda propia: asi la zona a repintar es de ~70 px, no de 480.
+    for (uint8_t slot = 0; slot < SLOTS; slot++) {
+        const float t = slotT(elapsed, slot);
+        if (t <= 0.0f || t >= 1.0f) continue;
+        int y0, y1;
+        if (slot == SLOT_CHIP) {
+            y0 = CHIP_Y - 4;
+            y1 = CHIP_Y + CHIP_H + RISE_PX;
+        } else if (slot == SLOT_FOOT) {
+            y0 = FOOT_Y - 4;
+            y1 = FOOT_Y + FEED_IMG_SIDE + RISE_PX;
+        } else if (slot == SLOT_PROG) {
+            y0 = PROG_Y - 6;
+            y1 = PROG_Y + RISE_PX + 6;
+        } else {
+            const int i = slot - SLOT_LINE0;
+            y0 = TEXT_Y + i * TEXT_LH - 4;
+            y1 = TEXT_Y + i * TEXT_LH + TEXT_LH + RISE_PX;
+        }
+        if (y0 < top) top = y0;
+        if (y1 > bottom) bottom = y1;
+    }
+    // Sin ningun elemento vivo no hay nada que repintar. Devolver la pantalla
+    // entera aca era una trampa: con los slots en secuencia quedan huecos de
+    // 10 ms entre uno y otro, y cada hueco costaba un repintado de 99 ms.
+    if (bottom <= top) return Band{0, 0};
+    return Band{top, bottom - top};
+}
+
+// Dibujar algo fuera de la banda que se va a empujar es trabajo tirado, y en
+// este panel el trabajo tirado se paga en frames perdidos.
+static inline bool touches(const Band& b, int y0, int y1) {
+    return y1 >= b.y && y0 <= b.y + b.h;
+}
+
+static Band paintFrame(uint32_t elapsed, uint32_t nowEpoch) {
+    const Band b = dirtyBand(elapsed);
+    if (b.h <= 0) return b;   // nada vivo: ni limpiar ni componer
+    s_sprite.fillRect(0, b.y, SCREEN_W, b.h, CANVAS);
+
+    const float markT = slotT(elapsed, SLOT_CHIP);
+    const bool chipBand = touches(b, CHIP_Y - 4, CHIP_Y + CHIP_H + RISE_PX);
+    if (chipBand) drawMark(SCREEN_W - MARGIN - MARK_W, CHIP_Y, markT);
 
     // Chip de fuente
-    const float chipT = slotT(elapsed, 0);
-    if (chipT > 0.0f && s_cur.chip[0]) {
+    const float chipT = markT;
+    if (chipBand && chipT > 0.0f && s_cur.chip[0]) {
         const int dy = (int)((1.0f - chipT) * RISE_PX);
         s_sprite.setFont(&fonts::Font0);
         const int w = s_sprite.textWidth(s_cur.chip) + 26;
@@ -187,31 +262,29 @@ static void paintFrame(uint32_t elapsed, uint32_t nowEpoch) {
     s_sprite.setFont(s_cur.isStatus ? DS::fontHeading() : DS::fontHeading());
     s_sprite.setTextDatum(lgfx::top_left);
     for (int i = 0; i < s_cur.lineCount; i++) {
-        const uint8_t slot = 1 + (i * 2) / MAX_LINES;
-        const float t = slotT(elapsed, slot);
+        const int ly = TEXT_Y + i * TEXT_LH;
+        if (!touches(b, ly - 4, ly + TEXT_LH + RISE_PX)) continue;
+        const float t = slotT(elapsed, SLOT_LINE0 + i);
         if (t <= 0.0f) continue;
         const int dy = (int)((1.0f - t) * RISE_PX);
         s_sprite.setTextColor(lerp565(s_cur.isStatus ? FG_2 : FG, CANVAS, t));
         s_sprite.drawString(s_cur.lines[i], MARGIN, TEXT_Y + i * TEXT_LH + dy);
     }
 
-    if (s_cur.isStatus) return;
+    if (s_cur.isStatus) return b;
 
     // Pie: imagen, autor, tiempo
-    const float footT = slotT(elapsed, 3);
-    if (footT > 0.0f) {
+    const float footT = slotT(elapsed, SLOT_FOOT);
+    if (footT > 0.0f && touches(b, FOOT_Y - 4, FOOT_Y + FEED_IMG_SIDE + RISE_PX)) {
         const int dy = (int)((1.0f - footT) * RISE_PX);
         int textX = MARGIN;
 
         if (s_cur.img) {
-            // pushImage no mezcla, asi que el fundido se hace pixel a pixel.
-            for (int py = 0; py < FEED_IMG_SIDE; py++) {
-                for (int px = 0; px < FEED_IMG_SIDE; px++) {
-                    s_sprite.drawPixel(MARGIN + px, FOOT_Y + dy + py,
-                                       lerp565(s_cur.img[py * FEED_IMG_SIDE + px],
-                                               CANVAS, footT));
-                }
-            }
+            // pushImage copia por filas; el fundido pixel a pixel costaba 4096
+            // llamadas a drawPixel por frame. La imagen entra por movimiento,
+            // que es igual de elegante y practicamente gratis.
+            s_sprite.pushImage(MARGIN, FOOT_Y + dy,
+                               FEED_IMG_SIDE, FEED_IMG_SIDE, s_cur.img);
             textX += FEED_IMG_SIDE + 18;
         }
 
@@ -230,8 +303,8 @@ static void paintFrame(uint32_t elapsed, uint32_t nowEpoch) {
         }
     }
 
-    // Línea de progreso hacia el próximo ítem: da vida constante sin ruido.
-    const float progT = slotT(elapsed, 4);
+    // LÃ­nea de progreso hacia el prÃ³ximo Ã­tem: da vida constante sin ruido.
+    const float progT = slotT(elapsed, SLOT_PROG);
     if (progT > 0.0f) {
         const int w = SCREEN_W - 2 * MARGIN;
         s_sprite.drawFastHLine(MARGIN, PROG_Y, w, lerp565(LINE, CANVAS, progT));
@@ -240,16 +313,29 @@ static void paintFrame(uint32_t elapsed, uint32_t nowEpoch) {
             s_sprite.drawFastHLine(MARGIN, PROG_Y, filled, lerp565(FG_4, CANVAS, progT));
         }
     }
+    return b;
 }
 
-static void present() {
+// Empuja solo la banda indicada. El panel refresca a 42 Hz (12 MHz de pclk
+// sobre 548x518 con porches), o sea 23,6 ms por VSync. Empujar los 460 KB
+// enteros no entra en ese presupuesto: medido daba 98,8 ms por frame, 10 fps.
+static void present(int y, int h) {
+    if (h <= 0) return;
+    if (y < 0) { h += y; y = 0; }
+    if (y + h > SCREEN_H) h = SCREEN_H - y;
+    if (h <= 0) return;
+
     displayWaitVSync();
     const uint32_t t0 = micros();
+    s_sprite.setClipRect(0, y, SCREEN_W, h);
+    tft.setClipRect(0, y, SCREEN_W, h);
     s_sprite.pushSprite(0, 0);
-    displayRecordPush(SCREEN_W * SCREEN_H * 2, micros() - t0);
+    tft.clearClipRect();
+    s_sprite.clearClipRect();
+    displayRecordPush(SCREEN_W * h * 2, micros() - t0);
 }
 
-// ── API ──
+// â”€â”€ API â”€â”€
 
 static void beginSlide() {
     s_animStart = millis();
@@ -275,8 +361,8 @@ void uiFercedShowItem(const FeedItem* item, uint8_t index, uint8_t total,
     s_sprite.setFont(DS::fontHeading());
     s_cur.lineCount = wrapText(item->text, s_cur.lines, SCREEN_W - 2 * MARGIN);
 
-    // La imagen se baja una sola vez acá, nunca dentro de un frame de
-    // animación: un GET de 8 KB en medio de la transición la cortaría.
+    // La imagen se baja una sola vez acÃ¡, nunca dentro de un frame de
+    // animaciÃ³n: un GET de 8 KB en medio de la transiciÃ³n la cortarÃ­a.
     s_cur.img = feedFetchImage(item->imgKey);
 
     beginSlide();
@@ -304,24 +390,45 @@ bool uiFercedTick(uint32_t nowEpoch, float progress01) {
 
     if (s_animating) {
         const uint32_t elapsed = now - s_animStart;
+        const uint32_t t0 = micros();
+
         relativeTime(s_cur.when, sizeof(s_cur.when), s_cur.epoch, nowEpoch);
-        paintFrame(elapsed, nowEpoch);
-        present();
+        const Band b = paintFrame(elapsed, nowEpoch);
+        present(b.y, b.h);
+
+        // Los frames sin banda no dibujan nada: contarlos falsearia la media
+        // hacia abajo y taparia el costo real de los que si pintan.
+        if (b.h > 0) {
+            const uint32_t frameUs = micros() - t0;
+            s_frameCount++;
+            s_frameSumUs += frameUs;
+            if (frameUs > s_frameWorstUs) s_frameWorstUs = frameUs;
+        }
 
         if (elapsed >= (uint32_t)ENTER_MS + (uint32_t)STAGGER_MS * SLOTS) {
             s_animating = false;
             s_lastProgressPaint = now;
+            if (s_frameCount > 0) {
+                s_stats.frames = (uint16_t)s_frameCount;
+                s_stats.avgUs100 = (uint16_t)((s_frameSumUs / s_frameCount) / 100);
+                s_stats.worstUs100 = (uint16_t)(s_frameWorstUs / 100);
+            }
+            s_frameCount = 0;
+            s_frameSumUs = 0;
+            s_frameWorstUs = 0;
         }
         return true;
     }
 
-    // En reposo repinta 4 veces por segundo: alcanza para que la línea de
+    // En reposo repinta 4 veces por segundo: alcanza para que la lÃ­nea de
     // progreso avance suave y no tiene costo perceptible.
     if (now - s_lastProgressPaint >= 250) {
         s_lastProgressPaint = now;
         relativeTime(s_cur.when, sizeof(s_cur.when), s_cur.epoch, nowEpoch);
-        paintFrame(0xFFFF, nowEpoch);
-        present();
+        const Band b = paintFrame(0xFFFF, nowEpoch);
+        present(b.y, b.h);
     }
     return false;
 }
+
+

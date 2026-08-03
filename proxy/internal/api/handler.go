@@ -17,8 +17,9 @@ const (
 )
 
 type Handler struct {
-	mix  *mixer.Mixer
-	imgs *img.Cache
+	mix   *mixer.Mixer
+	imgs  *img.Cache
+	guard *Guard
 }
 
 func New(m *mixer.Mixer) *Handler { return &Handler{mix: m} }
@@ -27,7 +28,40 @@ func NewWithImages(m *mixer.Mixer, c *img.Cache) *Handler {
 	return &Handler{mix: m, imgs: c}
 }
 
+func (h *Handler) SetGuard(g *Guard) { h.guard = g }
+
+// El firmware manda de paso como le fue a la ultima animacion. Sin esto el
+// framerate real seria una suposicion, y ya nos equivocamos una vez.
+func logAnim(r *http.Request) {
+	fr := r.URL.Query().Get("fr")
+	if fr == "" || fr == "0" {
+		return
+	}
+	frames, _ := strconv.Atoi(fr)
+	avg, _ := strconv.Atoi(r.URL.Query().Get("avg"))
+	worst, _ := strconv.Atoi(r.URL.Query().Get("max"))
+	if frames <= 0 || avg <= 0 {
+		return
+	}
+	log.Printf("[anim] %d frames, medio %.1f ms (%.0f fps), peor %.1f ms",
+		frames, float64(avg)/10.0, 10000.0/float64(avg), float64(worst)/10.0)
+}
+
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if h.guard != nil {
+		if code := h.guard.Check(r); code != 0 {
+			log.Printf("[deny] %s %s %s -> %d", clientIP(r), r.Method, r.URL.Path, code)
+			http.Error(w, http.StatusText(code), code)
+			return
+		}
+	}
+
+	// Endurecimiento basico: nada de esto se embebe en otro sitio ni se
+	// interpreta como HTML.
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+
 	switch r.URL.Path {
 	case "/healthz":
 		w.WriteHeader(http.StatusOK)
@@ -51,6 +85,7 @@ func (h *Handler) serveImg(w http.ResponseWriter, r *http.Request) {
 	key := r.URL.Query().Get("k")
 	raw, ok := h.imgs.Get(key)
 	log.Printf("[img] %s pidio k=%s -> %v", r.RemoteAddr, key, ok)
+	logAnim(r)
 	if !ok {
 		http.NotFound(w, r)
 		return
@@ -81,6 +116,8 @@ func (h *Handler) serveFeed(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[feed] %s pidio n=%d, sirvo %d items (%s)",
 		r.RemoteAddr, n, len(items), r.UserAgent())
+
+	logAnim(r)
 
 	// Se serializa a buffer para poder declarar Content-Length. Con un encoder
 	// en streaming, Go pasa a Transfer-Encoding: chunked al superar ~4KB, y el

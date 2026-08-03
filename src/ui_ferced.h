@@ -31,3 +31,11 @@ void uiFercedShowStatus(const char* eyebrow, const char* message);
 // loop. `progress01` (0..1) alimenta la línea de progreso hacia el próximo
 // ítem. Devuelve true mientras haya animación en curso.
 bool uiFercedTick(uint32_t nowEpoch, float progress01);
+
+// Medición real de la última animación, para no discutir el framerate a ojo.
+struct UiFrameStats {
+    uint16_t frames;    // frames dibujados en la última transición
+    uint16_t avgUs100;  // duración media de frame, en centenas de microsegundo
+    uint16_t worstUs100;// peor frame
+};
+UiFrameStats uiFercedStats();
