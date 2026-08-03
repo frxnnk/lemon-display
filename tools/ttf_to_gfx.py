@@ -2,10 +2,19 @@
 """Convert TTF font to Adafruit GFX / LovyanGFX compatible C header.
 
 Usage:
-    python ttf_to_gfx.py <input.ttf> <size_pt> <output.h> <font_name>
+    python ttf_to_gfx.py <input.ttf> <size_pt> <output.h> <font_name> [last_char_hex]
 
 Example:
     python ttf_to_gfx.py Satoshi-Regular.ttf 12 Satoshi12.h Satoshi12
+    python ttf_to_gfx.py Satoshi-Regular.ttf 12 Satoshi12.h Satoshi12 FF
+
+El rango es contiguo desde 0x20 hasta last_char, porque asi lo indexa
+GFXfont::getGlyph() cuando range_num es 0. Con 0xFF entran los acentos, la enye
+y los signos de apertura del castellano; el tramo muerto 0x7F-0xBF cuesta unos
+455 bytes de glifos vacios, que al lado del flash disponible no se siente.
+
+El aparato recibe UTF-8 y LovyanGFX lo decodifica solo (TextStyle::utf8 viene en
+true), asi que un codepoint como U+00F1 llega como 0xF1 y cae dentro del rango.
 """
 
 import sys
@@ -105,6 +114,8 @@ def convert_font(ttf_path: str, size_pt: int, output_path: str, font_name: str,
     lines.append(f"const GFXglyph {font_name}Glyphs[] PROGMEM = {{")
     for i, (boff, w, h, xadv, xoff, yoff) in enumerate(glyphs):
         char_code = first_char + i
+        # El header se deja en ASCII puro a proposito: meter la enye literal en
+        # un comentario invita al mojibake, que en este repo ya paso.
         ch = chr(char_code) if 0x20 < char_code < 0x7F else ' '
         lines.append(f"  {{ {boff:5d}, {w:3d}, {h:3d}, {xadv:3d}, {xoff:3d}, {yoff:3d} }},  // 0x{char_code:02X} '{ch}'")
     lines.append(f"}};")
@@ -117,7 +128,7 @@ def convert_font(ttf_path: str, size_pt: int, output_path: str, font_name: str,
     lines.append(f"  0x{first_char:02X}, 0x{last_char:02X}, {y_advance} }};")
     lines.append(f"")
 
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="ascii", newline="\n") as f:
         f.write("\n".join(lines))
 
     bitmap_kb = len(bitmaps) / 1024
@@ -127,7 +138,9 @@ def convert_font(ttf_path: str, size_pt: int, output_path: str, font_name: str,
 
 if __name__ == "__main__":
     if len(sys.argv) < 5:
-        print(f"Usage: {sys.argv[0]} <input.ttf> <size_pt> <output.h> <font_name>")
+        print(f"Usage: {sys.argv[0]} <input.ttf> <size_pt> <output.h> <font_name> [last_char_hex]")
         sys.exit(1)
 
-    convert_font(sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4])
+    last = int(sys.argv[5], 16) if len(sys.argv) > 5 else 0x7E
+    convert_font(sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4],
+                 last_char=last)

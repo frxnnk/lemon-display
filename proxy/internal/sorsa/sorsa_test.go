@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/fcedeirajoaquin/ferced-display/proxy/internal/feed"
 )
@@ -80,25 +81,33 @@ func TestMapsFullTextAndUser(t *testing.T) {
 	}
 }
 
+// Las tildes y la enye se conservan desde que la fuente llega hasta 0xFF; lo
+// que sigue cayendose son los emoji y todo lo que este arriba de ese rango.
 func TestNormalizesTextAndCollapsesURL(t *testing.T) {
 	items := parseFile(t, schemaFixture)
 
-	if want := "Publicamos la nueva version del firmware - mas rapida y con soporte de temas [link]"; items[0].Text != want {
+	if want := "Publicamos la nueva versión del firmware - más rápida y con soporte de temas [link]"; items[0].Text != want {
 		t.Errorf("texto  = %q\nquiero = %q", items[0].Text, want)
 	}
-	if items[1].Text != "Buenisimo esto" {
+	if items[1].Text != "Buenísimo esto" {
 		t.Errorf("emoji no removido: %q", items[1].Text)
 	}
-	if items[1].Author != "Alguien Nandu" {
+	if items[1].Author != "Alguien Ñandú" {
 		t.Errorf("autor sin normalizar: %q", items[1].Author)
 	}
 }
 
-func TestTextIsASCIIAndBounded(t *testing.T) {
+// El invariante ya no es ASCII sino "lo que la fuente puede dibujar": UTF-8
+// valido y ningun codepoint arriba de 0xFF. Un byte suelto o un codepoint
+// fuera de rango sale como cuadradito en la pantalla.
+func TestTextIsRenderableAndBounded(t *testing.T) {
 	for _, it := range parseFile(t, schemaFixture) {
-		for i := 0; i < len(it.Text); i++ {
-			if it.Text[i] > 127 {
-				t.Fatalf("texto no normalizado: %q", it.Text)
+		if !utf8.ValidString(it.Text) {
+			t.Fatalf("texto con UTF-8 roto: %q", it.Text)
+		}
+		for _, r := range it.Text {
+			if r > 0xFF {
+				t.Fatalf("codepoint U+%04X fuera del rango de la fuente en %q", r, it.Text)
 			}
 		}
 		if len(it.Text) > maxText+1 {

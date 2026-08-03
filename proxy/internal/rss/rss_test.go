@@ -28,10 +28,12 @@ func TestParseSkipsEmptyTitles(t *testing.T) {
 	}
 }
 
+// Las tildes se conservan: la fuente del firmware llega hasta 0xFF. Antes esto
+// esperaba "Primer titulo con acentuacion".
 func TestParseNormalizesText(t *testing.T) {
 	items := load(t)
-	if items[0].Text != "Primer titulo con acentuacion" {
-		t.Errorf("texto = %q, quiero sin tildes", items[0].Text)
+	if want := "Primer título con acentuación"; items[0].Text != want {
+		t.Errorf("texto = %q, quiero %q", items[0].Text, want)
 	}
 }
 
