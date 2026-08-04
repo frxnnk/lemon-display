@@ -14,6 +14,7 @@ void loop(void);
 // Definidas en sim_main.cpp
 extern int  g_startIndex;
 extern bool g_still;
+extern bool g_config;
 
 static int user_func(bool* running) {
     setup();
@@ -29,6 +30,11 @@ int main(int argc, char** argv) {
             g_still = true;
         } else if (std::strncmp(argv[i], "--item=", 7) == 0) {
             g_startIndex = std::atoi(argv[i] + 7);
+        } else if (std::strcmp(argv[i], "--config") == 0) {
+            // Por linea de comandos y no con la tecla 'c': Panel_sdl corre su
+            // propio bucle de eventos y se come las teclas antes que loop(),
+            // asi que el teclado no sirve para capturar sin manos.
+            g_config = true;
         }
     }
     return lgfx::Panel_sdl::main(user_func);

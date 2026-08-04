@@ -4,6 +4,7 @@
 #include "sim_display.h"
 #include "feed_client.h"
 #include "ui_ferced.h"
+#include "ui_config.h"
 
 #include <SDL2/SDL.h>
 
@@ -15,12 +16,16 @@ static uint8_t  s_index = 0;
 static uint32_t s_lastRotate = 0;
 static bool     s_paused = false;
 static uint32_t s_rotateMs = 17000;
+// Mientras la pantalla de configuracion esta arriba hay que frenar el tick del
+// feed: si no, la animacion repinta encima y la captura sale con el titular.
+static bool     s_config = false;
 
 // Configuracion por linea de comandos. El teclado no sirve para automatizar:
 // Panel_sdl corre su propio bucle de eventos en el hilo principal y consume
 // las teclas antes de que las vea este loop.
 int      g_startIndex = 0;
 bool     g_still      = false;   // sin rotacion, para capturas estables
+bool     g_config     = false;   // arrancar en la pantalla de configuracion
 
 static void applyArgs() {
     if (g_startIndex > 0) {
@@ -28,6 +33,17 @@ static void applyArgs() {
         if (total > 0) s_index = (uint8_t)(g_startIndex % total);
     }
     if (g_still) s_paused = true;
+}
+
+// Datos falsos: lo que se verifica aca es la disposicion, no los valores.
+static void mostrarConfig() {
+    static const ConfigInfo demo = {
+        "1.0.0", "e96efeb-dirty", "2026-08-03 23:51",
+        "MiWiFi", "192.168.1.41", "feed.ferced.com",
+        8073, 35.4f, 20, true
+    };
+    s_config = true;
+    uiConfigDraw(demo);
 }
 
 // El firmware usa millis(); aca lo replico sobre el reloj del sistema.
@@ -63,6 +79,7 @@ static void banner() {
         "  ---------------------------------------------\n"
         "  ESPACIO  siguiente item        P  pausar rotacion\n"
         "  B        item anterior         R  repetir animacion\n"
+        "  C        pantalla de configuracion\n"
         "  T        modelo de tiempo del hardware on/off\n"
         "  F        reporte de framerate\n"
         "  ESC      salir\n\n"
@@ -92,6 +109,7 @@ void setup() {
     applyArgs();
     show();
     s_lastRotate = millisNow();
+    if (g_config) mostrarConfig();
 }
 
 void loop() {
@@ -99,9 +117,10 @@ void loop() {
     while (SDL_PollEvent(&e)) {
         if (e.type != SDL_KEYDOWN) continue;
         switch (e.key.keysym.sym) {
-            case SDLK_SPACE:  advance(+1); break;
-            case SDLK_b:      advance(-1); break;
-            case SDLK_r:      show(); s_lastRotate = millisNow(); break;
+            case SDLK_SPACE:  s_config = false; advance(+1); break;
+            case SDLK_b:      s_config = false; advance(-1); break;
+            case SDLK_r:      s_config = false; show(); s_lastRotate = millisNow(); break;
+            case SDLK_c:      mostrarConfig(); break;
             case SDLK_p:      s_paused = !s_paused;
                               std::printf("  rotacion %s\n", s_paused ? "en pausa" : "activa");
                               break;
@@ -115,6 +134,8 @@ void loop() {
             default: break;
         }
     }
+
+    if (s_config) { SDL_Delay(8); return; }
 
     const uint32_t now = millisNow();
     const uint32_t since = now - s_lastRotate;

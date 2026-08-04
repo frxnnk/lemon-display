@@ -4,11 +4,13 @@
 #   .\shot.ps1                 -> primer item
 #   .\shot.ps1 -Advance 3      -> cuarto item
 #   .\shot.ps1 -Advance 3 -Mid -> a mitad de la animacion del cuarto item
+#   .\shot.ps1 -Config         -> pantalla de configuracion
 #   .\shot.ps1 -NoBuild        -> sin recompilar
 
 param(
     [int]$Advance = 0,
     [switch]$Mid,
+    [switch]$Config,
     [switch]$NoBuild,
     [string]$Out = "shot.png"
 )
@@ -28,6 +30,7 @@ if (-not $NoBuild) {
 }
 
 $simArgs = @("--still", "--item=$Advance")
+if ($Config) { $simArgs += "--config" }
 $p = Start-Process -FilePath "$sim\build\ferced-sim.exe" -ArgumentList $simArgs -WorkingDirectory $sim -PassThru
 Start-Sleep -Seconds 4
 
