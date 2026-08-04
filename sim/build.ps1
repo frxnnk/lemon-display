@@ -35,7 +35,8 @@ $sources = @(
     "$sim\src\sim_display.cpp",
     "$sim\src\sim_feed.cpp",
     "$sim\src\sim_stubs.cpp",
-    "$root\src\ui_ferced.cpp"
+    "$root\src\ui_ferced.cpp",
+    "$root\src\ui_config.cpp"
 ) + $lgfxSrc
 
 $incs = @(
