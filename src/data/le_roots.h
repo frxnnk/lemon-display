@@ -1,5 +1,9 @@
 #pragma once
 
+// pgmspace define PROGMEM. Sin este include el header solo compila si a
+// alguien se le ocurre poner Arduino.h antes, y eso es una trampa esperando.
+#include <pgmspace.h>
+
 // Raices de Let's Encrypt para validar la descarga del firmware.
 //
 // Generado por tools/fetch_le_roots.py. NO editar a mano.
