@@ -122,7 +122,9 @@ void uiConfigDraw(const ConfigInfo& info) {
     tft.drawString("FERCED", MARGEN + MARK_W + 12, 20 + MARK_H / 2, &SatoshiMedium18);
 
     int y = FILA_Y0;
-    fila(y, "Version",   info.version);      y += FILA_H;
+    // Los rotulos van acentuados: las fuentes se regeneraron hasta 0xFF, asi
+    // que la pantalla puede escribir castellano de verdad.
+    fila(y, "Versión",   info.version);      y += FILA_H;
     fila(y, "Commit",    info.commit);       y += FILA_H;
     fila(y, "Compilado", info.built);        y += FILA_H;
 
@@ -130,7 +132,7 @@ void uiConfigDraw(const ConfigInfo& info) {
     // bloque anterior parecia subrayarlo en vez de separar.
     separador(y + 10); y += SEP_GAP;
 
-    fila(y, "Red",  info.online ? info.ssid : "sin conexion"); y += FILA_H;
+    fila(y, "Red",  info.online ? info.ssid : "sin conexión"); y += FILA_H;
     fila(y, "IP",   info.online ? info.ip : "-");              y += FILA_H;
     fila(y, "Feed", info.endpoint);                            y += FILA_H;
 
@@ -140,9 +142,9 @@ void uiConfigDraw(const ConfigInfo& info) {
     formatearUptime(buf, sizeof(buf), info.uptimeS);
     fila(y, "Encendido", buf); y += FILA_H;
     snprintf(buf, sizeof(buf), "%.1f fps", info.fps);
-    fila(y, "Animacion", buf); y += FILA_H;
+    fila(y, "Animación", buf); y += FILA_H;
     snprintf(buf, sizeof(buf), "%u", (unsigned)info.items);
-    fila(y, "Items", buf);
+    fila(y, "Ítems", buf);
 
     boton(BTN_REFRESH, "Actualizar feed", FG);
     boton(BTN_CLOSE,   "Cerrar",          FG);
