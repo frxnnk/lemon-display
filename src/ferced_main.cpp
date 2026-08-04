@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <esp_ota_ops.h>
 #include <esp_task_wdt.h>
 
 #include "colors.h"
@@ -60,12 +61,45 @@ static void showCurrent() {
     uiFercedShowItem(feedItem(s_index), s_index, total, s_offline);
 }
 
+// -- Red de rollback ---------------------------------------------------------
+// Con CONFIG_APP_ROLLBACK_ENABLE el bootloader deja la particion recien escrita
+// en PENDING_VERIFY: si nadie la confirma, el proximo arranque vuelve sola a la
+// anterior.
+//
+// Arduino la confirma apenas bootea, dentro de initArduino(), lo que anularia
+// la red entera. Esa llamada esta envuelta en if(!verifyRollbackLater()), y
+// verifyRollbackLater() es una funcion debil que por defecto devuelve false.
+// Definiendola fuerte le decimos que se abstenga.
+extern "C" bool verifyRollbackLater() { return true; }
+
+static bool s_arranqueConfirmado = false;
+
+// Se confirma cuando el firmware DEMUESTRA que sirve, no cuando arranca. Un
+// binario que compila y bootea pero se queda sin red es justo el caso que el
+// rollback tiene que atrapar: sin conexion no hay forma de arreglarlo salvo por
+// USB, que es de lo que este mecanismo existe para escapar.
+static void confirmarArranque() {
+    if (s_arranqueConfirmado) return;
+    s_arranqueConfirmado = true;
+
+    const esp_partition_t* corriendo = esp_ota_get_running_partition();
+    esp_ota_img_states_t estado;
+    if (esp_ota_get_state_partition(corriendo, &estado) != ESP_OK) return;
+    if (estado != ESP_OTA_IMG_PENDING_VERIFY) return;
+
+    esp_ota_mark_app_valid_cancel_rollback();
+    Serial.println("[OTA] arranque confirmado, la particion nueva queda fija");
+}
+
 static void refreshFeed() {
     const UiFrameStats st = uiFercedStats();
     const FeedResult r = feedFetch(st.frames, st.avgUs100, st.worstUs100);
     s_lastFetch = millis();
 
     if (r == FEED_UPDATED) {
+        // Primer feed exitoso desde el arranque: recien aca el firmware probo
+        // que tiene red y sirve.
+        confirmarArranque();
         s_offline = false;
         s_retryMs = FEED_RETRY_MIN_MS;
         s_nextRetry = 0;
