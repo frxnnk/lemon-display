@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <cstring>
 #include <ctime>
 #include <esp_task_wdt.h>
 
@@ -9,6 +10,7 @@
 #include "nvs_storage.h"
 #include "time_manager.h"
 #include "touch_manager.h"
+#include "ui_config.h"
 #include "ui_ferced.h"
 #include "wifi_manager.h"
 #include "wifi_provision.h"
@@ -17,6 +19,7 @@ enum AppPhase : uint8_t {
     PHASE_PROVISION,
     PHASE_CONNECTING,
     PHASE_RUNNING,
+    PHASE_CONFIG,
 };
 
 static AppPhase s_phase = PHASE_PROVISION;
@@ -92,6 +95,46 @@ static void advance() {
     s_index = (s_index + 1) % total;
     showCurrent();
     s_lastRotate = millis();
+}
+
+// El host del endpoint, sin esquema ni ruta: alcanza para distinguir el build
+// de LAN del de produccion y no expone la ruta ni el token.
+static const char* endpointHost() {
+    static char host[48];
+    const char* p = strstr(FEED_ENDPOINT, "://");
+    p = p ? p + 3 : FEED_ENDPOINT;
+    size_t n = 0;
+    while (p[n] && p[n] != '/' && n < sizeof(host) - 1) { host[n] = p[n]; n++; }
+    host[n] = '\0';
+    return host;
+}
+
+// La pantalla de diagnostico no anima nada: se dibuja una sola vez al entrar y
+// el loop de la fase se limita a esperar un toque.
+static void enterConfig() {
+    s_phase = PHASE_CONFIG;
+
+    // wifiSSID() devuelve el SSID con el que se conecto, sin tener que leer la
+    // clave de NVS para nada.
+    const bool online = wifiConnected();
+    const String ip = wifiIP();
+
+    // OJO: avgUs100 es el costo de pintar un frame, no el periodo entre
+    // frames. El fps real sale del periodo, que ui_ferced.cpp promedia para su
+    // log [anim] pero no publica en UiFrameStats. Hasta que lo publique, este
+    // numero es una cota superior y da mas alto que lo que se ve en pantalla.
+    const UiFrameStats st = uiFercedStats();
+    const float fps = st.avgUs100 > 0 ? 10000.0f / (float)st.avgUs100 : 0.0f;
+
+    const ConfigInfo info = {
+        FERCED_VERSION, FERCED_COMMIT, FERCED_BUILD_DATE,
+        wifiSSID(), ip.c_str(), endpointHost(),
+        millis() / 1000,
+        fps,
+        feedCount(),
+        online,
+    };
+    uiConfigDraw(info);
 }
 
 void setup() {
@@ -181,9 +224,46 @@ void loop() {
         return;
     }
 
+    if (s_phase == PHASE_CONFIG) {
+        // La pantalla esta quieta: no hay nada que repintar, solo resolver el
+        // toque contra la geometria de los botones, que vive en ui_config.cpp.
+        const TouchEvent ev = touchLoop();
+        if (ev.gesture == TOUCH_TAP) {
+            switch (uiConfigHit(ev.x, ev.y)) {
+                case CFG_CLOSE:
+                    s_phase = PHASE_RUNNING;
+                    showCurrent();
+                    s_lastRotate = millis();
+                    break;
+                case CFG_REFRESH:
+                    // refreshFeed() ya repinta y reacomoda s_lastRotate cuando
+                    // baja contenido nuevo; el reset de aca cubre el caso en
+                    // que la red falle y se quede con el pool anterior.
+                    s_phase = PHASE_RUNNING;
+                    refreshFeed();
+                    s_lastRotate = millis();
+                    break;
+                case CFG_FORGET:
+                    // Sin confirmacion, por decision explicita. El boton va
+                    // separado y en rojo para bajar la chance de un roce.
+                    nvsForgetWifi();
+                    ESP.restart();
+                    break;
+                default:
+                    break;
+            }
+        }
+        delay(8);
+        return;
+    }
+
     wifiLoop();
 
-    if (touchLoop().gesture == TOUCH_TAP) advance();
+    // touchLoop() consume el evento: una sola llamada por vuelta y se reparte
+    // el resultado, porque la segunda ya devolveria TOUCH_NONE.
+    const TouchEvent ev = touchLoop();
+    if (ev.gesture == TOUCH_LONG_PRESS) { enterConfig(); return; }
+    if (ev.gesture == TOUCH_TAP) advance();
 
     const uint32_t sinceRotate = now - s_lastRotate;
     if (sinceRotate >= FEED_ROTATE_MS) advance();
