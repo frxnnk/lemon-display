@@ -35,7 +35,11 @@ bool uiFercedTick(uint32_t nowEpoch, float progress01);
 // Medición real de la última animación, para no discutir el framerate a ojo.
 struct UiFrameStats {
     uint16_t frames;    // frames dibujados en la última transición
-    uint16_t avgUs100;  // duración media de frame, en centenas de microsegundo
+    uint16_t avgUs100;  // costo medio DENTRO del tick, en centenas de microsegundo
     uint16_t worstUs100;// peor frame
+    // Período real de reloj de pared entre frames. De acá sale el FPS de
+    // verdad: avgUs100 deja afuera el delay() del loop, el táctil y wifiLoop(),
+    // así que derivar el framerate de ese campo lo sobreestima como al doble.
+    uint16_t periodUs100;
 };
 UiFrameStats uiFercedStats();
