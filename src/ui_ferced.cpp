@@ -452,6 +452,9 @@ bool uiFercedTick(uint32_t nowEpoch, float progress01) {
                 s_stats.frames = (uint16_t)s_frameCount;
                 s_stats.avgUs100 = (uint16_t)((s_frameSumUs / s_frameCount) / 100);
                 s_stats.worstUs100 = (uint16_t)(s_frameWorstUs / 100);
+                s_stats.periodUs100 = s_framePeriodCount > 0
+                    ? (uint16_t)((s_framePeriodSumUs / s_framePeriodCount) / 100)
+                    : 0;
 
                 // El mismo dato que viaja al proxy como [anim], pero por serie:
                 // medir no puede depender de leer un log remoto. waitTimeouts

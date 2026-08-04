@@ -119,12 +119,11 @@ static void enterConfig() {
     const bool online = wifiConnected();
     const String ip = wifiIP();
 
-    // OJO: avgUs100 es el costo de pintar un frame, no el periodo entre
-    // frames. El fps real sale del periodo, que ui_ferced.cpp promedia para su
-    // log [anim] pero no publica en UiFrameStats. Hasta que lo publique, este
-    // numero es una cota superior y da mas alto que lo que se ve en pantalla.
+    // El fps sale del PERIODO, no del costo. avgUs100 mide solo lo que tarda
+    // el tick y deja afuera el delay() del loop, el tactil y wifiLoop(): usarlo
+    // daria cerca del doble del framerate real.
     const UiFrameStats st = uiFercedStats();
-    const float fps = st.avgUs100 > 0 ? 10000.0f / (float)st.avgUs100 : 0.0f;
+    const float fps = st.periodUs100 > 0 ? 10000.0f / (float)st.periodUs100 : 0.0f;
 
     const ConfigInfo info = {
         FERCED_VERSION, FERCED_COMMIT, FERCED_BUILD_DATE,
