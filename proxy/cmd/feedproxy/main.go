@@ -119,6 +119,14 @@ func main() {
 	// una imagen cada 17 s, asi que le sobra muy holgado.
 	h.SetGuard(api.NewGuard(token, 0.5, 20))
 
+	// FIRMWARE_DIR es el interruptor del OTA: sin la variable los endpoints
+	// dan 404 y el aparato solo se actualiza por USB. La carpeta lleva
+	// firmware.bin y version.txt, que se suben por scp igual que el proxy.
+	if dir := os.Getenv("FIRMWARE_DIR"); dir != "" {
+		h.SetFirmware(&api.Firmware{Dir: dir})
+		log.Printf("OTA habilitado, sirvo firmware desde %s", dir)
+	}
+
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           h,
