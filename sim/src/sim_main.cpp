@@ -26,6 +26,7 @@ static bool     s_config = false;
 int      g_startIndex = 0;
 bool     g_still      = false;   // sin rotacion, para capturas estables
 bool     g_config     = false;   // arrancar en la pantalla de configuracion
+int      g_progreso   = -1;      // 0..100: congela la franja de estado del OTA
 
 static void applyArgs() {
     if (g_startIndex > 0) {
@@ -44,6 +45,10 @@ static void mostrarConfig() {
     };
     s_config = true;
     uiConfigDraw(demo);
+
+    // El mismo llamado que hace el callback de progreso del OTA en el firmware,
+    // con la version falsa: aca no se descarga nada, se mira como queda.
+    if (g_progreso >= 0) uiConfigEstado("Descargando 1.0.1", g_progreso);
 }
 
 // El firmware usa millis(); aca lo replico sobre el reloj del sistema.
