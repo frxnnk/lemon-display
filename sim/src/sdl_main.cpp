@@ -15,6 +15,7 @@ void loop(void);
 extern int  g_startIndex;
 extern bool g_still;
 extern bool g_config;
+extern int  g_progreso;
 
 static int user_func(bool* running) {
     setup();
@@ -34,6 +35,11 @@ int main(int argc, char** argv) {
             // Por linea de comandos y no con la tecla 'c': Panel_sdl corre su
             // propio bucle de eventos y se come las teclas antes que loop(),
             // asi que el teclado no sirve para capturar sin manos.
+            g_config = true;
+        } else if (std::strncmp(argv[i], "--progreso=", 11) == 0) {
+            // Congela la franja de estado del OTA en un porcentaje. Sin esto no
+            // hay forma de fotografiar una descarga: dura lo que dura la red.
+            g_progreso = std::atoi(argv[i] + 11);
             g_config = true;
         }
     }

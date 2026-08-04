@@ -5,12 +5,14 @@
 #   .\shot.ps1 -Advance 3      -> cuarto item
 #   .\shot.ps1 -Advance 3 -Mid -> a mitad de la animacion del cuarto item
 #   .\shot.ps1 -Config         -> pantalla de configuracion
+#   .\shot.ps1 -Progreso 45    -> configuracion con la descarga del OTA al 45%
 #   .\shot.ps1 -NoBuild        -> sin recompilar
 
 param(
     [int]$Advance = 0,
     [switch]$Mid,
     [switch]$Config,
+    [int]$Progreso = -1,
     [switch]$NoBuild,
     [string]$Out = "shot.png"
 )
@@ -31,6 +33,8 @@ if (-not $NoBuild) {
 
 $simArgs = @("--still", "--item=$Advance")
 if ($Config) { $simArgs += "--config" }
+# --progreso ya implica la pantalla de configuracion del lado del simulador.
+if ($Progreso -ge 0) { $simArgs += "--progreso=$Progreso" }
 $p = Start-Process -FilePath "$sim\build\ferced-sim.exe" -ArgumentList $simArgs -WorkingDirectory $sim -PassThru
 Start-Sleep -Seconds 4
 

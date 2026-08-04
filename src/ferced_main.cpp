@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <cstdio>
 #include <cstring>
 #include <ctime>
 #include <esp_task_wdt.h>
@@ -8,6 +9,7 @@
 #include "feed_client.h"
 #include "ferced_config.h"
 #include "nvs_storage.h"
+#include "ota_ferced.h"
 #include "time_manager.h"
 #include "touch_manager.h"
 #include "ui_config.h"
@@ -136,6 +138,45 @@ static void enterConfig() {
     uiConfigDraw(info);
 }
 
+// -- Actualizacion por WiFi --------------------------------------------------
+// Corre entera dentro del toque: otaAplicar() bloquea hasta terminar y avisa el
+// avance por este callback. El callback escribe SOLO la franja de estado, que
+// es para lo que existe: la descarga informa hasta 101 veces y repintar la
+// pantalla completa cuesta 99 ms cada una, o sea diez segundos de dibujo.
+static char s_otaVersion[16] = {};
+
+static void otaProgreso(int pct) {
+    char linea[40];
+    snprintf(linea, sizeof(linea), "Descargando %s", s_otaVersion);
+    uiConfigEstado(linea, pct);
+}
+
+static void buscarActualizacion() {
+    uiConfigEstado("Buscando actualización...");
+
+    const OtaCheck c = otaBuscar();
+    if (c.error) {
+        uiConfigEstado(c.detalle, -1, true);
+        return;
+    }
+    if (!c.hayNueva) {
+        char linea[48];
+        snprintf(linea, sizeof(linea), "Ya está al día: %s", FERCED_VERSION);
+        uiConfigEstado(linea);
+        return;
+    }
+
+    snprintf(s_otaVersion, sizeof(s_otaVersion), "%s", c.version);
+
+    char detalle[64] = {};
+    if (otaAplicar(otaProgreso, detalle, sizeof(detalle))) return;  // reinicia
+
+    // Nada de ESP.restart() aca: si fallo, la particion quedo abortada y el
+    // firmware que corre es el mismo de siempre. Lo unico que falta es contar
+    // por que, y para eso la pantalla tiene que quedarse donde esta.
+    uiConfigEstado(detalle[0] ? detalle : "no se pudo actualizar", -1, true);
+}
+
 void setup() {
     Serial.begin(115200);
     Serial.println("\n=== ferced-display ===");
@@ -242,9 +283,16 @@ void loop() {
                     refreshFeed();
                     s_lastRotate = millis();
                     break;
+                case CFG_UPDATE:
+                    // Se queda en PHASE_CONFIG: el resultado, el avance y el
+                    // motivo de una falla se escriben en la franja de estado de
+                    // esta misma pantalla.
+                    buscarActualizacion();
+                    break;
                 case CFG_FORGET:
                     // Sin confirmacion, por decision explicita. El boton va
-                    // separado y en rojo para bajar la chance de un roce.
+                    // aparte, en rojo y en la pastilla mas chica de la grilla
+                    // para bajar la chance de un roce.
                     nvsForgetWifi();
                     ESP.restart();
                     break;
