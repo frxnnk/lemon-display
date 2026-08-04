@@ -36,8 +36,19 @@ automático, corriendo como `NT AUTHORITY\LocalService`, escuchando **sólo en
 **Cuatro fuentes RSS** intercaladas: BBC Mundo, La Nación, BBC Tech, Xataka.
 
 **Firmware** con animación escalonada, miniaturas de 64x64 y reconexión
-automática de WiFi. 16,6% de flash, 19% de RAM. Animación a 35,5 fps medidos
+automática de WiFi. 16,9% de flash, 19% de RAM. Animación a 35,5 fps medidos
 sobre un techo de panel de 42.
+
+**Pantalla de configuración**: se abre con un **long press** en cualquier parte.
+Muestra versión, commit y fecha de compilación —inyectados al compilar por
+`tools/inject_version.py`, con sufijo `-dirty` si el árbol estaba sucio—, más
+red, IP, host del feed, uptime, fps e ítems en el pool. Trae tres botones:
+actualizar feed, cerrar y reaparear WiFi (este último borra las credenciales
+**sin confirmación**, por decisión explícita). Diseño y plan en
+`docs/plans/2026-08-03-pantalla-configuracion*.md`.
+
+Es la respuesta rápida a "¿la cajita tiene lo último?": comparás el commit de la
+pantalla contra `git log --oneline -1`.
 
 **Simulador** que corre el mismo `src/ui_ferced.cpp` con la misma LovyanGFX
 sobre SDL, reproduciendo el costo de frame medido en el aparato.
@@ -198,10 +209,40 @@ muchos ciclos de flasheo. El síntoma es en dos etapas y conviene distinguirlas:
 
 `tools/restart_usb.ps1` deshabilita y rehabilita el dispositivo, pero
 `Disable-PnpDevice` **necesita admin** y sin permisos falla en silencio (el
-script usa `-ErrorAction SilentlyContinue`). Lo único que destraba las dos
-etapas a la vez es **desenchufar y volver a enchufar el cable**. El aparato
-mientras tanto sigue funcionando perfecto: se confirma mirando los `[anim]` del
-log del proxy, que llegan igual porque van por WiFi.
+script usa `-ErrorAction SilentlyContinue`). El aparato mientras tanto sigue
+funcionando perfecto: se confirma mirando los `[anim]` del log del proxy, que
+llegan igual porque van por WiFi.
+
+**Y no es el chip: es el contacto.** El 2026-08-04 la cosa escaló a seis
+combinaciones de cable y puerto antes de volver. Vale la pena el mapa, porque
+enseña a leer los síntomas:
+
+| Combinación | Qué mostró Windows |
+|---|---|
+| Nativo + cable A | nada, ni un dispositivo con error |
+| Nativo + cable B | `VID_0000&PID_0002`, error de descriptor |
+| CP2104 + cable B | igual: error de descriptor |
+| CP2104 + otro puerto PC | nada |
+| Otro puerto PC | nada |
+| **Nativo otra vez** | **enumera limpio, COM3 vuelve** |
+
+Lecciones:
+
+- **`VID_0000` no es un fabricante.** Es lo que pone Windows cuando no consigue
+  leer ni un byte del descriptor. Significa que hay contacto eléctrico pero la
+  señal no sirve.
+- **"Nada" y "error de descriptor" son cosas distintas.** Nada = el cable no
+  lleva datos. Error de descriptor = los lleva pero mal.
+- La hipótesis de que se había trabado el periférico USB del ESP32 **era
+  equivocada**: si lo estuviera, no habría vuelto solo al reconectar en el mismo
+  puerto nativo. Lo consistente con las seis pruebas es que el contacto sea
+  marginal.
+- Cuidado al medir: si desenchufás para probar, el aparato **se reinicia**, y un
+  chequeo hecho antes de que termine de arrancar da un falso negativo. Confirmá
+  contra el log del proxy que ya volvió antes de concluir.
+
+Moraleja de fondo: **actualizar este aparato depende de un conector que se porta
+así.** Por eso el OTA dejó de ser un lujo — ver Pendiente.
 
 ### Del software
 
@@ -473,8 +514,32 @@ prefetch — y no por casualidad el `/tv` te entrega el `buffer` del siguiente.
 MB/s a 10 fps: no entra por WiFi. Para v1 conviene stills de `/last/` y GIF
 resuelto como primer cuadro (o salteado); `/tv` queda para v2.
 
-**Rebrandear el portal cautivo** (ver más abajo) y **cerrar la brecha de
-framerate** son los que quedan del lado del firmware.
+**Habilitar el OTA — el más importante de todos.** Hoy la única forma de
+actualizar el aparato es por USB, y el 2026-08-04 eso costó seis combinaciones
+de cable y puerto (ver trampas del hardware). El WiFi, en cambio, no falló una
+sola vez en toda la sesión. Que actualizar dependa del conector más frágil del
+aparato es la fragilidad real del proyecto.
+
+Las dos piezas difíciles ya están:
+
+- **La tabla de particiones lo soporta.** `default_16MB.csv` trae `otadata`,
+  `app0` (ota_0) y `app1` (ota_1) de 6,5 MB cada una. No hay que reparticionar,
+  que era el escenario que mataba la idea porque también habría pedido USB.
+- **`src/ota_manager.cpp` ya existe**, con descarga por HTTPS sobre `Update.h`,
+  comparación de versiones semánticas con prerelease y progreso en pantalla.
+  Está sólo excluido del build en `platformio.ini` (`-<ota_manager.cpp>`).
+
+Lo que falta decidir antes de escribir código: de dónde baja el binario (lo
+natural es el proxy, que ya está autenticado con el token), cómo se dispara
+(la pantalla de configuración es el lugar obvio para un botón manual) y cómo se
+autentica. **Ojo con lo último: un endpoint de OTA es una vía para ejecutar
+código arbitrario en el aparato.** No es una decisión para tomar al pasar.
+
+Y el huevo y la gallina que conviene tener presente: **habilitar el OTA requiere
+un flasheo por USB.** No sirve para salir de un apuro; sirve para que no haya
+un próximo apuro.
+
+**Cerrar la brecha de framerate** es lo otro que queda del lado del firmware.
 
 **Un logo de Ferced en tamaño grande.** El portal cautivo y la pantalla de
 provisioning ya son de Ferced —título, paleta, pie, wordmark— pero el único
