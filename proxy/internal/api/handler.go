@@ -20,6 +20,7 @@ type Handler struct {
 	mix   *mixer.Mixer
 	imgs  *img.Cache
 	guard *Guard
+	fw    *Firmware
 }
 
 func New(m *mixer.Mixer) *Handler { return &Handler{mix: m} }
@@ -29,6 +30,10 @@ func NewWithImages(m *mixer.Mixer, c *img.Cache) *Handler {
 }
 
 func (h *Handler) SetGuard(g *Guard) { h.guard = g }
+
+// SetFirmware enciende el OTA. Sin llamarla, /v1/firmware da 404 y el aparato
+// se sigue actualizando solo por USB.
+func (h *Handler) SetFirmware(f *Firmware) { h.fw = f }
 
 // El firmware manda de paso como le fue a la ultima animacion. Sin esto el
 // framerate real seria una suposicion, y ya nos equivocamos una vez.
@@ -70,6 +75,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveFeed(w, r)
 	case "/v1/img":
 		h.serveImg(w, r)
+	// El OTA queda del mismo lado del guard que el feed: un binario ejecutable
+	// no puede estar mas expuesto que un titular. h.fw en nil no rompe, los dos
+	// metodos chequean que la funcion este encendida.
+	case "/v1/firmware":
+		h.fw.serveMeta(w, r)
+	case "/v1/firmware/bin":
+		h.fw.serveBin(w, r)
 	default:
 		http.NotFound(w, r)
 	}
