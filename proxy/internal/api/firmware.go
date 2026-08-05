@@ -91,7 +91,11 @@ func (f *Firmware) serveMeta(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[fw] %s pidio la version -> %s, %d bytes", clientIP(r), m.Version, m.Size)
+	// El user agent va aca a proposito: el aparato y la PC de casa salen por la
+	// misma IP publica, y sin este dato no se distingue un pedido del aparato de
+	// uno hecho a mano con curl. El 2026-08-05 eso arruino un diagnostico.
+	log.Printf("[fw] %s pidio la version -> %s, %d bytes (%s)",
+		clientIP(r), m.Version, m.Size, r.UserAgent())
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
@@ -128,7 +132,7 @@ func (f *Firmware) serveBin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[fw] %s baja el binario, %d bytes", clientIP(r), st.Size())
+	log.Printf("[fw] %s baja el binario, %d bytes (%s)", clientIP(r), st.Size(), r.UserAgent())
 
 	// Content-Type puesto antes: con la cabecera ya presente ServeContent no
 	// olfatea el contenido para adivinarla.
