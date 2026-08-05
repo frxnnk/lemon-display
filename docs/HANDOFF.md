@@ -203,8 +203,19 @@ scp -i $env:USERPROFILE\.ssh\id_ed25519_franco_vps .pio\build\ferced_display_vps
 
 **Compilá siempre con el árbol limpio.** Con cambios sin commitear el sello queda
 `-dirty` y el aparato termina mostrando un commit que no existe, que es
-exactamente la confusión que el sello existe para evitar. Ya pasó una vez y hubo
-que republicar.
+exactamente la confusión que el sello existe para evitar. Ya pasó dos veces y
+hubo que republicar las dos.
+
+**La segunda vez fue por el orden de los pasos, no por olvidarse de commitear.**
+`proxy/feedproxy-vps.exe` está versionado, así que reconstruirlo para desplegar
+el proxy ensucia el árbol. Si eso pasa *después* de commitear el firmware, el
+build siguiente sale `-dirty` aunque uno haya commiteado todo. El orden que
+funciona: **construir y commitear el exe del proxy primero, y recién después
+compilar el firmware.** Y verificar antes de publicar:
+
+```powershell
+python -c "import re; s=open(r'.pio\build\ferced_display_vps\firmware.bin','rb').read(); print('dirty' if re.search(rb'[0-9a-f]{7}-dirty', s) else 'limpio')"
+```
 
 **Tres decisiones que conviene no revertir:**
 
