@@ -35,9 +35,15 @@ constexpr int CARD_W = SCREEN_W - 2 * MARGIN;   // 424
 // La grilla se calcula a partir de cuántas apps hay, no está fijada para dos.
 // Con la altura clavada en 104, la tercera tarjeta se salía de la pantalla y se
 // comía los puntos y el pie: 140 + 2*(104+20) + 104 = 492 sobre un panel de 480.
-constexpr int CARD_Y0  = 132;
-constexpr int CARD_FIN = 404;                   // desde acá abajo van puntos y pie
-constexpr int CARD_GAP = 18;
+constexpr int CARD_Y0  = 120;
+constexpr int CARD_FIN = 408;                   // desde acá abajo van puntos y pie
+constexpr int CARD_GAP = 16;
+
+// Altos reales del texto, medidos: con esto el bloque se arma en vez de
+// suponerse. Con cuatro apps la tarjeta baja a 60 px y un bloque fijo de 48 se
+// cruzaba con el borde de abajo.
+constexpr int NOMBRE_H = 26;   // SatoshiMedium18
+constexpr int ESTADO_H = 20;   // Satoshi12
 
 constexpr int MONO_MAX = 54;                    // lado del monograma
 constexpr int TEXT_X = CARD_X + 20 + MONO_MAX + 20;
@@ -102,10 +108,12 @@ void tarjeta(uint8_t i, const AppInfo& app) {
     tft.setTextDatum(lgfx::middle_center);
     tft.drawString(inicial, mx + mono / 2, my + mono / 2);
 
-    // Nombre y estado centrados como bloque, para que la tarjeta se vea igual
-    // de equilibrada con dos apps que con cuatro.
-    constexpr int BLOQUE = 48;
-    const int ty = y + (h - BLOQUE) / 2;
+    // Nombre y estado centrados como bloque, con el aire entre los dos apretado
+    // cuando la tarjeta es baja. Así se ve equilibrada con dos apps y no se sale
+    // del marco con cuatro.
+    const int aire = h >= 90 ? 6 : 2;
+    const int bloque = NOMBRE_H + aire + ESTADO_H;
+    const int ty = y + (h - bloque) / 2;
 
     tft.setTextDatum(lgfx::top_left);
     tft.setFont(DS::fontHeading());
@@ -115,7 +123,7 @@ void tarjeta(uint8_t i, const AppInfo& app) {
     if (app.estado[0]) {
         tft.setFont(DS::fontBody());
         tft.setTextColor(FG_3, CANVAS);
-        tft.drawString(app.estado, TEXT_X, ty + 30);
+        tft.drawString(app.estado, TEXT_X, ty + NOMBRE_H + aire);
     }
 }
 

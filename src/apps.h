@@ -9,6 +9,7 @@ enum AppId : uint8_t {
     APP_NOTICIAS,
     APP_PADEL,
     APP_TAREAS,
+    APP_AVISOS,
     APP_COUNT,
 };
 

@@ -19,6 +19,8 @@ extern int  g_progreso;
 extern bool g_padel;
 extern bool g_launcher;
 extern bool g_tareas;
+extern bool g_avisos;
+extern bool g_aviso;
 extern int  g_hacia;
 extern int  g_congelar;
 
@@ -47,6 +49,10 @@ int main(int argc, char** argv) {
             g_launcher = true;
         } else if (std::strcmp(argv[i], "--tareas") == 0) {
             g_tareas = true;
+        } else if (std::strcmp(argv[i], "--avisos") == 0) {
+            g_avisos = true;
+        } else if (std::strcmp(argv[i], "--aviso") == 0) {
+            g_aviso = true;
         } else if (std::strncmp(argv[i], "--hacia=", 8) == 0) {
             g_hacia = std::atoi(argv[i] + 8);
         } else if (std::strncmp(argv[i], "--congelar=", 11) == 0) {
