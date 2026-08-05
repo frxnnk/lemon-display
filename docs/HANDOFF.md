@@ -37,7 +37,7 @@ Tres piezas:
 | Pieza | Dónde vive | Estado |
 |---|---|---|
 | **Proxy** (Go) | VPS Windows, `https://feed.ferced.com` | En producción |
-| **Firmware** (C++/Arduino) | El aparato, `192.168.1.41` | Funcionando |
+| **Firmware** (C++/Arduino) | El aparato, `http://ferced.local/` | Funcionando |
 | **Simulador** (C++/SDL) | `sim/`, corre en la PC | Funcionando |
 
 El firmware **no sabe de dónde salen los datos**: pide una URL y dibuja lo que
@@ -50,7 +50,7 @@ el proxy, donde se arregla sin reflashear. Esa decisión pagó varias veces.
 
 **Proxy en el VPS.** Servicio `ferced-feedproxy` en `173.212.246.68`, arranque
 automático, corriendo como `NT AUTHORITY\LocalService`, escuchando **sólo en
-127.0.0.1:9110** detrás de Caddy. 70 tests en Go.
+127.0.0.1:9110** detrás de Caddy. 109 tests en Go.
 
 **Cuatro fuentes RSS** intercaladas: BBC Mundo, La Nación, BBC Tech, Xataka.
 
@@ -128,10 +128,10 @@ python tools\fetch_fixture.py     # baja contenido real del proxy, una vez
 ```
 
 La captura queda en `sim/build/shot.png` (o en `-Out loquesea.png`). **Mirala
-siempre**: cuatro bugs serios se encontraron a simple vista y habrían costado
-horas en el aparato. Los dos últimos fueron tipográficos: la «í» de «día» y el
-punto medio del chip salían como glifos rotos porque caían fuera del rango de
-la fuente.
+siempre**: seis bugs serios se encontraron a simple vista y habrían costado
+horas en el aparato, y ninguno daba error de compilación. Dos fueron
+tipográficos —la «í» de «día» y el punto medio del chip, fuera del rango de la
+fuente— y dos de desborde del selector al sumar apps.
 
 Ítems con imagen en el fixture: los índices impares (1, 3, 5, …).
 
