@@ -120,3 +120,58 @@ func TestReturnedSliceIsACopy(t *testing.T) {
 		t.Fatalf("el pool interno se corrompio: %q", second[0].Text)
 	}
 }
+
+// El boton "Actualizar feed" del aparato disparaba el pedido, pero dentro del
+// TTL el mixer devolvia el mismo pool y en pantalla no pasaba nada. Estos tres
+// tests fijan el comportamiento que lo arregla.
+func TestFeedFreshSalteaElTTL(t *testing.T) {
+	a := &fake{name: "a", items: []feed.Item{{ID: "1", Text: "x", At: at(10)}}}
+	m := New(10*time.Minute, a)
+
+	m.Feed(10)
+	if a.calls != 1 {
+		t.Fatalf("llamadas = %d, quiero 1", a.calls)
+	}
+
+	// Dentro del TTL, un pedido normal no vuelve a la fuente.
+	m.Feed(10)
+	if a.calls != 1 {
+		t.Fatalf("un pedido normal dentro del TTL no puede refetchear (llamadas = %d)", a.calls)
+	}
+
+	// El piso anti-golpeteo se cuenta desde el ultimo fetch: se lo corre para
+	// atras en vez de dormir 20 s en un test.
+	m.mu.Lock()
+	m.fetched = time.Now().Add(-minForzado - time.Second)
+	m.mu.Unlock()
+
+	m.FeedFresh(10)
+	if a.calls != 2 {
+		t.Errorf("FeedFresh tiene que volver a la fuente (llamadas = %d, quiero 2)", a.calls)
+	}
+}
+
+func TestFeedFreshRespetaElPiso(t *testing.T) {
+	a := &fake{name: "a", items: []feed.Item{{ID: "1", Text: "x", At: at(10)}}}
+	m := New(10*time.Minute, a)
+
+	m.Feed(10)
+	m.FeedFresh(10) // inmediato: cae dentro del piso
+	if a.calls != 1 {
+		t.Errorf("dos refrescos seguidos no pueden pegarle dos veces a la fuente (llamadas = %d)", a.calls)
+	}
+}
+
+func TestFeedFreshSinPoolPideIgual(t *testing.T) {
+	a := &fake{name: "a", items: []feed.Item{{ID: "1", Text: "x", At: at(10)}}}
+	m := New(10*time.Minute, a)
+
+	// Sin pool previo el piso no aplica: si no, el primer refresco a mano
+	// devolveria una pantalla vacia.
+	if got := m.FeedFresh(10); len(got) != 1 {
+		t.Fatalf("items = %d, quiero 1", len(got))
+	}
+	if a.calls != 1 {
+		t.Errorf("llamadas = %d, quiero 1", a.calls)
+	}
+}

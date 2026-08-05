@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"log"
@@ -12,6 +12,7 @@ import (
 	"github.com/fcedeirajoaquin/ferced-display/proxy/internal/feed"
 	"github.com/fcedeirajoaquin/ferced-display/proxy/internal/img"
 	"github.com/fcedeirajoaquin/ferced-display/proxy/internal/mixer"
+	"github.com/fcedeirajoaquin/ferced-display/proxy/internal/padel"
 	"github.com/fcedeirajoaquin/ferced-display/proxy/internal/rss"
 	"github.com/fcedeirajoaquin/ferced-display/proxy/internal/sorsa"
 	"github.com/fcedeirajoaquin/ferced-display/proxy/internal/trends"
@@ -127,6 +128,27 @@ func main() {
 		log.Printf("OTA habilitado, sirvo firmware desde %s", dir)
 	}
 
+	// PADEL=0 apaga la app. Prendida por defecto: no necesita ninguna clave,
+	// las dos fuentes son publicas y estan renderizadas del lado del servidor.
+	if os.Getenv("PADEL") != "0" {
+		p := padel.New()
+		// PADEL_CATS acota "las mejores ligas". Vacio = Premier Padel entero
+		// mas platinum y gold del Cupra FIP Tour.
+		if cs := os.Getenv("PADEL_CATS"); cs != "" {
+			var cats []string
+			for _, c := range strings.Split(cs, ",") {
+				if c = strings.TrimSpace(strings.ToUpper(c)); c != "" {
+					cats = append(cats, c)
+				}
+			}
+			if len(cats) > 0 {
+				p.Cats = cats
+			}
+		}
+		h.SetPadel(p)
+		log.Printf("padel habilitado, categorias: %v", p.Cats)
+	}
+
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           h,
@@ -139,4 +161,3 @@ func main() {
 	log.Printf("escuchando en %s", addr)
 	log.Fatal(srv.ListenAndServe())
 }
-
