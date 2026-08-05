@@ -56,6 +56,10 @@ const PadelTour*  padelTour(uint8_t i);
 // El torneo en juego, o nullptr si no hay ninguno de las categorias elegidas.
 const PadelTour*  padelLive();
 
+// La fecha del orden de juego, ya en castellano ("mié 5 ago"), o "" si no se
+// pudo determinar. La hora sola no dice cuándo se juega.
+const char*       padelFecha();
+
 // Cuantas pantallas tiene la app: el torneo en juego (si hay), mas un partido
 // por pantalla, mas los proximos torneos.
 uint8_t padelScreenCount();

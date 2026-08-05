@@ -89,9 +89,13 @@ type Match struct {
 // Snapshot es lo que se sirve en /v1/padel.
 type Snapshot struct {
 	// Torneo en juego. nil cuando no hay ninguno de las categorias elegidas.
-	Live    *Tournament  `json:"torneo,omitempty"`
-	Day     int          `json:"dia,omitempty"`
-	Days    int          `json:"dias,omitempty"`
+	Live *Tournament `json:"torneo,omitempty"`
+	Day  int         `json:"dia,omitempty"`
+	Days int         `json:"dias,omitempty"`
+	// Fecha del orden de juego, ya en castellano ("mié 5 ago"). Sin esto la
+	// pantalla dice a que hora se juega pero no que dia, que era justo lo que
+	// hacia falta saber.
+	Fecha   string       `json:"fecha,omitempty"`
 	Matches []Match      `json:"partidos"`
 	Next    []Tournament `json:"proximos"`
 }
@@ -161,6 +165,7 @@ type Client struct {
 	// la app sin partidos.
 	oopCache []Match
 	oopSlug  string
+	oopFecha string
 	oopDia   int
 	oopAt    time.Time
 }
@@ -342,7 +347,7 @@ func (c *Client) Feed(nProximos int) (*Snapshot, error) {
 			log.Printf("[padel] no pude ubicar el orden de juego de %s: %v", live.Slug, err)
 		} else {
 			snap.Day, snap.Days = ref.day, ref.totalDay
-			ms, err := c.orderOfPlay(live.Slug, ref)
+			ms, fecha, err := c.orderOfPlay(live.Slug, ref)
 			switch {
 			case err != nil:
 				log.Printf("[padel] no pude bajar el orden de juego de %s dia %d: %v",
@@ -353,9 +358,9 @@ func (c *Client) Feed(nProximos int) (*Snapshot, error) {
 				log.Printf("[padel] el orden de juego de %s dia %d vino vacio",
 					live.Slug, ref.day)
 			default:
-				snap.Matches = ms
+				snap.Matches, snap.Fecha = ms, fecha
 				completo = true
-				c.recordar(live.Slug, ref.day, ms)
+				c.recordar(live.Slug, ref.day, ms, fecha)
 			}
 
 			// Un tirón del servidor de terceros no puede dejar la app sin
@@ -363,10 +368,10 @@ func (c *Client) Feed(nProximos int) (*Snapshot, error) {
 			// torneo y el MISMO día, que sigue diciendo quién juega contra
 			// quién. Es la misma decisión que toma el mixer del feed.
 			if len(snap.Matches) == 0 {
-				if ms := c.recordado(live.Slug, ref.day); len(ms) > 0 {
+				if ms, fecha := c.recordado(live.Slug, ref.day); len(ms) > 0 {
 					log.Printf("[padel] sirvo el orden de juego anterior de %s dia %d (%d partidos)",
 						live.Slug, ref.day, len(ms))
-					snap.Matches = ms
+					snap.Matches, snap.Fecha = ms, fecha
 				}
 			}
 		}
@@ -389,23 +394,23 @@ func (c *Client) Feed(nProximos int) (*Snapshot, error) {
 // recordar y recordado guardan el último orden de juego bueno. La clave es
 // torneo + día: servir el de ayer sería mentir, servir el de hace cinco minutos
 // es apenas estar un poco desactualizado.
-func (c *Client) recordar(slug string, dia int, ms []Match) {
+func (c *Client) recordar(slug string, dia int, ms []Match, fecha string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.oopSlug, c.oopDia, c.oopAt = slug, dia, c.now()
-	c.oopCache = ms
+	c.oopCache, c.oopFecha = ms, fecha
 }
 
-func (c *Client) recordado(slug string, dia int) []Match {
+func (c *Client) recordado(slug string, dia int) ([]Match, string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.oopSlug != slug || c.oopDia != dia {
-		return nil
+		return nil, ""
 	}
 	if c.now().Sub(c.oopAt) > oopMaxStale {
-		return nil
+		return nil, ""
 	}
-	return c.oopCache
+	return c.oopCache, c.oopFecha
 }
 
 // oopRefFor saca de la pagina del torneo el id que usa el widget y en que dia
@@ -464,17 +469,19 @@ func (c *Client) oopRefFor(slug string) (oopRef, error) {
 	return ref, nil
 }
 
-func (c *Client) orderOfPlay(slug string, ref oopRef) ([]Match, error) {
+// orderOfPlay devuelve los partidos del dia y la fecha a la que corresponden.
+func (c *Client) orderOfPlay(slug string, ref oopRef) ([]Match, string, error) {
 	url := fmt.Sprintf("https://widget.matchscorerlive.com/screen/oopbyday/FIP-%d-%s/%d?t=tol&culture=en",
 		ref.year, ref.id, ref.day)
 	body, err := c.get(url, maxPageBytes)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	c.mu.Lock()
 	nombres := c.nombres[slug]
 	c.mu.Unlock()
 
-	return ConNombresCompletos(ParseOOP(string(body)), nombres), nil
+	html := string(body)
+	return ConNombresCompletos(ParseOOP(html), nombres), ParseOOPDays(html)[ref.day], nil
 }

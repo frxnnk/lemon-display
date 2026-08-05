@@ -119,6 +119,53 @@ func ConNombresCompletos(ms []Match, nombres map[string]string) []Match {
 	return ms
 }
 
+// El widget encabeza el orden de juego con una pestana por dia del torneo, y
+// cada una dice a que fecha corresponde. Es la unica forma de saber de que dia
+// son los partidos que se estan mostrando: la hora sola no dice cuando.
+var diaRe = regexp.MustCompile(`(?s)href="[^"]*/oopbyday/[^/"]+/(\d+)[^"]*"\s*>` +
+	`\s*<div class="[^"]*play-day-button[^"]*">` +
+	`\s*<span class="[^"]*play-day-date[^"]*">(.*?)</span>` +
+	`\s*<div class="[^"]*play-day-week[^"]*">(.*?)</div>`)
+
+var mesesEN = map[string]string{
+	"JAN": "ene", "FEB": "feb", "MAR": "mar", "APR": "abr",
+	"MAY": "may", "JUN": "jun", "JUL": "jul", "AUG": "ago",
+	"SEP": "sep", "OCT": "oct", "NOV": "nov", "DEC": "dic",
+}
+
+var diasEN = map[string]string{
+	"MON": "lun", "TUE": "mar", "WED": "mié", "THU": "jue",
+	"FRI": "vie", "SAT": "sáb", "SUN": "dom",
+}
+
+// ParseOOPDays devuelve, por numero de dia del torneo, la fecha ya escrita en
+// castellano: 4 -> "mié 5 ago". El aparato no traduce meses ni sabe de
+// calendarios.
+func ParseOOPDays(html string) map[int]string {
+	out := map[int]string{}
+	for _, m := range diaRe.FindAllStringSubmatch(html, -1) {
+		n, err := strconv.Atoi(m[1])
+		if err != nil || n <= 0 {
+			continue
+		}
+		fecha := strings.Fields(strings.ToUpper(norm.StripHTML(m[2]))) // "AUG 5"
+		semana := strings.ToUpper(strings.TrimSpace(norm.StripHTML(m[3])))
+		if len(fecha) != 2 {
+			continue
+		}
+		mes, ok := mesesEN[fecha[0]]
+		if !ok {
+			continue
+		}
+		if d, ok := diasEN[semana]; ok {
+			out[n] = fmt.Sprintf("%s %s %s", d, fecha[1], mes)
+		} else {
+			out[n] = fmt.Sprintf("%s %s", fecha[1], mes)
+		}
+	}
+	return out
+}
+
 // ParseOOPRef saca de la pagina de un torneo el ano, el id y el total de dias
 // que necesita el widget de orden de juego.
 func ParseOOPRef(html string) (oopRef, error) {

@@ -20,14 +20,14 @@ func escribirFixture(ruta string, s *padel.Snapshot) error {
 	var b strings.Builder
 	b.WriteString("# fixture de padel para el simulador. Generado con:\n")
 	b.WriteString("#   go run ./cmd/padelcheck -fixture ../sim/data/padel.txt\n")
-	b.WriteString("# L|nombre|cat|ciudad|pais|rango|faltan|dia|dias   torneo en juego\n")
+	b.WriteString("# L|nombre|cat|ciudad|pais|rango|faltan|dia|dias|fecha  torneo en juego\n")
 	b.WriteString("# M|hora|cancha|fase|gen|a1|a2|b1|b2|seedA|seedB|resA|resB|estado\n")
 	b.WriteString("# T|nombre|cat|ciudad|pais|rango|faltan            proximo torneo\n")
 
 	if s.Live != nil {
-		fmt.Fprintf(&b, "L|%s|%s|%s|%s|%s|0|%d|%d\n",
+		fmt.Fprintf(&b, "L|%s|%s|%s|%s|%s|0|%d|%d|%s\n",
 			s.Live.Name, s.Live.Cat, s.Live.City, s.Live.Country, s.Live.Rango,
-			s.Day, s.Days)
+			s.Day, s.Days, s.Fecha)
 	}
 	for _, m := range s.Matches {
 		est := 0
