@@ -89,6 +89,10 @@ uint8_t uiTodoVisibles() { return MAX_FILAS; }
 void uiTodoDraw(const char* direccion) {
     if (!s_ready) return;
 
+    // Esta pantalla dibuja directo sobre tft, asi que el sprite de la
+    // animacion queda con contenido que ya no esta en el panel. Declararlo
+    // aca y no en quien llama hace imposible olvidarselo.
+    uiAnimInvalidate();
     displayWaitVSync();
     tft.fillScreen(CANVAS);
 

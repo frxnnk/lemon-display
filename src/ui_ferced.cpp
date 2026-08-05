@@ -55,6 +55,12 @@ static bool     s_hasContent = false;
 static float    s_progress = 0.0f;
 static uint32_t s_lastProgressPaint = 0;
 
+// Geometría del ítem anterior. Sin esto, un titular más corto que el que estaba
+// deja los renglones de abajo colgados en pantalla para siempre: sus bandas ya
+// no se animan, así que nadie los repinta.
+static int      s_prevLines = 0;
+static bool     s_prevStatus = false;
+
 void uiFercedSetup() {
     if (s_ready) return;
     uiAnimSetup();
@@ -261,6 +267,41 @@ static UiBand paintFrame(uint32_t elapsed, uint32_t nowEpoch) {
 
 // ── API ──
 
+// Arranca la transición y borra lo que el dibujado nuevo no vaya a tapar.
+//
+// Las bandas de los renglones se solapan entre sí (cada una llega 22 px más
+// abajo que el arranque de la siguiente), así que entre renglón y renglón no
+// quedan huecos. Lo único que puede quedar colgado es lo que estaba más abajo
+// del último renglón nuevo, y el pie cuando se pasa a una pantalla de estado.
+static void arrancar(int lineasNuevas, bool esStatus) {
+    const bool completo = uiAnimBegin();
+
+    if (!completo) {
+        int top = SCREEN_H, bottom = 0;
+        for (int i = lineasNuevas; i < s_prevLines; i++) {
+            const int y0 = TEXT_Y + i * TEXT_LH - 4;
+            const int y1 = TEXT_Y + i * TEXT_LH + TEXT_LH + 4;
+            if (y0 < top) top = y0;
+            if (y1 > bottom) bottom = y1;
+        }
+        // Una pantalla de estado no dibuja pie: el del ítem anterior sobra.
+        if (esStatus && !s_prevStatus) {
+            const int y0 = FOOT_Y - 4;
+            const int y1 = FOOT_Y + FEED_IMG_SIDE + 8;
+            if (y0 < top) top = y0;
+            if (y1 > bottom) bottom = y1;
+        }
+        // Una sola franja para todo: dos empujes cuestan dos VSync y el sobrante
+        // casi siempre es contiguo.
+        if (bottom > top) uiAnimClearBand(top, bottom - top);
+    }
+
+    s_prevLines = lineasNuevas;
+    s_prevStatus = esStatus;
+    s_animating = true;
+    s_hasContent = true;
+}
+
 void uiFercedShowItem(const FeedItem* item, uint8_t index, uint8_t total,
                       bool offline) {
     if (!s_ready || !item) return;
@@ -283,9 +324,7 @@ void uiFercedShowItem(const FeedItem* item, uint8_t index, uint8_t total,
     // animación: un GET de 8 KB en medio de la transición la cortaría.
     s_cur.img = feedFetchImage(item->imgKey);
 
-    uiAnimBegin();
-    s_animating = true;
-    s_hasContent = true;
+    arrancar(s_cur.lineCount, false);
 }
 
 void uiFercedShowStatus(const char* eyebrow, const char* message) {
@@ -299,9 +338,7 @@ void uiFercedShowStatus(const char* eyebrow, const char* message) {
     uiSprite.setFont(DS::fontHeading());
     s_cur.lineCount = wrapText(message ? message : "", s_cur.lines,
                                SCREEN_W - 2 * MARGIN);
-    uiAnimBegin();
-    s_animating = true;
-    s_hasContent = true;
+    arrancar(s_cur.lineCount, true);
 }
 
 bool uiFercedTick(uint32_t nowEpoch, float progress01) {

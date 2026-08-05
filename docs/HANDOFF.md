@@ -64,7 +64,7 @@ tareas".
 Ver "El OTA".
 
 **Firmware** con animación escalonada, miniaturas de 64x64 y reconexión
-automática de WiFi. 18,8% de flash, 21,0% de RAM. Animación a 35,5 fps medidos
+automática de WiFi. 18,8% de flash, 23,5% de RAM. Animación a 35,5 fps medidos
 sobre un techo de panel de 42.
 
 **Los gestos**, que ahora son cinco:
@@ -125,6 +125,18 @@ punto medio del chip salían como glifos rotos porque caían fuera del rango de
 la fuente.
 
 Ítems con imagen en el fixture: los índices impares (1, 3, 5, …).
+
+**Para mirar una transición por dentro**, que es donde vive lo que hay que
+verificar:
+
+```powershell
+.\shot.ps1 -Advance 3 -Hacia 1 -Congelar 420    # muestra el 3, pasa al 1, congela a los 420 ms
+```
+
+Lo que tiene que verse: el titular nuevo entrando arriba **y el pie del anterior
+todavía en pantalla**. Si en algún momento la pantalla queda vacía, volvió el
+parpadeo. Y `-Congelar 2000` de un ítem largo a uno corto verifica que no queden
+renglones huérfanos colgados.
 
 El fixture de pádel se genera aparte, con datos del circuito real:
 
@@ -543,6 +555,39 @@ Lecciones:
 Moraleja de fondo: **actualizar este aparato depende de un conector que se porta
 así.** Por eso el OTA dejó de ser un lujo — ver Pendiente.
 
+### De los gestos
+
+**Un tope de duración convertía la mitad de los deslizamientos en nada.** El
+clasificador tenía cuatro ramas y una de ellas exigía `duration <= 300 ms` para
+que un movimiento contara como deslizamiento. Si tardaba más, no era envión (muy
+lento), no era pulsación larga (se había movido), no era deslizamiento (tardó
+demasiado) y no era toque (se movió demasiado): **caía fuera de las cuatro y
+terminaba en `TOUCH_NONE`, en silencio.** Y un deslizamiento hecho con calma
+sobre un aparato de escritorio tarda tranquilamente 400 ms. De ahí el "a veces
+anda muy bien y a veces no": no dependía del azar, dependía de con cuánta
+tranquilidad uno movía el dedo.
+
+Ahora el deslizamiento se reconoce **por distancia, no por duración**, y la
+clasificación es exhaustiva: toda soltada produce exactamente un gesto. La regla
+es que ningún toque se pierda, porque hacerse el desentendido es lo peor que
+puede hacer una pantalla táctil.
+
+**El GT911 saltea reportes.** Cada tanto devuelve cero contactos en medio de un
+gesto aunque el dedo siga apoyado. Tomando ese hueco como una soltada, un
+deslizamiento se parte en dos mitades, ninguna llega al umbral, y las dos se
+descartan. Se exigen **dos lecturas vacías consecutivas** antes de darlo por
+terminado.
+
+**El rebote se aplicaba a todo.** Los 120 ms de anti-rebote descartaban
+*cualquier* gesto que llegara pegado al anterior, así que dos deslizamientos
+seguidos —cambiar de app dos veces rápido— perdían el segundo. Ahora sólo
+frenan toques, que es para lo que existían.
+
+**El log lo dice todo, incluso los descartes.** Cada soltada imprime
+`[Touch] IZQ dx=-87 dy=12 dur=380ms max=91 vel=-40`. Cuando alguien dice "el
+gesto no hizo nada", esa línea contesta si el aparato lo vio y qué midió, en vez
+de dejarlo en discusión.
+
 ### Del software
 
 **`pushImage` con `uint16_t*` asume orden intercambiado.** Las imágenes salían
@@ -695,6 +740,40 @@ Buscar las fuentes levantadas con `findstr fuente C:\ferced\feedproxy\err.log`.
 ---
 
 ## Pendiente
+
+### La transición entre ítems, y por qué ya no parpadea
+
+Cada ítem arrancaba con un `fillScreen` + empuje completo: **99 ms con el panel
+en negro**, y recién después los elementos entrando de a uno durante más de un
+segundo. Eso era el "las animaciones están medio rotas". No era el framerate —
+que estaba medido en 35,5 fps— sino que la pantalla se vaciaba entre ítem e
+ítem.
+
+Ahora no se limpia nada por defecto. Cada banda se limpia sola en el frame en
+que su elemento empieza a entrar, así el contenido viejo se reemplaza **en ola,
+de arriba hacia abajo**, y la pantalla nunca queda vacía. Sale gratis: son las
+mismas bandas que ya se repintaban.
+
+Lo que hace falta para que funcione:
+
+- **Las bandas de los renglones se solapan** (cada una llega 22 px más abajo que
+  el arranque de la siguiente), así que entre renglón y renglón no quedan
+  huecos. Si alguien toca `TEXT_LH` o `UI_RISE_PX`, verificar que siga siendo
+  cierto o volverán las franjas sin pintar.
+- **Lo que el dibujo nuevo no vaya a tapar hay que borrarlo a mano**: renglones
+  que sobran cuando el titular nuevo es más corto, el pie cuando se pasa a una
+  pantalla de estado. Lo hace `arrancar()` en `ui_ferced.cpp`.
+- **Las pantallas que dibujan directo sobre `tft`** —configuración, selector,
+  tareas— dejan el sprite con contenido que ya no está en el panel, así que
+  llaman a `uiAnimInvalidate()`. Que lo declare quien ensucia, y no quien viene
+  después, hace imposible olvidárselo.
+
+**La imagen del próximo titular se adelanta.** Se bajaba dentro de
+`uiFercedShowItem()`, o sea entre el gesto del usuario y el primer píxel que
+cambia: 200 ms en los que el aparato parecía no responder. Ahora se adelanta
+recién a los 2 s de que la pantalla se quedó quieta —antes caería encima del
+segundo toque de quien pasa titulares rápido— y hay dos ranuras de imagen en vez
+de una: 8 KB más de RAM a cambio de que la transición no espere a la red.
 
 ### Inmediato: el framerate
 

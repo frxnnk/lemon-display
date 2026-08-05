@@ -51,3 +51,12 @@ const FeedItem* feedItem(uint8_t index);
 // Baja los pixeles de una imagen ya resuelta por el proxy. Devuelve nullptr si
 // el item no tiene imagen o si falla: nunca es motivo para no dibujar el item.
 const uint16_t* feedFetchImage(const char* key);
+
+// Deja la imagen lista en el cache sin devolverla, para que cuando el item
+// entre no haya que esperar la red.
+//
+// Existe por latencia percibida: feedFetchImage() se llama justo antes de
+// arrancar la transicion, asi que su GET —200 ms en una red buena— se mete
+// entre el gesto del usuario y el primer pixel que cambia. Adelantarla mientras
+// no pasa nada hace que el aparato responda en el acto.
+void feedPrefetchImage(const char* key);

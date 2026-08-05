@@ -111,3 +111,7 @@ FeedResult feedFetch(uint16_t, uint16_t, uint16_t, bool) {
     std::printf("[sim] fixture: %u items, %zu imagenes\n", _count, _imgs.size());
     return _count > 0 ? FEED_UPDATED : FEED_FAILED;
 }
+
+// En el simulador las imagenes ya estan en RAM: adelantarlas no cuesta nada y
+// la funcion existe solo para que enlace igual que el firmware.
+void feedPrefetchImage(const char*) {}

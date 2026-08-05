@@ -145,6 +145,10 @@ void formatearUptime(char* out, size_t n, uint32_t s) {
 }  // namespace
 
 void uiConfigDraw(const ConfigInfo& info) {
+    // Esta pantalla dibuja directo sobre tft, asi que el sprite de la
+    // animacion queda con contenido que ya no esta en el panel. Declararlo
+    // aca y no en quien llama hace imposible olvidarselo.
+    uiAnimInvalidate();
     displayWaitVSync();
     tft.fillScreen(CANVAS);
 

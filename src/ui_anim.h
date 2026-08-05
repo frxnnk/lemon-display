@@ -82,12 +82,30 @@ uint32_t uiAnimTotalMs(uint8_t slots);
 // en este panel el trabajo tirado se paga en frames perdidos.
 bool uiAnimTouches(const UiBand& b, int y0, int y1);
 
-// Borra el sprite entero, lo empuja y arranca el reloj de la transicion.
+// Declara que lo que hay en el panel no lo dibujo la app que esta por entrar,
+// asi que la proxima transicion tiene que limpiar todo. Lo llaman las pantallas
+// que dibujan directo sobre tft —configuracion, selector, tareas— y el cambio
+// de app. Que lo declare quien ensucia es mas robusto que acordarse afuera.
+void uiAnimInvalidate();
+
+// Arranca el reloj de la transicion. Devuelve true si limpio la pantalla
+// entera.
 //
-// Cuesta un frame caro (~99 ms) por pantalla. A cambio, los ~30 frames de la
-// animacion siguen siendo baratos, y los huecos entre bandas nunca quedan en el
-// negro puro con el que nace el sprite.
-void uiAnimBegin();
+// Antes limpiaba SIEMPRE: 99 ms con el panel en negro y recien despues los
+// elementos entrando de a uno. Ese parpadeo era la parte fea de la animacion, y
+// ademas un tiron de 99 ms en el que el aparato no atiende el tactil.
+//
+// Ahora, si la pantalla anterior era de la misma app, no limpia nada: cada
+// banda se limpia sola en el frame en que su elemento empieza a entrar, y el
+// contenido viejo se reemplaza en ola de arriba hacia abajo. La pantalla nunca
+// queda vacia. Quien llama se encarga de limpiar lo que su dibujo nuevo no vaya
+// a tapar, con uiAnimClearBand().
+bool uiAnimBegin();
+
+// Limpia una franja y la empuja. Para lo que quedo huerfano de la pantalla
+// anterior: renglones que sobran cuando el texto nuevo es mas corto, un pie que
+// ya no va.
+void uiAnimClearBand(int y, int h);
 
 // Milisegundos desde uiAnimBegin().
 uint32_t uiAnimElapsed();

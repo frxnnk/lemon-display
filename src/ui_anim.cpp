@@ -70,13 +70,35 @@ bool uiAnimTouches(const UiBand& b, int y0, int y1) {
     return y1 >= b.y && y0 <= b.y + b.h;
 }
 
-void uiAnimBegin() {
-    if (!s_ready) return;
-    uiSprite.fillScreen(CANVAS);
-    displayWaitVSync();
-    uiSprite.pushSprite(0, 0);
-    displayRecordPush(SCREEN_W * SCREEN_H * 2, 0);
+// Arranca en true: el primer dibujado despues de encender no tiene nada
+// coherente atras.
+static bool s_invalidado = true;
+
+void uiAnimInvalidate() { s_invalidado = true; }
+
+bool uiAnimBegin() {
+    if (!s_ready) return false;
+
+    const bool completo = s_invalidado;
+    s_invalidado = false;
+
+    if (completo) {
+        uiSprite.fillScreen(CANVAS);
+        displayWaitVSync();
+        uiSprite.pushSprite(0, 0);
+        displayRecordPush(SCREEN_W * SCREEN_H * 2, 0);
+    }
     s_animStart = millis();
+    return completo;
+}
+
+void uiAnimClearBand(int y, int h) {
+    if (!s_ready || h <= 0) return;
+    if (y < 0) { h += y; y = 0; }
+    if (y + h > SCREEN_H) h = SCREEN_H - y;
+    if (h <= 0) return;
+    uiSprite.fillRect(0, y, SCREEN_W, h, CANVAS);
+    uiAnimPresent(y, h);
 }
 
 uint32_t uiAnimElapsed() { return millis() - s_animStart; }
