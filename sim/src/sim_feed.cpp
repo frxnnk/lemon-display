@@ -52,7 +52,8 @@ static bool loadImage(const std::string& path, std::vector<uint16_t>& out) {
 //   texto|autor|handle|epoch|origen|archivo_imagen
 // El separador es "|" porque el texto ya viene normalizado a ASCII sin barras
 // verticales desde el proxy.
-FeedResult feedFetch(uint16_t, uint16_t, uint16_t) {
+// `fresh` no hace nada aca: el fixture es un archivo, no tiene TTL que saltear.
+FeedResult feedFetch(uint16_t, uint16_t, uint16_t, bool) {
     const char* path = std::getenv("SIM_FIXTURE");
     std::string file = path ? path : "data/fixture.txt";
 

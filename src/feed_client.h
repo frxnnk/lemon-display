@@ -36,10 +36,14 @@ enum FeedResult : uint8_t {
 
 // Baja el feed y lo deja en el cache interno. Ante fallo conserva el cache
 // anterior: la pantalla nunca se queda vacia por un corte de red.
-// Los tres parametros son metricas de animacion que viajan de paso, para
-// poder medir el framerate real sin consola serie.
+// Los tres primeros parametros son metricas de animacion que viajan de paso,
+// para poder medir el framerate real sin consola serie.
+//
+// `fresh` le pide al proxy que saltee el TTL de su pool y vuelva a consultar las
+// fuentes. Lo usa el boton "Actualizar feed": sin eso, dentro de los 10 minutos
+// del cache devolvia los mismos items y el boton parecia no hacer nada.
 FeedResult feedFetch(uint16_t frames = 0, uint16_t avgUs100 = 0,
-                     uint16_t worstUs100 = 0);
+                     uint16_t worstUs100 = 0, bool fresh = false);
 
 uint8_t         feedCount();
 const FeedItem* feedItem(uint8_t index);

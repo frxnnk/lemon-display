@@ -22,5 +22,9 @@
 #define FEED_RETRY_MIN_MS    5000UL
 #define FEED_RETRY_MAX_MS   60000UL
 
+// El proxy cachea el orden de juego 5 minutos, así que pedirlo más seguido no
+// trae nada nuevo. Además sólo se pide con la app de pádel abierta.
+#define PADEL_REFRESH_MS  300000UL
+
 #define FERCED_AP_SSID "Ferced-Setup"
 #define FERCED_AP_PASS "ferced1234"

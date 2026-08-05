@@ -12,6 +12,8 @@ param(
     [int]$Advance = 0,
     [switch]$Mid,
     [switch]$Config,
+    [switch]$Padel,
+    [switch]$Launcher,
     [int]$Progreso = -1,
     [switch]$NoBuild,
     [string]$Out = "shot.png"
@@ -32,6 +34,8 @@ if (-not $NoBuild) {
 }
 
 $simArgs = @("--still", "--item=$Advance")
+if ($Padel)    { $simArgs += "--padel" }
+if ($Launcher) { $simArgs += "--launcher" }
 if ($Config) { $simArgs += "--config" }
 # --progreso ya implica la pantalla de configuracion del lado del simulador.
 if ($Progreso -ge 0) { $simArgs += "--progreso=$Progreso" }
