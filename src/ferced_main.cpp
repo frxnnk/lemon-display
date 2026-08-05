@@ -5,16 +5,20 @@
 #include <esp_ota_ops.h>
 #include <esp_task_wdt.h>
 
+#include "apps.h"
 #include "colors.h"
 #include "display_manager.h"
 #include "feed_client.h"
 #include "ferced_config.h"
 #include "nvs_storage.h"
 #include "ota_ferced.h"
+#include "padel_client.h"
 #include "time_manager.h"
 #include "touch_manager.h"
 #include "ui_config.h"
 #include "ui_ferced.h"
+#include "ui_launcher.h"
+#include "ui_padel.h"
 #include "wifi_manager.h"
 #include "wifi_provision.h"
 
@@ -23,15 +27,24 @@ enum AppPhase : uint8_t {
     PHASE_CONNECTING,
     PHASE_RUNNING,
     PHASE_CONFIG,
+    PHASE_LAUNCHER,
 };
 
 static AppPhase s_phase = PHASE_PROVISION;
-static uint8_t  s_index = 0;
+static AppId    s_app = APP_NOTICIAS;
 static uint32_t s_lastRotate = 0;
+
+// -- Estado de noticias --
+static uint8_t  s_index = 0;
 static uint32_t s_lastFetch = 0;
 static uint32_t s_retryMs = FEED_RETRY_MIN_MS;
 static uint32_t s_nextRetry = 0;
 static bool     s_offline = false;
+
+// -- Estado de padel --
+static uint8_t  s_padelIndex = 0;
+static uint32_t s_padelLastFetch = 0;
+static bool     s_padelTried = false;
 
 #define WIFI_RETRY_MIN_MS  5000UL
 #define WIFI_RETRY_MAX_MS 60000UL
@@ -49,16 +62,6 @@ static void startProvisioning() {
     s_phase = PHASE_PROVISION;
     provisionStart();
     provisionDrawQR();
-}
-
-static void showCurrent() {
-    const uint8_t total = feedCount();
-    if (total == 0) {
-        uiFercedShowStatus("Sin contenido", "No llego nada del feed. Tocar para reintentar.");
-        return;
-    }
-    if (s_index >= total) s_index = 0;
-    uiFercedShowItem(feedItem(s_index), s_index, total, s_offline);
 }
 
 // -- Red de rollback ---------------------------------------------------------
@@ -91,9 +94,24 @@ static void confirmarArranque() {
     Serial.println("[OTA] arranque confirmado, la particion nueva queda fija");
 }
 
-static void refreshFeed() {
-    const UiFrameStats st = uiFercedStats();
-    const FeedResult r = feedFetch(st.frames, st.avgUs100, st.worstUs100);
+// -- Noticias ----------------------------------------------------------------
+
+static void showNoticias() {
+    const uint8_t total = feedCount();
+    if (total == 0) {
+        uiFercedShowStatus("Sin contenido", "No llego nada del feed. Tocar para reintentar.");
+        return;
+    }
+    if (s_index >= total) s_index = 0;
+    uiFercedShowItem(feedItem(s_index), s_index, total, s_offline);
+}
+
+// Devuelve true si bajo contenido nuevo. `forzado` saltea el TTL del pool en el
+// proxy: sin eso, apretar el boton dentro de los 10 minutos del cache devolvia
+// exactamente los mismos items y en pantalla no pasaba nada.
+static bool refreshFeed(bool forzado = false) {
+    const UiFrameStats st = uiAnimStats();
+    const FeedResult r = feedFetch(st.frames, st.avgUs100, st.worstUs100, forzado);
     s_lastFetch = millis();
 
     if (r == FEED_UPDATED) {
@@ -104,9 +122,11 @@ static void refreshFeed() {
         s_retryMs = FEED_RETRY_MIN_MS;
         s_nextRetry = 0;
         s_index = 0;
-        showCurrent();
-        s_lastRotate = millis();
-        return;
+        if (s_phase == PHASE_RUNNING && s_app == APP_NOTICIAS) {
+            showNoticias();
+            s_lastRotate = millis();
+        }
+        return true;
     }
 
     // Falla de red: se conserva el pool y se reintenta con backoff, en vez de
@@ -114,7 +134,106 @@ static void refreshFeed() {
     s_offline = true;
     s_nextRetry = millis() + s_retryMs;
     s_retryMs = s_retryMs * 2 > FEED_RETRY_MAX_MS ? FEED_RETRY_MAX_MS : s_retryMs * 2;
-    showCurrent();
+    if (s_phase == PHASE_RUNNING && s_app == APP_NOTICIAS) showNoticias();
+    return false;
+}
+
+// -- Padel -------------------------------------------------------------------
+
+static void showPadel() {
+    const uint8_t total = padelScreenCount();
+    if (total == 0) {
+        uiPadelShowStatus("Padel", s_padelTried
+                                       ? "No llego nada del circuito. Tocar para reintentar."
+                                       : "Buscando el circuito.");
+        return;
+    }
+    if (s_padelIndex >= total) s_padelIndex = 0;
+    uiPadelShowScreen(s_padelIndex);
+}
+
+static bool refreshPadel() {
+    s_padelTried = true;
+    const PadelResult r = padelFetch();
+    s_padelLastFetch = millis();
+    if (r != PADEL_UPDATED) return false;
+
+    confirmarArranque();
+    s_padelIndex = 0;
+    if (s_phase == PHASE_RUNNING && s_app == APP_PADEL) {
+        showPadel();
+        s_lastRotate = millis();
+    }
+    return true;
+}
+
+// -- Apps --------------------------------------------------------------------
+
+static void showApp() {
+    if (s_app == APP_PADEL) showPadel();
+    else                    showNoticias();
+}
+
+static void advance() {
+    if (s_app == APP_PADEL) {
+        const uint8_t total = padelScreenCount();
+        if (total == 0) { refreshPadel(); showPadel(); s_lastRotate = millis(); return; }
+        s_padelIndex = (s_padelIndex + 1) % total;
+    } else {
+        const uint8_t total = feedCount();
+        if (total == 0) { refreshFeed(); return; }
+        s_index = (s_index + 1) % total;
+    }
+    showApp();
+    s_lastRotate = millis();
+}
+
+static void enterApp(AppId app) {
+    s_app = app;
+    s_phase = PHASE_RUNNING;
+
+    // La primera entrada a padel baja los datos: no tiene sentido pedirlos al
+    // arrancar el aparato si el usuario nunca abre la app.
+    if (app == APP_PADEL && padelScreenCount() == 0) {
+        showPadel();               // "Buscando el circuito."
+        refreshPadel();
+    }
+    showApp();
+    s_lastRotate = millis();
+}
+
+// El estado que muestra cada tarjeta del selector. Lo arma quien conoce la app:
+// el launcher no consulta clientes.
+static void llenarApps(AppInfo out[APP_COUNT]) {
+    out[APP_NOTICIAS].nombre = "NOTICIAS";
+    out[APP_NOTICIAS].inicial = 'N';
+    if (feedCount() > 0) {
+        snprintf(out[APP_NOTICIAS].estado, sizeof(out[APP_NOTICIAS].estado),
+                 "%u titulares%s", feedCount(), s_offline ? "  ·  sin red" : "");
+    } else {
+        snprintf(out[APP_NOTICIAS].estado, sizeof(out[APP_NOTICIAS].estado), "sin contenido");
+    }
+
+    out[APP_PADEL].nombre = "PÁDEL";
+    out[APP_PADEL].inicial = 'P';
+    const PadelTour* live = padelLive();
+    if (live) {
+        snprintf(out[APP_PADEL].estado, sizeof(out[APP_PADEL].estado),
+                 "%s  ·  día %u de %u", live->name, live->day, live->days);
+    } else if (padelTourCount() > 0) {
+        snprintf(out[APP_PADEL].estado, sizeof(out[APP_PADEL].estado),
+                 "próximo: %s", padelTour(0)->name);
+    } else {
+        snprintf(out[APP_PADEL].estado, sizeof(out[APP_PADEL].estado), "%s",
+                 s_padelTried ? "sin datos" : "sin abrir todavía");
+    }
+}
+
+static void enterLauncher() {
+    s_phase = PHASE_LAUNCHER;
+    AppInfo apps[APP_COUNT];
+    llenarApps(apps);
+    uiLauncherDraw(apps, APP_COUNT, s_app);
 }
 
 static void enterRunning() {
@@ -122,14 +241,7 @@ static void enterRunning() {
     timeSetup();
     uiFercedShowStatus("Conectado", "Buscando contenido.");
     refreshFeed();
-    s_lastRotate = millis();
-}
-
-static void advance() {
-    const uint8_t total = feedCount();
-    if (total == 0) { refreshFeed(); return; }
-    s_index = (s_index + 1) % total;
-    showCurrent();
+    showApp();
     s_lastRotate = millis();
 }
 
@@ -158,7 +270,7 @@ static void enterConfig() {
     // El fps sale del PERIODO, no del costo. avgUs100 mide solo lo que tarda
     // el tick y deja afuera el delay() del loop, el tactil y wifiLoop(): usarlo
     // daria cerca del doble del framerate real.
-    const UiFrameStats st = uiFercedStats();
+    const UiFrameStats st = uiAnimStats();
     const float fps = st.periodUs100 > 0 ? 10000.0f / (float)st.periodUs100 : 0.0f;
 
     const ConfigInfo info = {
@@ -211,6 +323,20 @@ static void buscarActualizacion() {
     uiConfigEstado(detalle[0] ? detalle : "no se pudo actualizar", -1, true);
 }
 
+// El boton "Actualizar feed" se quedaba mudo: disparaba el pedido, pero el
+// proxy servia el pool cacheado y en pantalla no cambiaba nada, asi que parecia
+// roto. Ahora fuerza el refresco de verdad y cuenta como le fue, sin salir de
+// esta pantalla: ver el resultado es justamente lo que faltaba.
+static void actualizarFeed() {
+    uiConfigEstado("Actualizando feed...");
+    const bool ok = refreshFeed(true);
+
+    char linea[52];
+    if (ok) snprintf(linea, sizeof(linea), "Listo: %u titulares", feedCount());
+    else    snprintf(linea, sizeof(linea), "No se pudo actualizar");
+    uiConfigEstado(linea, -1, !ok);
+}
+
 void setup() {
     Serial.begin(115200);
     Serial.println("\n=== ferced-display ===");
@@ -222,6 +348,8 @@ void setup() {
     displaySetBrightness(nvsGetBrightness());
     touchSetup();
     uiFercedSetup();
+    uiPadelSetup();
+    uiLauncherSetup();
 
     if (!nvsHasWifi()) {
         uiFercedShowStatus("Configurar", "Escanea el codigo para conectar el equipo a tu red.");
@@ -306,21 +434,15 @@ void loop() {
             switch (uiConfigHit(ev.x, ev.y)) {
                 case CFG_CLOSE:
                     s_phase = PHASE_RUNNING;
-                    showCurrent();
+                    showApp();
                     s_lastRotate = millis();
                     break;
                 case CFG_REFRESH:
-                    // refreshFeed() ya repinta y reacomoda s_lastRotate cuando
-                    // baja contenido nuevo; el reset de aca cubre el caso en
-                    // que la red falle y se quede con el pool anterior.
-                    s_phase = PHASE_RUNNING;
-                    refreshFeed();
-                    s_lastRotate = millis();
+                    // Se queda en configuracion a proposito: el resultado se
+                    // escribe en la franja de estado y hay que poder leerlo.
+                    actualizarFeed();
                     break;
                 case CFG_UPDATE:
-                    // Se queda en PHASE_CONFIG: el resultado, el avance y el
-                    // motivo de una falla se escriben en la franja de estado de
-                    // esta misma pantalla.
                     buscarActualizacion();
                     break;
                 case CFG_FORGET:
@@ -338,24 +460,69 @@ void loop() {
         return;
     }
 
+    if (s_phase == PHASE_LAUNCHER) {
+        // Igual que configuracion: pantalla quieta, solo resolver el toque.
+        const TouchEvent ev = touchLoop();
+        if (ev.gesture == TOUCH_TAP) {
+            const int8_t hit = uiLauncherHit(ev.x, ev.y);
+            if (hit >= 0) { enterApp((AppId)hit); return; }
+        } else if (ev.gesture == TOUCH_SWIPE_DOWN || ev.gesture == TOUCH_FLING_DOWN) {
+            enterApp(s_app);   // cerrar sin cambiar
+            return;
+        } else if (ev.gesture == TOUCH_LONG_PRESS) {
+            enterConfig();
+            return;
+        }
+        delay(8);
+        return;
+    }
+
     wifiLoop();
 
     // touchLoop() consume el evento: una sola llamada por vuelta y se reparte
     // el resultado, porque la segunda ya devolveria TOUCH_NONE.
     const TouchEvent ev = touchLoop();
-    if (ev.gesture == TOUCH_LONG_PRESS) { enterConfig(); return; }
-    if (ev.gesture == TOUCH_TAP) advance();
+    switch (ev.gesture) {
+        case TOUCH_LONG_PRESS:
+            enterConfig();
+            return;
+        case TOUCH_SWIPE_UP:
+        case TOUCH_FLING_UP:
+            enterLauncher();
+            return;
+        case TOUCH_SWIPE_LEFT:
+            enterApp((AppId)((s_app + 1) % APP_COUNT));
+            return;
+        case TOUCH_SWIPE_RIGHT:
+            enterApp((AppId)((s_app + APP_COUNT - 1) % APP_COUNT));
+            return;
+        case TOUCH_TAP:
+            advance();
+            break;
+        default:
+            break;
+    }
 
     const uint32_t sinceRotate = now - s_lastRotate;
     if (sinceRotate >= FEED_ROTATE_MS) advance();
 
+    // El feed se refresca siempre, corra la app que corra: al volver a noticias
+    // tiene que haber contenido fresco, no el de hace media hora.
     const bool dueRefresh = now - s_lastFetch >= FEED_REFRESH_MS;
     const bool dueRetry = s_offline && s_nextRetry != 0 && now >= s_nextRetry;
     if (dueRefresh || dueRetry) refreshFeed();
 
-    // La animacion la marca el VSync dentro de uiFercedTick; el delay solo
-    // evita que el loop queme CPU cuando no hay nada que repintar.
-    const bool busy = uiFercedTick(nowEpoch(),
-                                   (float)sinceRotate / (float)FEED_ROTATE_MS);
+    // Padel solo se refresca con la app abierta: fuera de ella nadie mira el
+    // orden de juego, y son dos sitios ajenos los que pagan el pedido.
+    if (s_app == APP_PADEL && s_padelTried &&
+        now - s_padelLastFetch >= PADEL_REFRESH_MS) {
+        refreshPadel();
+    }
+
+    // La animacion la marca el VSync dentro del tick; el delay solo evita que
+    // el loop queme CPU cuando no hay nada que repintar.
+    const float progreso = (float)sinceRotate / (float)FEED_ROTATE_MS;
+    const bool busy = s_app == APP_PADEL ? uiPadelTick(progreso)
+                                         : uiFercedTick(nowEpoch(), progreso);
     delay(busy ? 1 : 8);
 }

@@ -49,7 +49,7 @@ const uint16_t* feedFetchImage(const char* key) {
     if (!slash) return nullptr;
     // Las metricas de animacion viajan tambien aca: una imagen se pide cada
     // ~35 s, contra los 10 min del feed. Sirve para iterar el rendimiento.
-    const UiFrameStats st = uiFercedStats();
+    const UiFrameStats st = uiAnimStats();
     snprintf(url, sizeof(url), "%.*s/v1/img?k=%s&fr=%u&avg=%u&max=%u",
              (int)(slash - base), base, key,
              st.frames, st.avgUs100, st.worstUs100);
@@ -91,12 +91,14 @@ static void addAuth(HTTPClient& http) {
     }
 }
 
-FeedResult feedFetch(uint16_t frames, uint16_t avgUs100, uint16_t worstUs100) {
+FeedResult feedFetch(uint16_t frames, uint16_t avgUs100, uint16_t worstUs100,
+                     bool fresh) {
     // Las metricas de animacion viajan en el pedido del feed: no hace falta
     // consola serie para saber a que framerate corre el aparato.
     char url[256];
-    snprintf(url, sizeof(url), "%s&fr=%u&avg=%u&max=%u",
-             FEED_ENDPOINT, frames, avgUs100, worstUs100);
+    snprintf(url, sizeof(url), "%s&fr=%u&avg=%u&max=%u%s",
+             FEED_ENDPOINT, frames, avgUs100, worstUs100,
+             fresh ? "&fresh=1" : "");
     const bool secure = strncmp(url, "https://", 8) == 0;
 
     WiFiClient plain;
