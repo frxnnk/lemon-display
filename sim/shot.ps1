@@ -1,4 +1,4 @@
-# Recompila, levanta el simulador, avanza N items y captura la pantalla.
+﻿# Recompila, levanta el simulador, avanza N items y captura la pantalla.
 # Un solo comando por iteracion de UI.
 #
 #   .\shot.ps1                 -> primer item
@@ -14,6 +14,7 @@ param(
     [switch]$Config,
     [switch]$Padel,
     [switch]$Launcher,
+    [switch]$Tareas,
     [int]$Progreso = -1,
     [switch]$NoBuild,
     [string]$Out = "shot.png"
@@ -35,6 +36,7 @@ if (-not $NoBuild) {
 
 $simArgs = @("--still", "--item=$Advance")
 if ($Padel)    { $simArgs += "--padel" }
+if ($Tareas)   { $simArgs += "--tareas" }
 if ($Launcher) { $simArgs += "--launcher" }
 if ($Config) { $simArgs += "--config" }
 # --progreso ya implica la pantalla de configuracion del lado del simulador.

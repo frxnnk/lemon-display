@@ -35,10 +35,12 @@ $sources = @(
     "$sim\src\sim_display.cpp",
     "$sim\src\sim_feed.cpp",
     "$sim\src\sim_padel.cpp",
+    "$sim\src\sim_todo.cpp",
     "$sim\src\sim_stubs.cpp",
     "$root\src\ui_anim.cpp",
     "$root\src\ui_ferced.cpp",
     "$root\src\ui_padel.cpp",
+    "$root\src\ui_todo.cpp",
     "$root\src\ui_launcher.cpp",
     "$root\src\ui_config.cpp"
 ) + $lgfxSrc

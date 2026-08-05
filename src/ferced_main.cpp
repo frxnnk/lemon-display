@@ -14,11 +14,14 @@
 #include "ota_ferced.h"
 #include "padel_client.h"
 #include "time_manager.h"
+#include "todo_server.h"
+#include "todo_store.h"
 #include "touch_manager.h"
 #include "ui_config.h"
 #include "ui_ferced.h"
 #include "ui_launcher.h"
 #include "ui_padel.h"
+#include "ui_todo.h"
 #include "wifi_manager.h"
 #include "wifi_provision.h"
 
@@ -46,6 +49,12 @@ static uint8_t  s_padelIndex = 0;
 static uint32_t s_padelLastFetch = 0;
 static bool     s_padelTried = false;
 
+// -- Estado de tareas --
+// La lista cambia desde el servidor web, que corre en la tarea de AsyncTCP. En
+// vez de dejar que esa tarea toque la pantalla —dos tareas dibujando sobre el
+// mismo panel es una carrera— se compara la revisión y repinta el loop.
+static uint32_t s_todoRev = 0;
+
 #define WIFI_RETRY_MIN_MS  5000UL
 #define WIFI_RETRY_MAX_MS 60000UL
 static uint32_t s_wifiRetryMs = WIFI_RETRY_MIN_MS;
@@ -60,6 +69,8 @@ static uint32_t nowEpoch() {
 
 static void startProvisioning() {
     s_phase = PHASE_PROVISION;
+    // El portal cautivo usa el mismo puerto 80 que el editor de tareas.
+    todoServerStop();
     provisionStart();
     provisionDrawQR();
 }
@@ -167,14 +178,28 @@ static bool refreshPadel() {
     return true;
 }
 
+// -- Tareas ------------------------------------------------------------------
+
+static void showTodo() {
+    s_todoRev = todoRevision();
+    uiTodoDraw(wifiConnected() ? wifiIP().c_str() : "sin red");
+}
+
 // -- Apps --------------------------------------------------------------------
 
 static void showApp() {
-    if (s_app == APP_PADEL) showPadel();
-    else                    showNoticias();
+    switch (s_app) {
+        case APP_PADEL:  showPadel(); break;
+        case APP_TAREAS: showTodo();  break;
+        default:         showNoticias(); break;
+    }
 }
 
 static void advance() {
+    // Las tareas no rotan: son una lista, no un carrusel. Un toque marca la
+    // tarea que se tocó, que es lo que uno espera de una pantalla táctil.
+    if (s_app == APP_TAREAS) return;
+
     if (s_app == APP_PADEL) {
         const uint8_t total = padelScreenCount();
         // Sin contenido, un toque es un reintento. refreshPadel() ya repinta
@@ -235,6 +260,19 @@ static void llenarApps(AppInfo out[APP_COUNT]) {
         snprintf(out[APP_PADEL].estado, sizeof(out[APP_PADEL].estado), "%s",
                  s_padelTried ? "sin datos" : "sin abrir todavía");
     }
+
+    out[APP_TAREAS].nombre = "TAREAS";
+    out[APP_TAREAS].inicial = 'T';
+    const uint8_t pend = todoPending();
+    if (todoCount() == 0) {
+        snprintf(out[APP_TAREAS].estado, sizeof(out[APP_TAREAS].estado),
+                 "sin tareas  ·  %s", wifiConnected() ? wifiIP().c_str() : "sin red");
+    } else if (pend == 0) {
+        snprintf(out[APP_TAREAS].estado, sizeof(out[APP_TAREAS].estado), "todo hecho");
+    } else {
+        snprintf(out[APP_TAREAS].estado, sizeof(out[APP_TAREAS].estado),
+                 "%u de %u pendiente%s", pend, todoCount(), pend == 1 ? "" : "s");
+    }
 }
 
 static void enterLauncher() {
@@ -248,6 +286,10 @@ static void enterRunning() {
     s_phase = PHASE_RUNNING;
     s_app = APP_NOTICIAS;
     timeSetup();
+    // El editor de tareas queda levantado siempre, no sólo con la app abierta:
+    // la gracia es poder anotar algo desde el teléfono mientras la pantalla
+    // muestra otra cosa.
+    todoServerStart();
     uiFercedShowStatus("Conectado", "Buscando contenido.");
     // refreshFeed() repinta solo, con contenido o con el aviso de que no llegó.
     refreshFeed();
@@ -359,6 +401,8 @@ void setup() {
     uiFercedSetup();
     uiPadelSetup();
     uiLauncherSetup();
+    uiTodoSetup();
+    todoLoad();
 
     if (!nvsHasWifi()) {
         uiFercedShowStatus("Configurar", "Escanea el codigo para conectar el equipo a tu red.");
@@ -506,14 +550,25 @@ void loop() {
             enterApp((AppId)((s_app + APP_COUNT - 1) % APP_COUNT));
             return;
         case TOUCH_TAP:
-            advance();
+            if (s_app == APP_TAREAS) {
+                // Tocar una tarea la marca hecha. La pantalla se repinta sola
+                // en cuanto cambia la revisión, más abajo.
+                const int8_t fila = uiTodoHit(ev.x, ev.y);
+                if (fila >= 0) todoToggle((uint8_t)fila);
+            } else {
+                advance();
+            }
             break;
         default:
             break;
     }
 
     const uint32_t sinceRotate = now - s_lastRotate;
-    if (sinceRotate >= FEED_ROTATE_MS) advance();
+    if (s_app != APP_TAREAS && sinceRotate >= FEED_ROTATE_MS) advance();
+
+    // La lista también cambia desde el teléfono, en otra tarea. Repintar acá y
+    // no allá evita que dos tareas dibujen sobre el mismo panel a la vez.
+    if (s_app == APP_TAREAS && todoRevision() != s_todoRev) showTodo();
 
     // El feed se refresca siempre, corra la app que corra: al volver a noticias
     // tiene que haber contenido fresco, no el de hace media hora.
@@ -530,8 +585,16 @@ void loop() {
 
     // La animacion la marca el VSync dentro del tick; el delay solo evita que
     // el loop queme CPU cuando no hay nada que repintar.
+    //
+    // El tick TIENE que ser el de la app que está corriendo: el de noticias
+    // repinta la línea de progreso cuatro veces por segundo, y llamarlo con la
+    // lista de tareas en pantalla la iría pisando.
     const float progreso = (float)sinceRotate / (float)FEED_ROTATE_MS;
-    const bool busy = s_app == APP_PADEL ? uiPadelTick(progreso)
-                                         : uiFercedTick(nowEpoch(), progreso);
+    bool busy = false;
+    switch (s_app) {
+        case APP_PADEL:  busy = uiPadelTick(progreso); break;
+        case APP_TAREAS: break;                        // pantalla quieta
+        default:         busy = uiFercedTick(nowEpoch(), progreso); break;
+    }
     delay(busy ? 1 : 8);
 }

@@ -18,6 +18,7 @@ extern bool g_config;
 extern int  g_progreso;
 extern bool g_padel;
 extern bool g_launcher;
+extern bool g_tareas;
 
 static int user_func(bool* running) {
     setup();
@@ -42,6 +43,8 @@ int main(int argc, char** argv) {
             g_padel = true;
         } else if (std::strcmp(argv[i], "--launcher") == 0) {
             g_launcher = true;
+        } else if (std::strcmp(argv[i], "--tareas") == 0) {
+            g_tareas = true;
         } else if (std::strncmp(argv[i], "--progreso=", 11) == 0) {
             // Congela la franja de estado del OTA en un porcentaje. Sin esto no
             // hay forma de fotografiar una descarga: dura lo que dura la red.
