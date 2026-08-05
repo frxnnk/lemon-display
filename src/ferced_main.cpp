@@ -217,6 +217,10 @@ static void advance() {
 }
 
 static void enterApp(AppId app) {
+    // Cambiar de app cambia el dibujo entero: lo que quede del anterior no tiene
+    // nada que ver con lo que viene.
+    if (app != s_app) uiAnimInvalidate();
+
     s_app = app;
     s_phase = PHASE_RUNNING;
     s_lastRotate = millis();
@@ -575,6 +579,18 @@ void loop() {
     const bool dueRefresh = now - s_lastFetch >= FEED_REFRESH_MS;
     const bool dueRetry = s_offline && s_nextRetry != 0 && now >= s_nextRetry;
     if (dueRefresh || dueRetry) refreshFeed();
+
+    // La imagen del próximo titular se adelanta cuando ya no pasa nada. Bajarla
+    // dentro de la transición metía ~200 ms de red entre el gesto y el primer
+    // píxel, que es justo donde se siente que el aparato "no responde".
+    //
+    // Los dos segundos de espera no son de más: si se adelantara apenas termina
+    // la animación, caería encima del segundo toque de quien está pasando
+    // titulares rápido, y ahí sí se comería un gesto.
+    if (s_app == APP_NOTICIAS && sinceRotate > 2000 && feedCount() > 1) {
+        const FeedItem* prox = feedItem((uint8_t)((s_index + 1) % feedCount()));
+        if (prox) feedPrefetchImage(prox->imgKey);
+    }
 
     // Padel solo se refresca con la app abierta: fuera de ella nadie mira el
     // orden de juego, y son dos sitios ajenos los que pagan el pedido.

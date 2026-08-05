@@ -39,6 +39,13 @@ bool     g_padel      = false;   // arrancar en la app de padel
 bool     g_launcher   = false;   // arrancar en el selector de apps
 bool     g_tareas     = false;   // arrancar en la lista de tareas
 
+// Captura de una transición a mitad de camino: muestra el ítem --item, deja que
+// termine de entrar, pasa al --hacia y congela el dibujo a los --congelar ms.
+// Sin esto la animación sólo se puede mirar de reojo, y lo que hay que
+// verificar —que la pantalla NUNCA quede vacía— pasa justo en el medio.
+int      g_hacia      = -1;
+int      g_congelar   = -1;
+
 // El firmware usa millis(); aca lo replico sobre el reloj del sistema.
 static uint32_t millisNow() {
     using namespace std::chrono;
@@ -217,6 +224,24 @@ void setup() {
     applyArgs();
     show();
     s_lastRotate = millisNow();
+
+    // Se deja terminar la entrada del primer ítem, se pasa al segundo y se
+    // congela: así la captura sale exactamente en el medio de la transición.
+    if (g_hacia >= 0) {
+        const uint32_t fin = millisNow() + 2000;
+        while (millisNow() < fin) uiFercedTick(nowEpoch(), 0.0f);
+
+        const uint8_t total = feedCount();
+        if (total > 0) {
+            s_index = (uint8_t)(g_hacia % total);
+            uiFercedShowItem(feedItem(s_index), s_index, total, false);
+        }
+        const uint32_t corte = millisNow() + (g_congelar > 0 ? (uint32_t)g_congelar : 250);
+        while (millisNow() < corte) uiFercedTick(nowEpoch(), 0.0f);
+        s_estatica = true;
+        std::printf("  transicion congelada a los %d ms\n", g_congelar > 0 ? g_congelar : 250);
+    }
+
     if (g_config) mostrarConfig();
     if (g_launcher) mostrarLauncher();
 }

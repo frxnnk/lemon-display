@@ -34,19 +34,31 @@ static FeedOrigin originFrom(const char* o) {
     return FEED_FROM_RSS;
 }
 
-// Un solo buffer: se rota un item cada 17 s, asi que no hace falta cachear
-// varias. La key evita rebajar la misma imagen si el item se repite.
-static uint16_t _imgBuf[FEED_IMG_PIXELS];
-static char     _imgBufKey[FEED_IMGKEY_LEN] = {0};
+// Dos ranuras y no una: mientras una tiene la imagen del item en pantalla, la
+// otra recibe la del siguiente. Son 8 KB mas de RAM, y a cambio la transicion
+// no espera a la red.
+#define IMG_RANURAS 2
+static uint16_t _imgBuf[IMG_RANURAS][FEED_IMG_PIXELS];
+static char     _imgBufKey[IMG_RANURAS][FEED_IMGKEY_LEN] = {{0}, {0}};
+static uint8_t  _imgEnUso = 0;   // la que esta dibujandose ahora
 
-const uint16_t* feedFetchImage(const char* key) {
-    if (!key || !key[0]) return nullptr;
-    if (strncmp(_imgBufKey, key, FEED_IMGKEY_LEN) == 0) return _imgBuf;
+static int8_t ranuraCon(const char* key) {
+    for (uint8_t i = 0; i < IMG_RANURAS; i++) {
+        if (_imgBufKey[i][0] && strncmp(_imgBufKey[i], key, FEED_IMGKEY_LEN) == 0) {
+            return (int8_t)i;
+        }
+    }
+    return -1;
+}
+
+// Baja a la ranura libre, que es la que no se esta mostrando.
+static int8_t bajarImagen(const char* key) {
+    const uint8_t r = (uint8_t)(1 - _imgEnUso);
 
     char url[192];
     const char* base = FEED_ENDPOINT;
     const char* slash = strstr(base, "/v1/feed");
-    if (!slash) return nullptr;
+    if (!slash) return -1;
     // Las metricas de animacion viajan tambien aca: una imagen se pide cada
     // ~35 s, contra los 10 min del feed. Sirve para iterar el rendimiento.
     const UiFrameStats st = uiAnimStats();
@@ -60,29 +72,49 @@ const uint16_t* feedFetchImage(const char* key) {
     if (secure) tls.setInsecure();
 
     HTTPClient http;
-    http.setTimeout(8000);
-    if (!(secure ? http.begin(tls, url) : http.begin(plain, url))) return nullptr;
+    // 3 s y no 8: una miniatura de 8 KB que tarda mas que eso no va a llegar, y
+    // mientras tanto el loop no atiende el tactil. Un techo alto no hace que la
+    // imagen llegue, sólo alarga el congelamiento.
+    http.setTimeout(3000);
+    if (!(secure ? http.begin(tls, url) : http.begin(plain, url))) return -1;
     addAuth(http);
 
-    if (http.GET() != HTTP_CODE_OK) { http.end(); return nullptr; }
+    if (http.GET() != HTTP_CODE_OK) { http.end(); return -1; }
 
     const int expected = FEED_IMG_PIXELS * 2;
     if (http.getSize() != expected) {
         Serial.printf("[Feed] imagen de %d bytes, esperaba %d\n", http.getSize(), expected);
         http.end();
-        return nullptr;
+        return -1;
     }
 
-    const int got = http.getStream().readBytes((uint8_t*)_imgBuf, expected);
+    const int got = http.getStream().readBytes((uint8_t*)_imgBuf[r], expected);
     http.end();
     if (got != expected) {
-        _imgBufKey[0] = '\0';
-        return nullptr;
+        _imgBufKey[r][0] = '\0';
+        return -1;
     }
 
-    strncpy(_imgBufKey, key, FEED_IMGKEY_LEN - 1);
-    _imgBufKey[FEED_IMGKEY_LEN - 1] = '\0';
-    return _imgBuf;
+    strncpy(_imgBufKey[r], key, FEED_IMGKEY_LEN - 1);
+    _imgBufKey[r][FEED_IMGKEY_LEN - 1] = '\0';
+    return (int8_t)r;
+}
+
+const uint16_t* feedFetchImage(const char* key) {
+    if (!key || !key[0]) return nullptr;
+
+    int8_t r = ranuraCon(key);
+    if (r < 0) r = bajarImagen(key);
+    if (r < 0) return nullptr;
+
+    _imgEnUso = (uint8_t)r;
+    return _imgBuf[r];
+}
+
+void feedPrefetchImage(const char* key) {
+    if (!key || !key[0]) return;
+    if (ranuraCon(key) >= 0) return;   // ya esta lista
+    bajarImagen(key);
 }
 
 static void addAuth(HTTPClient& http) {

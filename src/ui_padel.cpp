@@ -299,6 +299,12 @@ static UiBand paintFrame(uint32_t elapsed) {
 // ── API ──
 
 static void arrancar(Modo m) {
+    // Los dos modos tienen filas en lugares distintos, así que los huecos de uno
+    // caen sobre el contenido del otro y quedarían restos colgados. Dentro del
+    // mismo modo no hace falta: la banda sucia limpia cada fila antes de
+    // dibujarla, incluso cuando el texto nuevo viene vacío.
+    if (m != s_modo) uiAnimInvalidate();
+
     s_modo = m;
     filas(m);
     uiAnimBegin();

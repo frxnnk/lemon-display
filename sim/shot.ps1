@@ -15,6 +15,8 @@ param(
     [switch]$Padel,
     [switch]$Launcher,
     [switch]$Tareas,
+    [int]$Hacia = -1,
+    [int]$Congelar = -1,
     [int]$Progreso = -1,
     [switch]$NoBuild,
     [string]$Out = "shot.png"
@@ -37,6 +39,8 @@ if (-not $NoBuild) {
 $simArgs = @("--still", "--item=$Advance")
 if ($Padel)    { $simArgs += "--padel" }
 if ($Tareas)   { $simArgs += "--tareas" }
+if ($Hacia -ge 0)    { $simArgs += "--hacia=$Hacia" }
+if ($Congelar -ge 0) { $simArgs += "--congelar=$Congelar" }
 if ($Launcher) { $simArgs += "--launcher" }
 if ($Config) { $simArgs += "--config" }
 # --progreso ya implica la pantalla de configuracion del lado del simulador.

@@ -129,6 +129,10 @@ void uiLauncherDraw(const AppInfo* apps, uint8_t n, uint8_t actual) {
     s_n = n;
     s_actual = actual < n ? actual : 0;
 
+    // Esta pantalla dibuja directo sobre tft, asi que el sprite de la
+    // animacion queda con contenido que ya no esta en el panel. Declararlo
+    // aca y no en quien llama hace imposible olvidarselo.
+    uiAnimInvalidate();
     displayWaitVSync();
     tft.fillScreen(CANVAS);
 
