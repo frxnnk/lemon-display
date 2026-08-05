@@ -305,6 +305,24 @@ de juego 5 minutos. Y el aparato **sólo pide pádel con la app abierta**: fuera
 de ella nadie mira el orden de juego, y son dos sitios ajenos los que pagan el
 pedido.
 
+**Los nombres completos salen de una tercera fuente.** El orden de juego sólo da
+la inicial («A. Tapia»); el cuadro que publica padelfip en la página del torneo
+trae el nombre entero («Agustin Tapia»). Se cruzan por la clave
+`inicial + apellidos`, que es lo único que comparten —no hay ningún id común—, y
+se sustituye **por pareja: los dos o ninguno**. Media pareja con nombre completo
+y la otra abreviada se lee como un error, no como un dato incompleto.
+
+El límite de 28 caracteres está **medido en el simulador**, no calculado:
+«Santiago Jose Pineda Cabello» son 28 y terminan a ~85 px de la cabeza de serie.
+Los que se pasan dejan a su pareja en la forma corta.
+
+**Sólo hay nombres completos del cuadro masculino.** Verificado: la página del
+torneo no trae ni una jugadora en el HTML (se probó con seis apellidos del orden
+de juego femenino), y el widget de cuadros de matchscorerlive —que sí existe, en
+`/screen/draw/FIP-<año>-<id>`— usa iniciales igual que el orden de juego. Así que
+los partidos femeninos se quedan abreviados. Lo mismo pasa con algunos
+clasificados, que no están en el cuadro principal.
+
 **La trampa que costó el rato**: el widget escribe `class="ml-2  line-thin"`,
 con **dos espacios**. El patrón que buscaba un espacio no enganchaba nada y los
 partidos se perdían enteros y en silencio. Peor: la inspección previa había
@@ -785,6 +803,22 @@ desincroniza y el simulador empieza a mentir.
 
 **Medir antes de optimizar.** El paso "slots en secuencia" empeoró el framerate
 y sólo se supo por la telemetría. Sin medir se habría quedado el bug adentro.
+
+**Un raspado de un sitio ajeno que falla en silencio se lee como una app rota.**
+El 2026-08-05, horas después de estrenar la app de pádel, dejó de mostrar
+partidos. El síntoma no decía nada: pantallas de torneo sin jugadores. La causa
+fue un tirón de `widget.matchscorerlive.com` —que normalmente responde en menos
+de dos segundos y esa vez se pasó de los 25 del timeout—, y el `if err == nil`
+que envolvía la llamada se tragó el error sin registrar una línea. Peor: el
+snapshot vacío se cacheaba cinco minutos, así que un tropiezo de un segundo
+apagaba la app durante cinco.
+
+Tres arreglos, y el más importante no es el reintento: **registrar siempre el
+fallo**, **conservar el último orden de juego bueno** del mismo torneo y el
+mismo día (lo mismo que hace el mixer del feed), y **cachear menos tiempo** un
+snapshot incompleto para reintentar en un minuto en vez de cinco. Es la misma
+moraleja que la del `esp_err_t` de la ISR de VSync: un error que se ignora
+porque "igual anda" termina costando caro.
 
 **Un botón que "no hace nada" puede estar haciendo todo.** El 2026-08-05 el
 botón «Actualizar feed» parecía roto. El log del proxy mostraba que el pedido
