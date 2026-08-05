@@ -2,6 +2,10 @@
 
 Estado al 2026-08-05. Rama `feat/ferced-display` del clon de `frxnnk/lemon-display`.
 
+Si venís a **mejorar la interfaz**, andá directo a `docs/HANDOFF-UI.md`: ahí está
+el presupuesto de frame, la identidad, la geometría de cada pantalla y el ciclo
+del simulador. Este documento cubre el resto del sistema.
+
 Leé esto entero antes de tocar nada. La mitad de los problemas de este proyecto
 no se deducen del código.
 
