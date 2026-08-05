@@ -7,11 +7,12 @@ no se deducen del código.
 
 ## Si venís a retomar: las tres cosas que importan hoy
 
-1. **La 1.1.0 está publicada y espera el botón.** Es la primera versión con dos
-   apps (noticias y pádel) y selector. El binario y el `version.txt` ya están en
-   el VPS, y `/v1/firmware` devuelve el sha256 correcto. **El OTA nunca corrió
-   de verdad**: esta es su primera prueba real, y hay que dispararla a mano
-   desde la pantalla de configuración. Ver "El OTA" y "Verificar el OTA".
+1. **El OTA funciona: ya corrió dos veces de verdad.** La 1.1.0 y la 1.1.1 se
+   publicaron y se instalaron desde el botón, sin USB. Eso cambia el proyecto:
+   actualizar dejó de depender del conector más frágil del aparato. Lo que
+   **sigue sin probarse es el rollback** —la red que atrapa un firmware que
+   arranca y se queda sin red—, y esa prueba no es opcional. Ver "Verificar el
+   OTA".
 2. **La fuente de X está caída por cuota agotada.** El feed sirve sólo RSS. Ver
    "La cuota de Sorsa".
 3. **El USB de este aparato es poco confiable.** Ver las trampas del hardware
@@ -22,9 +23,10 @@ no se deducen del código.
 ## Qué es
 
 Una Lemon Box (MaTouch ESP32-S3 4.0", 480x480 táctil) con firmware propio de
-Ferced. Desde la 1.1.0 tiene **dos apps**: noticias (un titular cada 17 s, con
-miniatura) y pádel (el orden de juego del circuito profesional). Se pasa de una
-a otra deslizando, o desde un selector.
+Ferced. Desde la 1.2.0 tiene **tres apps**: noticias (un titular cada 17 s, con
+miniatura), pádel (el orden de juego del circuito profesional) y tareas (una
+lista que se edita desde el teléfono, servida por el propio aparato). Se pasa de
+una a otra deslizando, o desde un selector.
 
 Tres piezas:
 
@@ -53,29 +55,38 @@ anda aporta ~4 de los 20 ítems, todos con imagen real del tweet.
 
 **App de pádel**, en `/v1/padel`. Ver "La app de pádel".
 
-**OTA por WiFi**, desplegado y sin verificar en el aparato. El proxy sirve
-`/v1/firmware` y `/v1/firmware/bin` desde `C:\ferced\firmware`, y el aparato
-tiene el botón «Buscar actualización». Ver "El OTA".
+**App de tareas**, servida por el propio ESP32 en el puerto 80. Ver "La app de
+tareas".
+
+**OTA por WiFi, probado en el aparato.** El proxy sirve `/v1/firmware` y
+`/v1/firmware/bin` desde `C:\ferced\firmware`, y el aparato tiene el botón
+«Buscar actualización». La 1.1.0 y la 1.1.1 se instalaron así, sin tocar el USB.
+Ver "El OTA".
 
 **Firmware** con animación escalonada, miniaturas de 64x64 y reconexión
-automática de WiFi. 18,3% de flash, 20,7% de RAM. Animación a 35,5 fps medidos
+automática de WiFi. 18,8% de flash, 21,0% de RAM. Animación a 35,5 fps medidos
 sobre un techo de panel de 42.
 
 **Los gestos**, que ahora son cinco:
 
 | Gesto | Qué hace |
 |---|---|
-| Toque | siguiente ítem dentro de la app |
+| Toque | siguiente ítem dentro de la app; en tareas, marca la que se tocó |
 | Deslizar ← o → | cambiar de app |
 | Deslizar ↑ | abrir el selector de apps |
 | Deslizar ↓ (en el selector) | cerrarlo sin cambiar |
 | Pulsación larga | pantalla de configuración |
 
 **Selector de apps**: una tarjeta por app, con monograma, nombre y estado en
-vivo («20 titulares», «LONDON P1 · día 4 de 8»). La app corriendo se dibuja en
-negativo. **No se anima, a propósito**: las tarjetas son altas y la banda sucia
-terminaría siendo la pantalla entera, o sea ~99 ms por frame. Se dibuja de una
-sola vez, como la de configuración.
+vivo («20 titulares», «LONDON P1 · día 4 de 8», «5 de 7 pendientes»). La app
+corriendo se dibuja en negativo. **No se anima, a propósito**: las tarjetas son
+altas y la banda sucia terminaría siendo la pantalla entera, o sea ~99 ms por
+frame. Se dibuja de una sola vez, como la de configuración.
+
+La grilla se calcula a partir de cuántas apps hay. Estuvo clavada para dos, y al
+sumar la tercera se salía de la pantalla —140 + 2*(104+20) + 104 = 492 sobre un
+panel de 480— tapando los puntos y el pie. Agregar una app no debería obligar a
+rehacer la geometría.
 
 **Pantalla de configuración**: se abre con un **long press** en cualquier parte.
 Muestra versión, commit y fecha de compilación —inyectados al compilar por
@@ -102,6 +113,7 @@ cd sim
 python tools\fetch_fixture.py     # baja contenido real del proxy, una vez
 .\shot.ps1 -Advance 1             # compila, corre, captura item 1
 .\shot.ps1 -Padel -Advance 1      # pádel: 0 es el torneo, 1.. los partidos
+.\shot.ps1 -Tareas                # la lista de tareas (fixture: sim/data/todo.txt)
 .\shot.ps1 -Launcher              # el selector de apps
 .\shot.ps1 -Config                # la pantalla de configuración
 ```
@@ -253,16 +265,13 @@ y vale la pena antes de la próxima sesión de depuración.
 
 ### Verificar el OTA — lo que falta y no es opcional
 
-Nunca corrió una actualización real. Faltan dos pruebas y la segunda es la que
-importa:
+De las dos pruebas, la primera ya pasó y la segunda —la que importa— sigue
+pendiente:
 
-1. **Camino feliz.** Publicar una versión mayor, tocar el botón, ver el progreso
-   y que el aparato vuelva con la versión nueva en la pantalla de configuración.
-   **La 1.1.0 ya está publicada y es exactamente esta prueba**: el `.bin` y el
-   `version.txt` están en el VPS, y el `sha256` que devuelve `/v1/firmware`
-   coincide con el `sha256sum` del binario local. Sólo falta pulsación larga →
-   «Buscar actualización». El log del proxy ahora anota el user agent, así que
-   se puede confirmar que el pedido salió del aparato y no de la PC.
+1. **Camino feliz: HECHO.** La 1.1.0 y la 1.1.1 se publicaron y se instalaron
+   desde el botón, con el aparato mostrando la versión nueva después. El OTA
+   dejó de ser una suposición. El log del proxy ahora anota el user agent, así
+   que se puede confirmar que el pedido salió del aparato y no de la PC.
 2. **Rollback a propósito.** Compilar un firmware con versión mayor y el SSID
    roto adrede, publicarlo, aplicarlo, y confirmar que el aparato arranca, no
    consigue red y **vuelve solo al anterior**.
@@ -340,6 +349,56 @@ partidos se perdían enteros y en silencio. Peor: la inspección previa había
 colapsado el whitespace para leerla más cómoda, así que el bug estaba escondido
 en el instrumento. Todos los patrones matchean las clases por contenido
 (`[^"]*line-thin[^"]*`) justamente por eso.
+
+### La app de tareas
+
+Una lista de pendientes que se edita desde el teléfono, en
+**`http://<ip-del-aparato>/`** — hoy `http://192.168.1.41/`.
+
+**Es la única parte del sistema que NO pasa por el proxy, y es a propósito.** La
+regla «todo lo frágil vive en el proxy» existe para las fuentes de terceros:
+claves, formatos ajenos, limpieza de texto. Una lista de tareas no es nada de
+eso. Es estado privado, tiene que poder editarse con el VPS caído, y los datos
+no tienen por qué salir de la red de casa. Por eso el servidor lo levanta el
+propio ESP32.
+
+| Pieza | Dónde |
+|---|---|
+| Lista y persistencia | `src/todo_store.cpp`, en NVS, namespace `ferced_todo` |
+| Servidor y página | `src/todo_server.cpp`, puerto 80, `ESPAsyncWebServer` |
+| Pantalla | `src/ui_todo.cpp` |
+
+La página va entera en PROGMEM, sin CDN ni fuentes externas: tiene que servirse
+sin internet. Usa la tipografía del sistema porque embeber Satoshi serían ~100
+KB de flash para algo que se abre de vez en cuando. Toda la app suma **31 KB de
+flash y ~1 KB de RAM**.
+
+**El namespace de NVS es propio y no el `lemon` del resto**, así que un
+`nvsFactoryReset()` del código heredado no se lleva la lista puesta.
+
+**Cuatro cosas que no son obvias:**
+
+- **Las mutaciones exigen el encabezado `X-Ferced`.** No es autenticación
+  —cualquiera en la red de casa puede editar, igual que el portal cautivo— sino
+  la defensa contra CSRF: un navegador no deja que una página de otro sitio
+  mande un encabezado propio sin un preflight de CORS, que este servidor no
+  contesta. Sin eso, cualquier web que el usuario visite podría borrarle las
+  tareas con un `<form>` escondido.
+- **Dos tareas del RTOS tocan la lista**: el servidor corre en la de AsyncTCP y
+  la pantalla en la del loop. El array está protegido con un `portMUX`, y la
+  escritura a flash queda **fuera** de la sección crítica, que es donde no puede
+  estar. La pantalla no la repinta el servidor: se compara `todoRevision()` en
+  el loop. Dos tareas dibujando sobre el mismo panel es una carrera.
+- **El tick tiene que ser el de la app que corre.** El de noticias repinta la
+  línea de progreso cuatro veces por segundo; llamarlo con la lista en pantalla
+  la va pisando. En el loop hay un `switch` por app justamente por esto.
+- **El puerto 80 lo comparte con el portal cautivo** del aprovisionamiento, así
+  que `startProvisioning()` baja el editor antes de levantarlo.
+
+Para iterar la página sin flashear, `scratchpad/extraer_pagina.py` la saca del
+`.cpp` y le enchufa un simulacro de la API para abrirla en el navegador. Sacarla
+del `.cpp` y no tener una copia es a propósito: una copia se desincroniza, igual
+que pasaría con `ui_ferced.cpp` y el simulador.
 
 ### La cuota de Sorsa
 
@@ -871,6 +930,9 @@ llega — en los dos casos, andá a buscar el dato crudo.
 | `src/ui_anim.cpp` | Motor compartido: sprite, bandas, VSync, telemetría |
 | `src/ui_ferced.cpp` | La app de noticias |
 | `src/ui_padel.cpp` | La app de pádel |
+| `src/ui_todo.cpp` | La app de tareas |
+| `src/todo_store.cpp` | La lista y su persistencia en NVS |
+| `src/todo_server.cpp` | El editor que hospeda el aparato, con la página adentro |
 | `src/ui_launcher.cpp` | El selector de apps |
 | `src/ferced_main.cpp` | Máquina de estados: provisioning, WiFi, apps, gestos |
 | `src/feed_client.cpp` | Cliente HTTP del feed y las imágenes |

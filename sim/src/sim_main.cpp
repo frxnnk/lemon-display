@@ -5,10 +5,12 @@
 #include "apps.h"
 #include "feed_client.h"
 #include "padel_client.h"
+#include "todo_store.h"
 #include "ui_config.h"
 #include "ui_ferced.h"
 #include "ui_launcher.h"
 #include "ui_padel.h"
+#include "ui_todo.h"
 
 #include <SDL2/SDL.h>
 
@@ -35,6 +37,7 @@ bool     g_config     = false;   // arrancar en la pantalla de configuracion
 int      g_progreso   = -1;      // 0..100: congela la franja de estado del OTA
 bool     g_padel      = false;   // arrancar en la app de padel
 bool     g_launcher   = false;   // arrancar en el selector de apps
+bool     g_tareas     = false;   // arrancar en la lista de tareas
 
 // El firmware usa millis(); aca lo replico sobre el reloj del sistema.
 static uint32_t millisNow() {
@@ -81,12 +84,32 @@ static void mostrarLauncher() {
         std::snprintf(apps[APP_PADEL].estado, sizeof(apps[APP_PADEL].estado), "sin datos");
     }
 
+    apps[APP_TAREAS].nombre = "TAREAS";
+    apps[APP_TAREAS].inicial = 'T';
+    const uint8_t pend = todoPending();
+    if (todoCount() == 0) {
+        std::snprintf(apps[APP_TAREAS].estado, sizeof(apps[APP_TAREAS].estado),
+                      "sin tareas  ·  192.168.1.41");
+    } else if (pend == 0) {
+        std::snprintf(apps[APP_TAREAS].estado, sizeof(apps[APP_TAREAS].estado), "todo hecho");
+    } else {
+        std::snprintf(apps[APP_TAREAS].estado, sizeof(apps[APP_TAREAS].estado),
+                      "%u de %u pendiente%s", pend, todoCount(), pend == 1 ? "" : "s");
+    }
+
     s_estatica = true;
     uiLauncherDraw(apps, APP_COUNT, s_app);
 }
 
 static void show() {
     s_estatica = false;
+    if (s_app == APP_TAREAS) {
+        // Igual que en el firmware: la lista es una pantalla quieta, así que
+        // se para el tick para que la animación no la repinte encima.
+        s_estatica = true;
+        uiTodoDraw("192.168.1.41");
+        return;
+    }
     if (s_app == APP_PADEL) {
         const uint8_t total = padelScreenCount();
         if (total == 0) {
@@ -108,6 +131,7 @@ static void show() {
 }
 
 static void advance(int delta) {
+    if (s_app == APP_TAREAS) return;   // una lista no rota
     if (s_app == APP_PADEL) {
         const uint8_t total = padelScreenCount();
         if (total == 0) return;
@@ -121,15 +145,24 @@ static void advance(int delta) {
     s_lastRotate = millisNow();
 }
 
+static const char* nombreApp(uint8_t a) {
+    switch (a) {
+        case APP_PADEL:  return "padel";
+        case APP_TAREAS: return "tareas";
+        default:         return "noticias";
+    }
+}
+
 static void cambiarApp() {
     s_app = (uint8_t)((s_app + 1) % APP_COUNT);
-    std::printf("  app: %s\n", s_app == APP_PADEL ? "padel" : "noticias");
+    std::printf("  app: %s\n", nombreApp(s_app));
     show();
     s_lastRotate = millisNow();
 }
 
 static void applyArgs() {
-    if (g_padel) s_app = APP_PADEL;
+    if (g_padel)  s_app = APP_PADEL;
+    if (g_tareas) s_app = APP_TAREAS;
     if (g_startIndex > 0) {
         if (s_app == APP_PADEL) {
             const uint8_t total = padelScreenCount();
@@ -175,10 +208,12 @@ void setup() {
     uiFercedSetup();
     uiPadelSetup();
     uiLauncherSetup();
+    uiTodoSetup();
     banner();
 
     feedFetch();
     padelFetch();
+    todoLoad();
     applyArgs();
     show();
     s_lastRotate = millisNow();

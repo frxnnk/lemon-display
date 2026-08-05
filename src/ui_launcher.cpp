@@ -31,17 +31,19 @@ constexpr int RULE_Y = 100;
 
 constexpr int CARD_X = MARGIN;
 constexpr int CARD_W = SCREEN_W - 2 * MARGIN;   // 424
-constexpr int CARD_Y0 = 140;
-constexpr int CARD_H = 104;
-constexpr int CARD_GAP = 20;
-constexpr int CARD_R = DS::RADIUS_LG;           // 16
 
-constexpr int MONO = 54;                        // lado del monograma
-constexpr int MONO_R = 14;
-constexpr int TEXT_X = CARD_X + 20 + MONO + 20;
+// La grilla se calcula a partir de cuántas apps hay, no está fijada para dos.
+// Con la altura clavada en 104, la tercera tarjeta se salía de la pantalla y se
+// comía los puntos y el pie: 140 + 2*(104+20) + 104 = 492 sobre un panel de 480.
+constexpr int CARD_Y0  = 132;
+constexpr int CARD_FIN = 404;                   // desde acá abajo van puntos y pie
+constexpr int CARD_GAP = 18;
 
-constexpr int DOTS_Y = 420;
-constexpr int HINT_Y = 442;
+constexpr int MONO_MAX = 54;                    // lado del monograma
+constexpr int TEXT_X = CARD_X + 20 + MONO_MAX + 20;
+
+constexpr int DOTS_Y = 424;
+constexpr int HINT_Y = 446;
 
 constexpr uint8_t MAX_APPS = 4;
 
@@ -49,7 +51,13 @@ uint8_t s_n = 0;
 uint8_t s_actual = 0;
 bool    s_ready = false;
 
-int cardY(uint8_t i) { return CARD_Y0 + i * (CARD_H + CARD_GAP); }
+int cardH() {
+    if (s_n == 0) return 0;
+    const int alto = (CARD_FIN - CARD_Y0 - (s_n - 1) * CARD_GAP) / s_n;
+    return alto > 126 ? 126 : alto;   // con una sola app, una tarjeta gigante queda ridícula
+}
+
+int cardY(uint8_t i) { return CARD_Y0 + i * (cardH() + CARD_GAP); }
 
 void marca(int x, int y) {
     for (int py = 0; py < MARK_H; py++) {
@@ -71,33 +79,43 @@ void marco(int x, int y, int w, int h, int r, uint16_t color) {
 
 void tarjeta(uint8_t i, const AppInfo& app) {
     const int y = cardY(i);
+    const int h = cardH();
     const bool activa = i == s_actual;
+    const int radio = h / 4 < DS::RADIUS_LG ? h / 4 : DS::RADIUS_LG;
 
-    marco(CARD_X, y, CARD_W, CARD_H, CARD_R, activa ? FG_2 : LINE);
+    marco(CARD_X, y, CARD_W, h, radio, activa ? FG_2 : LINE);
 
-    const int mx = CARD_X + 20;
-    const int my = y + (CARD_H - MONO) / 2;
+    // El monograma se achica si la tarjeta no le da lugar, en vez de desbordar.
+    int mono = h - 24;
+    if (mono > MONO_MAX) mono = MONO_MAX;
+    const int mx = CARD_X + 20 + (MONO_MAX - mono) / 2;   // la columna de texto no se mueve
+    const int my = y + (h - mono) / 2;
     const char inicial[2] = {app.inicial, '\0'};
     if (activa) {
-        tft.fillSmoothRoundRect(mx, my, MONO, MONO, MONO_R, FG);
+        tft.fillSmoothRoundRect(mx, my, mono, mono, mono / 4, FG);
         tft.setTextColor(CANVAS, FG);
     } else {
-        marco(mx, my, MONO, MONO, MONO_R, LINE);
+        marco(mx, my, mono, mono, mono / 4, LINE);
         tft.setTextColor(FG_3, CANVAS);
     }
     tft.setFont(DS::fontHeading());
     tft.setTextDatum(lgfx::middle_center);
-    tft.drawString(inicial, mx + MONO / 2, my + MONO / 2);
+    tft.drawString(inicial, mx + mono / 2, my + mono / 2);
+
+    // Nombre y estado centrados como bloque, para que la tarjeta se vea igual
+    // de equilibrada con dos apps que con cuatro.
+    constexpr int BLOQUE = 48;
+    const int ty = y + (h - BLOQUE) / 2;
 
     tft.setTextDatum(lgfx::top_left);
     tft.setFont(DS::fontHeading());
     tft.setTextColor(activa ? FG : FG_2, CANVAS);
-    tft.drawString(app.nombre, TEXT_X, y + 30);
+    tft.drawString(app.nombre, TEXT_X, ty);
 
     if (app.estado[0]) {
         tft.setFont(DS::fontBody());
         tft.setTextColor(FG_3, CANVAS);
-        tft.drawString(app.estado, TEXT_X, y + 60);
+        tft.drawString(app.estado, TEXT_X, ty + 30);
     }
 }
 
@@ -146,9 +164,12 @@ void uiLauncherDraw(const AppInfo* apps, uint8_t n, uint8_t actual) {
 
 int8_t uiLauncherHit(int16_t x, int16_t y) {
     if (x < CARD_X || x >= CARD_X + CARD_W) return -1;
+    const int h = cardH();
     for (uint8_t i = 0; i < s_n; i++) {
         const int cy = cardY(i);
-        if (y >= cy && y < cy + CARD_H) return (int8_t)i;
+        // La mitad del hueco entre tarjetas cuenta para la de arriba: un dedo
+        // que cae justo en el borde tiene que hacer algo, no nada.
+        if (y >= cy && y < cy + h + CARD_GAP / 2) return (int8_t)i;
     }
     return -1;
 }
