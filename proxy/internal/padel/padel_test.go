@@ -205,3 +205,69 @@ func TestRankOrdenaPorJerarquia(t *testing.T) {
 		t.Error("una categoria desconocida tiene que quedar ultima")
 	}
 }
+
+// El orden de juego solo da la inicial ("A. Tapia"); el cuadro de la pagina del
+// torneo trae el nombre entero. Cruzarlos es lo que hace que la pantalla se lea
+// de reojo, asi que conviene fijar las reglas.
+func TestParseDraw(t *testing.T) {
+	html := `
+	<p class="singleMatch__team--itemName">Agustin Tapia</p>
+	<p class="singleMatch__team--itemName">Arturo Coello<span class="ranking"></span></p>
+	<p class="singleMatch__team--itemName">Bye</p>
+	<p class="singleMatch__team--itemName">Maria Ortega Gallego</p>
+	<p class="singleMatch__team--itemName">Cabeza</p>`
+
+	d := ParseDraw(html)
+	if d["A. Tapia"] != "Agustin Tapia" {
+		t.Errorf("A. Tapia -> %q", d["A. Tapia"])
+	}
+	if d["A. Coello"] != "Arturo Coello" {
+		t.Errorf("el <span class=ranking> no puede meterse en el nombre: %q", d["A. Coello"])
+	}
+	if d["M. Ortega Gallego"] != "Maria Ortega Gallego" {
+		t.Errorf("apellido compuesto -> %q", d["M. Ortega Gallego"])
+	}
+	if len(d) != 3 {
+		t.Errorf("entradas = %d, quiero 3: \"Bye\" y un nombre suelto no aportan (%v)", len(d), d)
+	}
+}
+
+func TestConNombresCompletos(t *testing.T) {
+	nombres := map[string]string{
+		"A. Tapia":               "Agustin Tapia",
+		"A. Coello":              "Arturo Coello",
+		"J. Ruiz Gonzalez":       "Javier Ruiz Gonzalez",
+		"M. Gonzalez San Martin": "Mariano Agustin Gonzalez San Martin",
+		"F. Cabeza Teres":        "Federico Cabeza Teres",
+	}
+
+	ms := []Match{
+		{A1: "A. Tapia", A2: "A. Coello", B1: "N. Deus", B2: "M. Deus"},
+		// Pineda no esta en el cuadro: los dos quedan abreviados.
+		{A1: "S. Pineda Cabello", A2: "J. Ruiz Gonzalez", B1: "A. Tapia", B2: "A. Coello"},
+		// El nombre entero no entra en pantalla: la pareja se queda corta.
+		{A1: "M. Gonzalez San Martin", A2: "F. Cabeza Teres", B1: "A. Tapia", B2: "A. Coello"},
+	}
+	out := ConNombresCompletos(ms, nombres)
+
+	if out[0].A1 != "Agustin Tapia" || out[0].A2 != "Arturo Coello" {
+		t.Errorf("pareja completa = %q / %q", out[0].A1, out[0].A2)
+	}
+	if out[0].B1 != "N. Deus" {
+		t.Errorf("sin entrada en el cuadro se deja como esta: %q", out[0].B1)
+	}
+	if out[1].A1 != "S. Pineda Cabello" || out[1].A2 != "J. Ruiz Gonzalez" {
+		t.Errorf("media pareja completa se lee como un error: %q / %q", out[1].A1, out[1].A2)
+	}
+	if out[2].A1 != "M. Gonzalez San Martin" || out[2].A2 != "F. Cabeza Teres" {
+		t.Errorf("un nombre que no entra en pantalla deja la pareja corta: %q / %q",
+			out[2].A1, out[2].A2)
+	}
+}
+
+func TestConNombresCompletosSinDiccionario(t *testing.T) {
+	ms := []Match{{A1: "A. Tapia", A2: "A. Coello"}}
+	if out := ConNombresCompletos(ms, nil); out[0].A1 != "A. Tapia" {
+		t.Errorf("sin cuadro no se toca nada: %q", out[0].A1)
+	}
+}

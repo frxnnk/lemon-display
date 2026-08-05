@@ -33,6 +33,92 @@ var (
 	ampmRe = regexp.MustCompile(`(\d{1,2}):(\d{2})\s*(AM|PM)`)
 )
 
+// El cuadro que padelfip publica en la pagina del torneo trae los nombres
+// ENTEROS ("Agustin Tapia"), mientras que el orden de juego solo da la inicial
+// ("A. Tapia"). En una pantalla que se mira de reojo, el nombre completo es la
+// diferencia entre reconocer al jugador y descifrarlo.
+var nombreCuadroRe = regexp.MustCompile(
+	`(?s)<p class="[^"]*singleMatch__team--itemName[^"]*">(.*?)(?:<span|</p>)`)
+
+// Ancho maximo de un nombre, en caracteres.
+//
+// Medido en el simulador, no calculado: "Santiago Jose Pineda Cabello" son 28 y
+// terminan a ~85 px de la cabeza de serie, que es lo primero con lo que podrian
+// chocar. Los que se pasan —"Mariano Agustin Gonzalez San Martin"— dejan a su
+// pareja en la forma abreviada, que siempre entra.
+const maxNombre = 28
+
+// claveNombre lleva un nombre completo a la forma que usa el orden de juego:
+// "Agustin Tapia" -> "A. Tapia", "Maria Ortega Gallego" -> "M. Ortega Gallego".
+// Es la unica forma de cruzar las dos fuentes, porque no comparten ningun id.
+func claveNombre(completo string) string {
+	partes := strings.Fields(completo)
+	if len(partes) < 2 {
+		return ""
+	}
+	inicial := []rune(partes[0])
+	if len(inicial) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%c. %s", inicial[0], strings.Join(partes[1:], " "))
+}
+
+// ParseDraw arma el diccionario "A. Tapia" -> "Agustin Tapia" a partir del
+// cuadro. Los nombres que ya vienen abreviados en el cuadro, o los "Bye", no
+// aportan nada y quedan afuera.
+func ParseDraw(html string) map[string]string {
+	out := map[string]string{}
+	for _, m := range nombreCuadroRe.FindAllStringSubmatch(html, -1) {
+		completo := strings.TrimSpace(norm.Clean(norm.StripHTML(m[1])))
+		if completo == "" || strings.EqualFold(completo, "bye") {
+			continue
+		}
+		clave := claveNombre(completo)
+		if clave == "" || clave == completo {
+			continue
+		}
+		out[clave] = completo
+	}
+	return out
+}
+
+// ConNombresCompletos reemplaza los nombres abreviados por los del cuadro.
+//
+// La sustitucion es por PAREJA y no por jugador: media pareja con nombre
+// completo y la otra media abreviada se lee como un error. Y si algun nombre no
+// entra en la pantalla, la pareja entera se queda con la forma corta.
+func ConNombresCompletos(ms []Match, nombres map[string]string) []Match {
+	if len(nombres) == 0 {
+		return ms
+	}
+	pareja := func(p1, p2 string) (string, string) {
+		n1, ok1 := nombres[p1]
+		if !ok1 {
+			return p1, p2
+		}
+		if len(n1) > maxNombre {
+			return p1, p2
+		}
+		if p2 == "" {
+			return n1, p2
+		}
+		// Los dos o ninguno: si uno de la pareja no esta en el cuadro —pasa con
+		// los que entran desde la clasificacion— se dejan los dos abreviados.
+		// "S. Pineda Cabello / Javier Ruiz Gonzalez" se lee como un error, no
+		// como un dato incompleto.
+		n2, ok2 := nombres[p2]
+		if !ok2 || len(n2) > maxNombre {
+			return p1, p2
+		}
+		return n1, n2
+	}
+	for i := range ms {
+		ms[i].A1, ms[i].A2 = pareja(ms[i].A1, ms[i].A2)
+		ms[i].B1, ms[i].B2 = pareja(ms[i].B1, ms[i].B2)
+	}
+	return ms
+}
+
 // ParseOOPRef saca de la pagina de un torneo el ano, el id y el total de dias
 // que necesita el widget de orden de juego.
 func ParseOOPRef(html string) (oopRef, error) {

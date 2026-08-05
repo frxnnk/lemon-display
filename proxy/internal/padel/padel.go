@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -38,6 +39,13 @@ const (
 	// El orden de juego si cambia dentro del dia, pero un partido dura mas de
 	// una hora: cinco minutos alcanza y sobra.
 	oopTTL = 5 * time.Minute
+	// Cuando el orden de juego no vino, el snapshot vale esto en vez de oopTTL:
+	// reintentar en un minuto es mejor que dejar la app sin partidos cinco.
+	reintentoTTL = time.Minute
+	// Hasta cuando vale el ultimo orden de juego bueno. Dos horas cubre de sobra
+	// un tiron del servidor de terceros sin llegar a servir un cuadro de otro
+	// momento del dia.
+	oopMaxStale = 2 * time.Hour
 
 	// El calendario entero no entra en un limite chico, y truncarlo perderia
 	// torneos enteros. Es el mismo problema que el limite del RSS.
@@ -141,12 +149,20 @@ type Client struct {
 	BaseCalendar string
 	BaseOOPData  string
 
-	mu     sync.Mutex
-	cal    []Tournament
-	calAt  time.Time
-	snap   *Snapshot
-	snapAt time.Time
-	oopIDs map[string]oopRef // slug -> referencia al widget
+	mu      sync.Mutex
+	cal     []Tournament
+	calAt   time.Time
+	snap    *Snapshot
+	snapAt  time.Time
+	oopIDs  map[string]oopRef            // slug -> referencia al widget
+	nombres map[string]map[string]string // slug -> "A. Tapia" -> "Agustin Tapia"
+
+	// Ultimo orden de juego bueno, para que un tiron de un sitio ajeno no deje
+	// la app sin partidos.
+	oopCache []Match
+	oopSlug  string
+	oopDia   int
+	oopAt    time.Time
 }
 
 type oopRef struct {
@@ -185,9 +201,26 @@ func (c *Client) quiere(cat string) bool {
 	return false
 }
 
-// get baja una URL con un limite de cuerpo. El limite no es paranoia: el
-// calendario del ano pesa 2 MB y una respuesta rota podria ser mucho mayor.
+// get baja una URL con un limite de cuerpo, reintentando una vez.
+//
+// El limite no es paranoia: el calendario del ano pesa 2 MB y una respuesta
+// rota podria ser mucho mayor. Y el reintento tampoco: el widget normalmente
+// responde en menos de dos segundos, pero se lo vio quedarse colgado mas de 25
+// y ahi la app se quedaba sin partidos. Un segundo intento cuesta nada al lado
+// de eso.
 func (c *Client) get(url string, max int64) ([]byte, error) {
+	var err error
+	for intento := 0; intento < 2; intento++ {
+		var body []byte
+		body, err = c.getUnaVez(url, max)
+		if err == nil {
+			return body, nil
+		}
+	}
+	return nil, err
+}
+
+func (c *Client) getUnaVez(url string, max int64) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -296,21 +329,83 @@ func (c *Client) Feed(nProximos int) (*Snapshot, error) {
 	}
 
 	snap := &Snapshot{Live: live, Next: next, Matches: []Match{}}
+	completo := live == nil
 
 	if live != nil {
+		// Los fallos de acá se registran y no se propagan: sin orden de juego la
+		// app sigue sirviendo el torneo y los próximos, que es mejor que un 503.
+		// Pero se registran SIEMPRE: un raspado de un sitio ajeno que falla en
+		// silencio se convierte en "la app no muestra nada" sin ninguna pista, y
+		// eso ya pasó una vez.
 		ref, err := c.oopRefFor(live.Slug)
-		if err == nil {
+		if err != nil {
+			log.Printf("[padel] no pude ubicar el orden de juego de %s: %v", live.Slug, err)
+		} else {
 			snap.Day, snap.Days = ref.day, ref.totalDay
-			if ms, err := c.orderOfPlay(ref); err == nil {
+			ms, err := c.orderOfPlay(live.Slug, ref)
+			switch {
+			case err != nil:
+				log.Printf("[padel] no pude bajar el orden de juego de %s dia %d: %v",
+					live.Slug, ref.day, err)
+			case len(ms) == 0:
+				// Pasa de verdad: el día siguiente responde "No schedule
+				// available" hasta que publican el orden de juego.
+				log.Printf("[padel] el orden de juego de %s dia %d vino vacio",
+					live.Slug, ref.day)
+			default:
 				snap.Matches = ms
+				completo = true
+				c.recordar(live.Slug, ref.day, ms)
+			}
+
+			// Un tirón del servidor de terceros no puede dejar la app sin
+			// partidos: se sirve el último orden de juego bueno del MISMO
+			// torneo y el MISMO día, que sigue diciendo quién juega contra
+			// quién. Es la misma decisión que toma el mixer del feed.
+			if len(snap.Matches) == 0 {
+				if ms := c.recordado(live.Slug, ref.day); len(ms) > 0 {
+					log.Printf("[padel] sirvo el orden de juego anterior de %s dia %d (%d partidos)",
+						live.Slug, ref.day, len(ms))
+					snap.Matches = ms
+				}
 			}
 		}
 	}
 
 	c.mu.Lock()
-	c.snap, c.snapAt = snap, c.now()
+	c.snap = snap
+	// Un snapshot al que le falta el orden de juego vale poco tiempo: así el
+	// próximo pedido reintenta en un minuto en vez de dejar la app sin partidos
+	// los cinco del TTL normal.
+	if completo {
+		c.snapAt = c.now()
+	} else {
+		c.snapAt = c.now().Add(-oopTTL + reintentoTTL)
+	}
 	c.mu.Unlock()
 	return snap, nil
+}
+
+// recordar y recordado guardan el último orden de juego bueno. La clave es
+// torneo + día: servir el de ayer sería mentir, servir el de hace cinco minutos
+// es apenas estar un poco desactualizado.
+func (c *Client) recordar(slug string, dia int, ms []Match) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.oopSlug, c.oopDia, c.oopAt = slug, dia, c.now()
+	c.oopCache = ms
+}
+
+func (c *Client) recordado(slug string, dia int) []Match {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.oopSlug != slug || c.oopDia != dia {
+		return nil
+	}
+	if c.now().Sub(c.oopAt) > oopMaxStale {
+		return nil
+	}
+	return c.oopCache
 }
 
 // oopRefFor saca de la pagina del torneo el id que usa el widget y en que dia
@@ -329,11 +424,22 @@ func (c *Client) oopRefFor(slug string) (oopRef, error) {
 		if err != nil {
 			return oopRef{}, err
 		}
+		// De la misma pagina sale el cuadro, y del cuadro los nombres enteros.
+		// Se guarda ahora porque despues no se vuelve a bajar: el id del widget
+		// no cambia durante el torneo.
+		nombres := ParseDraw(string(body))
+		log.Printf("[padel] %s: id %s, %d dias, %d nombres completos del cuadro",
+			slug, ref.id, ref.totalDay, len(nombres))
+
 		c.mu.Lock()
 		if c.oopIDs == nil {
 			c.oopIDs = map[string]oopRef{}
 		}
+		if c.nombres == nil {
+			c.nombres = map[string]map[string]string{}
+		}
 		c.oopIDs[slug] = ref
+		c.nombres[slug] = nombres
 		c.mu.Unlock()
 	}
 
@@ -358,12 +464,17 @@ func (c *Client) oopRefFor(slug string) (oopRef, error) {
 	return ref, nil
 }
 
-func (c *Client) orderOfPlay(ref oopRef) ([]Match, error) {
+func (c *Client) orderOfPlay(slug string, ref oopRef) ([]Match, error) {
 	url := fmt.Sprintf("https://widget.matchscorerlive.com/screen/oopbyday/FIP-%d-%s/%d?t=tol&culture=en",
 		ref.year, ref.id, ref.day)
 	body, err := c.get(url, maxPageBytes)
 	if err != nil {
 		return nil, err
 	}
-	return ParseOOP(string(body)), nil
+
+	c.mu.Lock()
+	nombres := c.nombres[slug]
+	c.mu.Unlock()
+
+	return ConNombresCompletos(ParseOOP(string(body)), nombres), nil
 }
