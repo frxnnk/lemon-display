@@ -248,9 +248,10 @@ importa:
 1. **Camino feliz.** Publicar una versión mayor, tocar el botón, ver el progreso
    y que el aparato vuelva con la versión nueva en la pantalla de configuración.
    **La 1.1.0 ya está publicada y es exactamente esta prueba**: el `.bin` y el
-   `version.txt` están en el VPS y `/v1/firmware` devuelve
-   `sha256 66b88b45…5c6f`, que coincide byte a byte con el binario local. Sólo
-   falta pulsación larga → «Buscar actualización».
+   `version.txt` están en el VPS, y el `sha256` que devuelve `/v1/firmware`
+   coincide con el `sha256sum` del binario local. Sólo falta pulsación larga →
+   «Buscar actualización». El log del proxy ahora anota el user agent, así que
+   se puede confirmar que el pedido salió del aparato y no de la PC.
 2. **Rollback a propósito.** Compilar un firmware con versión mayor y el SSID
    roto adrede, publicarlo, aplicarlo, y confirmar que el aparato arranca, no
    consigue red y **vuelve solo al anterior**.
