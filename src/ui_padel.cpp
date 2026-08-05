@@ -332,11 +332,15 @@ static void mostrarPartido(const PadelMatch* m, const PadelTour* live) {
     else      snprintf(s_cur.chip, sizeof(s_cur.chip), "PÁDEL");
     mayusculas(s_cur.chip);
 
+    // El primer renglón es el CUÁNDO: la hora sola no alcanza, porque el orden
+    // de juego es siempre de una fecha concreta y en pantalla no hay forma de
+    // saber cuál. La cancha bajó al pie, que es donde va el dónde.
     s_cur.jugando = m->state == 1;
-    const char* hora = m->time[0] ? m->time : "sin horario";
-    if (m->court[0]) snprintf(s_cur.cap1, sizeof(s_cur.cap1), "%s  ·  %s", hora, m->court);
-    else             snprintf(s_cur.cap1, sizeof(s_cur.cap1), "%s", hora);
-    if (s_cur.jugando) snprintf(s_cur.cap1, sizeof(s_cur.cap1), "EN JUEGO  ·  %s", m->court);
+    const char* cuando = s_cur.jugando ? "EN JUEGO"
+                                       : (m->time[0] ? m->time : "sin horario");
+    const char* fecha = padelFecha();
+    if (fecha[0]) snprintf(s_cur.cap1, sizeof(s_cur.cap1), "%s  ·  %s", fecha, cuando);
+    else          snprintf(s_cur.cap1, sizeof(s_cur.cap1), "%s", cuando);
 
     const char* gen = m->gender == 'F' ? "Femenino" : (m->gender == 'M' ? "Masculino" : "");
     if (m->round[0] && gen[0]) snprintf(s_cur.cap2, sizeof(s_cur.cap2), "%s  ·  %s", m->round, gen);
@@ -353,11 +357,16 @@ static void mostrarPartido(const PadelMatch* m, const PadelTour* live) {
     snprintf(s_cur.scoreB, sizeof(s_cur.scoreB), "%s", m->scoreB);
     if (m->state == 2) s_cur.ganador = ganador(m->scoreA, m->scoreB);
 
-    if (live && live->days > 0) {
-        snprintf(s_cur.pie, sizeof(s_cur.pie), "día %u de %u  ·  %s",
-                 live->day, live->days, live->city);
-    } else if (live) {
-        snprintf(s_cur.pie, sizeof(s_cur.pie), "%s", live->city);
+    // Pie: dónde. La ciudad ya la dice el chip del torneo ("LONDON P1"), así
+    // que acá va la cancha, que es lo único que no está en ningún otro lado.
+    const bool hayDia = live && live->days > 0;
+    if (m->court[0] && hayDia) {
+        snprintf(s_cur.pie, sizeof(s_cur.pie), "%s  ·  día %u de %u",
+                 m->court, live->day, live->days);
+    } else if (m->court[0]) {
+        snprintf(s_cur.pie, sizeof(s_cur.pie), "%s", m->court);
+    } else if (hayDia) {
+        snprintf(s_cur.pie, sizeof(s_cur.pie), "día %u de %u", live->day, live->days);
     }
 
     arrancar(MODO_PARTIDO);

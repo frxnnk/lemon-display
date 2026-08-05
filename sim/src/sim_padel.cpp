@@ -21,12 +21,14 @@ static PadelTour  _tours[PADEL_MAX_TOURS];
 static uint8_t    _tourCount = 0;
 static PadelTour  _live;
 static bool       _hasLive = false;
+static char       _fecha[24] = {0};
 
 uint8_t           padelMatchCount() { return _matchCount; }
 uint8_t           padelTourCount() { return _tourCount; }
 const PadelMatch* padelMatch(uint8_t i) { return i < _matchCount ? &_matches[i] : nullptr; }
 const PadelTour*  padelTour(uint8_t i) { return i < _tourCount ? &_tours[i] : nullptr; }
 const PadelTour*  padelLive() { return _hasLive ? &_live : nullptr; }
+const char*       padelFecha() { return _fecha; }
 
 uint8_t padelScreenCount() {
     return (uint8_t)((_hasLive ? 1 : 0) + _matchCount + _tourCount);
@@ -71,6 +73,7 @@ PadelResult padelFetch() {
     _matchCount = 0;
     _tourCount = 0;
     _hasLive = false;
+    _fecha[0] = '\0';
 
     char line[1024];
     while (std::fgets(line, sizeof(line), f)) {
@@ -86,6 +89,7 @@ PadelResult padelFetch() {
             _live.live = true;
             _live.day = (uint8_t)std::strtoul(p[7].c_str(), nullptr, 10);
             _live.days = (uint8_t)std::strtoul(p[8].c_str(), nullptr, 10);
+            if (p.size() >= 10) setField(_fecha, sizeof(_fecha), p[9]);
             _hasLive = _live.name[0] != '\0';
         } else if (p[0] == "T" && p.size() >= 7 && _tourCount < PADEL_MAX_TOURS) {
             leerTorneo(_tours[_tourCount], p);

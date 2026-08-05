@@ -271,3 +271,27 @@ func TestConNombresCompletosSinDiccionario(t *testing.T) {
 		t.Errorf("sin cuadro no se toca nada: %q", out[0].A1)
 	}
 }
+
+// La hora sola no dice cuando: el orden de juego es siempre de una fecha
+// concreta, y la pestana del widget es el unico lugar donde figura.
+func TestParseOOPDays(t *testing.T) {
+	d := ParseOOPDays(leer(t, "oop.html"))
+	if len(d) != 8 {
+		t.Fatalf("dias = %d, esperaba los 8 del torneo (%v)", len(d), d)
+	}
+	if d[1] != "dom 2 ago" {
+		t.Errorf("dia 1 = %q, esperaba \"dom 2 ago\"", d[1])
+	}
+	if d[4] != "mié 5 ago" {
+		t.Errorf("dia 4 = %q, esperaba \"mié 5 ago\"", d[4])
+	}
+	if d[8] != "dom 9 ago" {
+		t.Errorf("dia 8 = %q, esperaba \"dom 9 ago\"", d[8])
+	}
+}
+
+func TestParseOOPDaysSinPestanas(t *testing.T) {
+	if d := ParseOOPDays("<html>nada</html>"); len(d) != 0 {
+		t.Errorf("esperaba vacio, salio %v", d)
+	}
+}

@@ -15,12 +15,14 @@ static PadelTour  _tours[PADEL_MAX_TOURS];
 static uint8_t    _tourCount = 0;
 static PadelTour  _live;
 static bool       _hasLive = false;
+static char       _fecha[24] = {0};
 
 uint8_t           padelMatchCount() { return _matchCount; }
 uint8_t           padelTourCount() { return _tourCount; }
 const PadelMatch* padelMatch(uint8_t i) { return i < _matchCount ? &_matches[i] : nullptr; }
 const PadelTour*  padelTour(uint8_t i) { return i < _tourCount ? &_tours[i] : nullptr; }
 const PadelTour*  padelLive() { return _hasLive ? &_live : nullptr; }
+const char*       padelFecha() { return _fecha; }
 
 uint8_t padelScreenCount() {
     return (uint8_t)((_hasLive ? 1 : 0) + _matchCount + _tourCount);
@@ -87,6 +89,8 @@ PadelResult padelFetch() {
         Serial.printf("[Padel] JSON invalido: %s\n", err.c_str());
         return _matchCount || _tourCount ? PADEL_STALE_CACHE : PADEL_FAILED;
     }
+
+    copyField(_fecha, sizeof(_fecha), doc["fecha"] | "");
 
     _hasLive = false;
     if (JsonObjectConst t = doc["torneo"].as<JsonObjectConst>()) {
