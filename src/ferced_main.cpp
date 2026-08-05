@@ -177,7 +177,10 @@ static void showApp() {
 static void advance() {
     if (s_app == APP_PADEL) {
         const uint8_t total = padelScreenCount();
-        if (total == 0) { refreshPadel(); showPadel(); s_lastRotate = millis(); return; }
+        // Sin contenido, un toque es un reintento. refreshPadel() ya repinta
+        // cuando trae algo: volver a dibujar acá costaría otros 99 ms para
+        // mostrar lo mismo.
+        if (total == 0) { if (!refreshPadel()) showPadel(); s_lastRotate = millis(); return; }
         s_padelIndex = (s_padelIndex + 1) % total;
     } else {
         const uint8_t total = feedCount();
@@ -191,12 +194,17 @@ static void advance() {
 static void enterApp(AppId app) {
     s_app = app;
     s_phase = PHASE_RUNNING;
+    s_lastRotate = millis();
 
     // La primera entrada a padel baja los datos: no tiene sentido pedirlos al
     // arrancar el aparato si el usuario nunca abre la app.
+    //
+    // Ojo con repintar de más: cada pantalla completa cuesta ~99 ms, así que
+    // encadenar showPadel() + refreshPadel() + showApp() se ve como un
+    // parpadeo triple. refreshPadel() ya dibuja cuando trae contenido.
     if (app == APP_PADEL && padelScreenCount() == 0) {
-        showPadel();               // "Buscando el circuito."
-        refreshPadel();
+        showPadel();                    // "Buscando el circuito", mientras bloquea el GET
+        if (refreshPadel()) return;
     }
     showApp();
     s_lastRotate = millis();
@@ -238,10 +246,11 @@ static void enterLauncher() {
 
 static void enterRunning() {
     s_phase = PHASE_RUNNING;
+    s_app = APP_NOTICIAS;
     timeSetup();
     uiFercedShowStatus("Conectado", "Buscando contenido.");
+    // refreshFeed() repinta solo, con contenido o con el aviso de que no llegó.
     refreshFeed();
-    showApp();
     s_lastRotate = millis();
 }
 
