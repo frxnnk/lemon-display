@@ -7,10 +7,11 @@ no se deducen del código.
 
 ## Si venís a retomar: las tres cosas que importan hoy
 
-1. **El OTA está construido pero NO verificado en el aparato.** Todo el camino
-   —endpoints, descarga con CA validada, botón, red de rollback— está escrito,
-   compilado y desplegado. Nunca corrió una actualización de verdad. La prueba
-   que falta, y que **no es opcional**, está en "Verificar el OTA".
+1. **La 1.1.0 está publicada y espera el botón.** Es la primera versión con dos
+   apps (noticias y pádel) y selector. El binario y el `version.txt` ya están en
+   el VPS, y `/v1/firmware` devuelve el sha256 correcto. **El OTA nunca corrió
+   de verdad**: esta es su primera prueba real, y hay que dispararla a mano
+   desde la pantalla de configuración. Ver "El OTA" y "Verificar el OTA".
 2. **La fuente de X está caída por cuota agotada.** El feed sirve sólo RSS. Ver
    "La cuota de Sorsa".
 3. **El USB de este aparato es poco confiable.** Ver las trampas del hardware
@@ -21,8 +22,9 @@ no se deducen del código.
 ## Qué es
 
 Una Lemon Box (MaTouch ESP32-S3 4.0", 480x480 táctil) con firmware propio de
-Ferced que muestra un feed rotativo de titulares, uno cada 17 segundos, con
-miniatura y animación de entrada.
+Ferced. Desde la 1.1.0 tiene **dos apps**: noticias (un titular cada 17 s, con
+miniatura) y pádel (el orden de juego del circuito profesional). Se pasa de una
+a otra deslizando, o desde un selector.
 
 Tres piezas:
 
@@ -49,21 +51,39 @@ automático, corriendo como `NT AUTHORITY\LocalService`, escuchando **sólo en
 **Una fuente de X por búsqueda**, hoy **caída** (ver "La cuota de Sorsa"). Cuando
 anda aporta ~4 de los 20 ítems, todos con imagen real del tweet.
 
+**App de pádel**, en `/v1/padel`. Ver "La app de pádel".
+
 **OTA por WiFi**, desplegado y sin verificar en el aparato. El proxy sirve
 `/v1/firmware` y `/v1/firmware/bin` desde `C:\ferced\firmware`, y el aparato
 tiene el botón «Buscar actualización». Ver "El OTA".
 
 **Firmware** con animación escalonada, miniaturas de 64x64 y reconexión
-automática de WiFi. 16,9% de flash, 19% de RAM. Animación a 35,5 fps medidos
+automática de WiFi. 18,3% de flash, 20,7% de RAM. Animación a 35,5 fps medidos
 sobre un techo de panel de 42.
+
+**Los gestos**, que ahora son cinco:
+
+| Gesto | Qué hace |
+|---|---|
+| Toque | siguiente ítem dentro de la app |
+| Deslizar ← o → | cambiar de app |
+| Deslizar ↑ | abrir el selector de apps |
+| Deslizar ↓ (en el selector) | cerrarlo sin cambiar |
+| Pulsación larga | pantalla de configuración |
+
+**Selector de apps**: una tarjeta por app, con monograma, nombre y estado en
+vivo («20 titulares», «LONDON P1 · día 4 de 8»). La app corriendo se dibuja en
+negativo. **No se anima, a propósito**: las tarjetas son altas y la banda sucia
+terminaría siendo la pantalla entera, o sea ~99 ms por frame. Se dibuja de una
+sola vez, como la de configuración.
 
 **Pantalla de configuración**: se abre con un **long press** en cualquier parte.
 Muestra versión, commit y fecha de compilación —inyectados al compilar por
 `tools/inject_version.py`, con sufijo `-dirty` si el árbol estaba sucio—, más
-red, IP, host del feed, uptime, fps e ítems en el pool. Trae tres botones:
-actualizar feed, cerrar y reaparear WiFi (este último borra las credenciales
-**sin confirmación**, por decisión explícita). Diseño y plan en
-`docs/plans/2026-08-03-pantalla-configuracion*.md`.
+red, IP, host del feed, uptime, fps e ítems en el pool. Trae cuatro botones:
+actualizar feed, buscar actualización, cerrar y reaparear WiFi (este último
+borra las credenciales **sin confirmación**, por decisión explícita). Diseño y
+plan en `docs/plans/2026-08-03-pantalla-configuracion*.md`.
 
 Es la respuesta rápida a "¿la cajita tiene lo último?": comparás el commit de la
 pantalla contra `git log --oneline -1`.
@@ -81,12 +101,32 @@ sobre SDL, reproduciendo el costo de frame medido en el aparato.
 cd sim
 python tools\fetch_fixture.py     # baja contenido real del proxy, una vez
 .\shot.ps1 -Advance 1             # compila, corre, captura item 1
+.\shot.ps1 -Padel -Advance 1      # pádel: 0 es el torneo, 1.. los partidos
+.\shot.ps1 -Launcher              # el selector de apps
+.\shot.ps1 -Config                # la pantalla de configuración
 ```
 
-La captura queda en `sim/build/shot.png`. **Mirala siempre**: dos bugs serios
-se encontraron a simple vista y habrían costado horas en el aparato.
+La captura queda en `sim/build/shot.png` (o en `-Out loquesea.png`). **Mirala
+siempre**: cuatro bugs serios se encontraron a simple vista y habrían costado
+horas en el aparato. Los dos últimos fueron tipográficos: la «í» de «día» y el
+punto medio del chip salían como glifos rotos porque caían fuera del rango de
+la fuente.
 
 Ítems con imagen en el fixture: los índices impares (1, 3, 5, …).
+
+El fixture de pádel se genera aparte, con datos del circuito real:
+
+```powershell
+cd proxy
+go run ./cmd/padelcheck -fixture ../sim/data/padel.txt
+```
+
+Que sean nombres de verdad importa: la pantalla se rompe justamente con los
+apellidos largos («S. Pineda Cabello»), y un fixture inventado los escondería.
+Para probar un partido **ya jugado** —otro camino de dibujo, con ganador,
+perdedor en gris y resultado a la derecha— hay que insertar una línea a mano
+como primer `M|`: temprano a la mañana en Londres todavía no se jugó ninguno, y
+sólo se cargan los primeros `PADEL_MAX_MATCHES` del archivo.
 
 ### Compilar y flashear
 
@@ -207,6 +247,10 @@ importa:
 
 1. **Camino feliz.** Publicar una versión mayor, tocar el botón, ver el progreso
    y que el aparato vuelva con la versión nueva en la pantalla de configuración.
+   **La 1.1.0 ya está publicada y es exactamente esta prueba**: el `.bin` y el
+   `version.txt` están en el VPS y `/v1/firmware` devuelve
+   `sha256 66b88b45…5c6f`, que coincide byte a byte con el binario local. Sólo
+   falta pulsación larga → «Buscar actualización».
 2. **Rollback a propósito.** Compilar un firmware con versión mayor y el SSID
    roto adrede, publicarlo, aplicarlo, y confirmar que el aparato arranca, no
    consigue red y **vuelve solo al anterior**.
@@ -215,6 +259,57 @@ importa:
 rollback deja el aparato sin ninguna vía de entrada salvo el USB, que en este
 aparato es justamente lo poco confiable. Sin esa prueba, la red de seguridad es
 una suposición.
+
+### La app de pádel
+
+Muestra el circuito profesional: el torneo que se está jugando, su orden de
+juego del día —hora, cancha, fase, las dos parejas, cabeza de serie y
+resultado— y los próximos torneos con cuenta regresiva. Una pantalla por
+partido, con el mismo ritmo de 17 s que las noticias.
+
+**Las dos fuentes son públicas y vienen renderizadas del lado del servidor**, así
+que no hace falta clave ni ejecutar JavaScript. Eso no fue suerte: se probaron
+antes las alternativas y ninguna servía. Sofascore devuelve 403 a cualquier
+cliente que no sea un navegador (le mira la huella TLS, no el User-Agent);
+premierpadel.com no tiene calendario en `/calendar`; padelapi.org tiene plan
+gratuito pero exige crear una cuenta. El camino que quedó:
+
+```
+padelfip.com/es/calendario/?events-year=YYYY   449 torneos del año, en HTML
+padelfip.com/es/eventos/<slug>/                 la página del torneo
+  └─ trae get-oop-data.php?year=&id=&day=&totalday=
+       └─ devuelve JSON con usedDay y la URL exacta del widget
+widget.matchscorerlive.com/screen/oopbyday/FIP-<año>-<id>/<día>
+                                                el orden de juego, en HTML
+```
+
+**El id del widget no se deduce del slug**: hay que leerlo de la página del
+torneo. Y el `day` del HTML puede ser de ayer si la página está cacheada, por
+eso se consulta el endpoint PHP, que devuelve el `usedDay` real.
+
+`matchscorerlive` es el proveedor que usa la propia FIP para sus resultados en
+vivo, así que es el mismo dato que muestra el sitio oficial.
+
+**Se filtra a "las mejores ligas"**: Premier Padel entero (Major, Master Finals,
+P1, P2) más platinum y gold del Cupra FIP Tour. Los promises, bronze y silver
+son ~380 de los 449 torneos del año y taparían al circuito grande. Se cambia
+con `PADEL_CATS` en el `.bat`, sin tocar código. `PADEL=0` apaga la app.
+
+**World Padel Tour ya no existe** como circuito separado: se fusionó con Premier
+Padel en 2024. Lo que hoy es "el mejor pádel" está todo en el calendario de la
+FIP, que es justamente el que se lee.
+
+TTL propios: el calendario 6 horas (pesa 2 MB y cambia de mes en mes), el orden
+de juego 5 minutos. Y el aparato **sólo pide pádel con la app abierta**: fuera
+de ella nadie mira el orden de juego, y son dos sitios ajenos los que pagan el
+pedido.
+
+**La trampa que costó el rato**: el widget escribe `class="ml-2  line-thin"`,
+con **dos espacios**. El patrón que buscaba un espacio no enganchaba nada y los
+partidos se perdían enteros y en silencio. Peor: la inspección previa había
+colapsado el whitespace para leerla más cómoda, así que el bug estaba escondido
+en el instrumento. Todos los patrones matchean las clases por contenido
+(`[^"]*line-thin[^"]*`) justamente por eso.
 
 ### La cuota de Sorsa
 
@@ -690,6 +785,20 @@ desincroniza y el simulador empieza a mentir.
 **Medir antes de optimizar.** El paso "slots en secuencia" empeoró el framerate
 y sólo se supo por la telemetría. Sin medir se habría quedado el bug adentro.
 
+**Un botón que "no hace nada" puede estar haciendo todo.** El 2026-08-05 el
+botón «Actualizar feed» parecía roto. El log del proxy mostraba que el pedido
+salía y se respondía con 20 ítems: lo que fallaba era el efecto, no la acción.
+El mixer tiene un TTL de 10 minutos, así que dentro de esa ventana devolvía
+exactamente el mismo pool, y el firmware volvía siempre al índice 0 — o sea, al
+mismo titular que ya estaba en pantalla. Encima el GET bloquea el loop, así que
+la pantalla de configuración se quedaba congelada sin decir nada.
+
+Tres arreglos, y ninguno era "arreglar el botón": `fresh=1` para saltear el TTL
+(con piso de 20 s), la franja de estado contando qué pasó, y quedarse en la
+pantalla en vez de salir corriendo. **Antes de buscar por qué algo no anda,
+verificá si de verdad no anda**: acá el mecanismo estaba perfecto y lo roto era
+el resultado observable.
+
 **Verificá que el instrumento distinga lo que decís que distingue.** El 2026-08-05
 se intentó diagnosticar el botón del OTA contando pedidos en el log del proxy,
 sin notar que esa línea no anota el user agent y que el aparato y la PC comparten
@@ -713,9 +822,15 @@ llega — en los dos casos, andá a buscar el dato crudo.
 
 | Ruta | Qué es |
 |---|---|
-| `src/ui_ferced.cpp` | Toda la UI y la animación |
-| `src/ferced_main.cpp` | Máquina de estados: provisioning, WiFi, rotación |
+| `src/ui_anim.cpp` | Motor compartido: sprite, bandas, VSync, telemetría |
+| `src/ui_ferced.cpp` | La app de noticias |
+| `src/ui_padel.cpp` | La app de pádel |
+| `src/ui_launcher.cpp` | El selector de apps |
+| `src/ferced_main.cpp` | Máquina de estados: provisioning, WiFi, apps, gestos |
 | `src/feed_client.cpp` | Cliente HTTP del feed y las imágenes |
+| `src/padel_client.cpp` | Cliente HTTP de `/v1/padel` |
+| `proxy/internal/padel/` | Raspado del calendario FIP y del orden de juego |
+| `proxy/cmd/padelcheck/` | Prueba a mano contra los sitios reales, y el fixture del simulador |
 | `proxy/internal/` | Fuentes, mezclador, normalizador, imágenes, guard |
 | `sim/shot.ps1` | Compilar + correr + capturar, un comando |
 | `docs/plans/2026-08-02-ferced-display-design.md` | Diseño validado |
