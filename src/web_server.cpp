@@ -1,8 +1,11 @@
-#include "todo_server.h"
+#include "web_server.h"
+#include "notif_store.h"
 #include "todo_store.h"
 
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
+#include <ESPmDNS.h>
+#include <ctime>
 #include <pgmspace.h>
 
 static AsyncWebServer* server = nullptr;
@@ -164,7 +167,7 @@ static int indiceDe(AsyncWebServerRequest* req) {
 
 // ── API ──────────────────────────────────────────────────────────────────────
 
-void todoServerStart() {
+void webServerStart() {
     if (server) return;
 
     server = new AsyncWebServer(80);
@@ -221,15 +224,74 @@ void todoServerStart() {
         responderLista(req);
     });
 
+    // ── Avisos ───────────────────────────────────────────────────────────────
+    // La entrada que usan los agentes. A propósito NO exige el encabezado
+    // X-Ferced: quien la va a llamar es un hook de una sola línea, y pedirle una
+    // bandera de más a algo que se instala una vez y se olvida es fricción
+    // gratis. El riesgo de que una web del navegador mande un aviso a la caja es
+    // que aparezca un cartel; el de que borre la lista de tareas, no.
+    //
+    //   curl -X POST "http://ferced.local/api/notify?src=claude&t=Termino"
+    server->on("/api/notify", HTTP_POST, [](AsyncWebServerRequest* req) {
+        const AsyncWebParameter* t = req->getParam("t");
+        if (!t) t = req->getParam("t", true);
+        if (!t || t->value().length() == 0) {
+            req->send(400, "text/plain", "falta t (el titulo del aviso)");
+            return;
+        }
+        const AsyncWebParameter* s = req->getParam("src");
+        if (!s) s = req->getParam("src", true);
+        const AsyncWebParameter* b = req->getParam("b");
+        if (!b) b = req->getParam("b", true);
+
+        // El reloj puede no estar sincronizado todavía; notifPush() lo tolera.
+        const uint32_t epoch = (uint32_t)time(nullptr);
+        if (!notifPush(s ? s->value().c_str() : "",
+                       t->value().c_str(),
+                       b ? b->value().c_str() : "",
+                       epoch > 1600000000UL ? epoch : 0)) {
+            req->send(400, "text/plain", "el titulo quedo vacio");
+            return;
+        }
+        req->send(200, "text/plain", "ok");
+    });
+
+    // GET además de POST: un `curl` sin banderas, o un navegador, o cualquier
+    // cosa que sólo sepa pedir una URL. La barrera de entrada tiene que ser lo
+    // más baja posible.
+    server->on("/api/notify", HTTP_GET, [](AsyncWebServerRequest* req) {
+        const AsyncWebParameter* t = req->getParam("t");
+        if (!t || t->value().length() == 0) {
+            req->send(400, "text/plain", "falta t (el titulo del aviso)");
+            return;
+        }
+        const AsyncWebParameter* s = req->getParam("src");
+        const AsyncWebParameter* b = req->getParam("b");
+        const uint32_t epoch = (uint32_t)time(nullptr);
+        notifPush(s ? s->value().c_str() : "", t->value().c_str(),
+                  b ? b->value().c_str() : "",
+                  epoch > 1600000000UL ? epoch : 0);
+        req->send(200, "text/plain", "ok");
+    });
+
     server->onNotFound([](AsyncWebServerRequest* req) {
         req->send(404, "text/plain", "no hay nada aca");
     });
 
     server->begin();
-    Serial.println("[Todo] editor en el puerto 80");
+
+    // mDNS para que la dirección no dependa de la IP que reparta el router. Un
+    // hook que se instala una vez y se olvida no puede romperse porque el DHCP
+    // cambió de humor.
+    if (MDNS.begin("ferced")) {
+        MDNS.addService("http", "tcp", 80);
+        Serial.println("[Web] servidor en el puerto 80, http://ferced.local/");
+    } else {
+        Serial.println("[Web] servidor en el puerto 80 (mDNS no arrancó; usar la IP)");
+    }
 }
 
-void todoServerStop() {
+void webServerStop() {
     if (!server) return;
     server->end();
     delete server;
@@ -237,4 +299,4 @@ void todoServerStop() {
     Serial.println("[Todo] editor apagado");
 }
 
-bool todoServerRunning() { return server != nullptr; }
+bool webServerRunning() { return server != nullptr; }

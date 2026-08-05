@@ -5,14 +5,19 @@
 #include "apps.h"
 #include "feed_client.h"
 #include "padel_client.h"
+#include "notif_store.h"
 #include "todo_store.h"
 #include "ui_config.h"
 #include "ui_ferced.h"
 #include "ui_launcher.h"
+#include "ui_notif.h"
 #include "ui_padel.h"
 #include "ui_todo.h"
 
 #include <SDL2/SDL.h>
+
+// Vive en sim_notif.cpp: carga el fixture de avisos.
+void simNotifLoad();
 
 #include <chrono>
 #include <cstdio>
@@ -38,6 +43,8 @@ int      g_progreso   = -1;      // 0..100: congela la franja de estado del OTA
 bool     g_padel      = false;   // arrancar en la app de padel
 bool     g_launcher   = false;   // arrancar en el selector de apps
 bool     g_tareas     = false;   // arrancar en la lista de tareas
+bool     g_avisos     = false;   // arrancar en la lista de avisos
+bool     g_aviso      = false;   // la tarjeta que interrumpe
 
 // Captura de una transición a mitad de camino: muestra el ítem --item, deja que
 // termine de entrar, pasa al --hacia y congela el dibujo a los --congelar ms.
@@ -95,13 +102,25 @@ static void mostrarLauncher() {
     apps[APP_TAREAS].inicial = 'T';
     const uint8_t pend = todoPending();
     if (todoCount() == 0) {
-        std::snprintf(apps[APP_TAREAS].estado, sizeof(apps[APP_TAREAS].estado),
-                      "sin tareas  ·  192.168.1.41");
+        std::snprintf(apps[APP_TAREAS].estado, sizeof(apps[APP_TAREAS].estado), "sin tareas");
     } else if (pend == 0) {
         std::snprintf(apps[APP_TAREAS].estado, sizeof(apps[APP_TAREAS].estado), "todo hecho");
     } else {
         std::snprintf(apps[APP_TAREAS].estado, sizeof(apps[APP_TAREAS].estado),
                       "%u de %u pendiente%s", pend, todoCount(), pend == 1 ? "" : "s");
+    }
+
+    apps[APP_AVISOS].nombre = "AVISOS";
+    apps[APP_AVISOS].inicial = 'A';
+    const uint8_t sinLeer = notifSinLeer();
+    if (notifCount() == 0) {
+        std::snprintf(apps[APP_AVISOS].estado, sizeof(apps[APP_AVISOS].estado), "sin avisos");
+    } else if (sinLeer == 0) {
+        std::snprintf(apps[APP_AVISOS].estado, sizeof(apps[APP_AVISOS].estado),
+                      "%u, todos leídos", notifCount());
+    } else {
+        std::snprintf(apps[APP_AVISOS].estado, sizeof(apps[APP_AVISOS].estado),
+                      "%u sin leer", sinLeer);
     }
 
     s_estatica = true;
@@ -115,6 +134,11 @@ static void show() {
         // se para el tick para que la animación no la repinte encima.
         s_estatica = true;
         uiTodoDraw("192.168.1.41");
+        return;
+    }
+    if (s_app == APP_AVISOS) {
+        s_estatica = true;
+        uiNotifDrawLista();
         return;
     }
     if (s_app == APP_PADEL) {
@@ -138,7 +162,7 @@ static void show() {
 }
 
 static void advance(int delta) {
-    if (s_app == APP_TAREAS) return;   // una lista no rota
+    if (s_app == APP_TAREAS || s_app == APP_AVISOS) return;   // una lista no rota
     if (s_app == APP_PADEL) {
         const uint8_t total = padelScreenCount();
         if (total == 0) return;
@@ -156,6 +180,7 @@ static const char* nombreApp(uint8_t a) {
     switch (a) {
         case APP_PADEL:  return "padel";
         case APP_TAREAS: return "tareas";
+        case APP_AVISOS: return "avisos";
         default:         return "noticias";
     }
 }
@@ -170,6 +195,7 @@ static void cambiarApp() {
 static void applyArgs() {
     if (g_padel)  s_app = APP_PADEL;
     if (g_tareas) s_app = APP_TAREAS;
+    if (g_avisos) s_app = APP_AVISOS;
     if (g_startIndex > 0) {
         if (s_app == APP_PADEL) {
             const uint8_t total = padelScreenCount();
@@ -216,11 +242,13 @@ void setup() {
     uiPadelSetup();
     uiLauncherSetup();
     uiTodoSetup();
+    uiNotifSetup();
     banner();
 
     feedFetch();
     padelFetch();
     todoLoad();
+    simNotifLoad();
     applyArgs();
     show();
     s_lastRotate = millisNow();
@@ -242,6 +270,10 @@ void setup() {
         std::printf("  transicion congelada a los %d ms\n", g_congelar > 0 ? g_congelar : 250);
     }
 
+    if (g_aviso) {
+        s_estatica = true;
+        uiNotifDrawCard(notifPendiente(), 0.62f);
+    }
     if (g_config) mostrarConfig();
     if (g_launcher) mostrarLauncher();
 }

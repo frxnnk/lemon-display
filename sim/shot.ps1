@@ -15,6 +15,8 @@ param(
     [switch]$Padel,
     [switch]$Launcher,
     [switch]$Tareas,
+    [switch]$Avisos,
+    [switch]$Aviso,
     [int]$Hacia = -1,
     [int]$Congelar = -1,
     [int]$Progreso = -1,
@@ -39,6 +41,8 @@ if (-not $NoBuild) {
 $simArgs = @("--still", "--item=$Advance")
 if ($Padel)    { $simArgs += "--padel" }
 if ($Tareas)   { $simArgs += "--tareas" }
+if ($Avisos)   { $simArgs += "--avisos" }
+if ($Aviso)    { $simArgs += "--aviso" }
 if ($Hacia -ge 0)    { $simArgs += "--hacia=$Hacia" }
 if ($Congelar -ge 0) { $simArgs += "--congelar=$Congelar" }
 if ($Launcher) { $simArgs += "--launcher" }

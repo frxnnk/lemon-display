@@ -10,18 +10,20 @@
 #include "display_manager.h"
 #include "feed_client.h"
 #include "ferced_config.h"
+#include "notif_store.h"
 #include "nvs_storage.h"
 #include "ota_ferced.h"
 #include "padel_client.h"
 #include "time_manager.h"
-#include "todo_server.h"
 #include "todo_store.h"
 #include "touch_manager.h"
 #include "ui_config.h"
 #include "ui_ferced.h"
 #include "ui_launcher.h"
+#include "ui_notif.h"
 #include "ui_padel.h"
 #include "ui_todo.h"
+#include "web_server.h"
 #include "wifi_manager.h"
 #include "wifi_provision.h"
 
@@ -31,6 +33,7 @@ enum AppPhase : uint8_t {
     PHASE_RUNNING,
     PHASE_CONFIG,
     PHASE_LAUNCHER,
+    PHASE_AVISO,
 };
 
 static AppPhase s_phase = PHASE_PROVISION;
@@ -55,6 +58,14 @@ static bool     s_padelTried = false;
 // mismo panel es una carrera— se compara la revisión y repinta el loop.
 static uint32_t s_todoRev = 0;
 
+// -- Estado de avisos --
+// Cuánto queda un aviso en pantalla antes de cerrarse solo. Un cuarto de minuto
+// alcanza para levantar la vista y leerlo, y no tanto como para tapar la
+// pantalla si uno no está.
+#define AVISO_MS 25000UL
+static uint32_t s_notifRev = 0;
+static uint32_t s_avisoDesde = 0;
+
 #define WIFI_RETRY_MIN_MS  5000UL
 #define WIFI_RETRY_MAX_MS 60000UL
 static uint32_t s_wifiRetryMs = WIFI_RETRY_MIN_MS;
@@ -70,7 +81,7 @@ static uint32_t nowEpoch() {
 static void startProvisioning() {
     s_phase = PHASE_PROVISION;
     // El portal cautivo usa el mismo puerto 80 que el editor de tareas.
-    todoServerStop();
+    webServerStop();
     provisionStart();
     provisionDrawQR();
 }
@@ -185,20 +196,40 @@ static void showTodo() {
     uiTodoDraw(wifiConnected() ? wifiIP().c_str() : "sin red");
 }
 
+// -- Avisos ------------------------------------------------------------------
+
+static void showAvisos() {
+    // Estar mirando la lista ya es haberlos leído: si no, al salir volvería a
+    // interrumpir con el que se acaba de leer.
+    notifMarcarTodosLeidos();
+    s_notifRev = notifRevision();
+    uiNotifDrawLista();
+}
+
+// El aviso interrumpe lo que haya en pantalla. Es el punto de un aviso: si hay
+// que ir a buscarlo, no avisó nada.
+static void entrarAviso() {
+    const Notif* n = notifPendiente();
+    if (!n) return;
+    s_phase = PHASE_AVISO;
+    s_avisoDesde = millis();
+    uiNotifDrawCard(n, 1.0f);
+}
+
 // -- Apps --------------------------------------------------------------------
 
 static void showApp() {
     switch (s_app) {
         case APP_PADEL:  showPadel(); break;
         case APP_TAREAS: showTodo();  break;
+        case APP_AVISOS: showAvisos(); break;
         default:         showNoticias(); break;
     }
 }
 
 static void advance() {
-    // Las tareas no rotan: son una lista, no un carrusel. Un toque marca la
-    // tarea que se tocó, que es lo que uno espera de una pantalla táctil.
-    if (s_app == APP_TAREAS) return;
+    // Las tareas y los avisos no rotan: son listas, no carruseles.
+    if (s_app == APP_TAREAS || s_app == APP_AVISOS) return;
 
     if (s_app == APP_PADEL) {
         const uint8_t total = padelScreenCount();
@@ -269,13 +300,25 @@ static void llenarApps(AppInfo out[APP_COUNT]) {
     out[APP_TAREAS].inicial = 'T';
     const uint8_t pend = todoPending();
     if (todoCount() == 0) {
-        snprintf(out[APP_TAREAS].estado, sizeof(out[APP_TAREAS].estado),
-                 "sin tareas  ·  %s", wifiConnected() ? wifiIP().c_str() : "sin red");
+        snprintf(out[APP_TAREAS].estado, sizeof(out[APP_TAREAS].estado), "sin tareas");
     } else if (pend == 0) {
         snprintf(out[APP_TAREAS].estado, sizeof(out[APP_TAREAS].estado), "todo hecho");
     } else {
         snprintf(out[APP_TAREAS].estado, sizeof(out[APP_TAREAS].estado),
                  "%u de %u pendiente%s", pend, todoCount(), pend == 1 ? "" : "s");
+    }
+
+    out[APP_AVISOS].nombre = "AVISOS";
+    out[APP_AVISOS].inicial = 'A';
+    const uint8_t sinLeer = notifSinLeer();
+    if (notifCount() == 0) {
+        snprintf(out[APP_AVISOS].estado, sizeof(out[APP_AVISOS].estado), "sin avisos");
+    } else if (sinLeer == 0) {
+        snprintf(out[APP_AVISOS].estado, sizeof(out[APP_AVISOS].estado),
+                 "%u, todos leídos", notifCount());
+    } else {
+        snprintf(out[APP_AVISOS].estado, sizeof(out[APP_AVISOS].estado),
+                 "%u sin leer", sinLeer);
     }
 }
 
@@ -293,7 +336,7 @@ static void enterRunning() {
     // El editor de tareas queda levantado siempre, no sólo con la app abierta:
     // la gracia es poder anotar algo desde el teléfono mientras la pantalla
     // muestra otra cosa.
-    todoServerStart();
+    webServerStart();
     uiFercedShowStatus("Conectado", "Buscando contenido.");
     // refreshFeed() repinta solo, con contenido o con el aviso de que no llegó.
     refreshFeed();
@@ -406,6 +449,7 @@ void setup() {
     uiPadelSetup();
     uiLauncherSetup();
     uiTodoSetup();
+    uiNotifSetup();
     todoLoad();
 
     if (!nvsHasWifi()) {
@@ -517,6 +561,41 @@ void loop() {
         return;
     }
 
+    if (s_phase == PHASE_AVISO) {
+        // Cualquier gesto lo cierra: cerrarlo ES la respuesta al gesto, así que
+        // no se encadena con otra acción. Tocar para cambiar de app justo cuando
+        // aparece un cartel sería hacer dos cosas de un toque.
+        const TouchEvent ev = touchLoop();
+        const uint32_t pasado = now - s_avisoDesde;
+
+        if (ev.gesture != TOUCH_NONE || pasado >= AVISO_MS) {
+            notifMarcarTodosLeidos();
+            s_notifRev = notifRevision();
+            s_phase = PHASE_RUNNING;
+            showApp();
+            s_lastRotate = millis();
+            return;
+        }
+
+        // Llegó otro mientras este estaba arriba: se muestra el nuevo y el reloj
+        // vuelve a empezar.
+        if (notifRevision() != s_notifRev) {
+            s_notifRev = notifRevision();
+            entrarAviso();
+            return;
+        }
+
+        // La barra que se agota, cuatro veces por segundo. Es una franja de 4 px:
+        // repintar la pantalla entera para esto costaría 99 ms cada vez.
+        static uint32_t ultimaBarra = 0;
+        if (now - ultimaBarra >= 250) {
+            ultimaBarra = now;
+            uiNotifDrawBarra(1.0f - (float)pasado / (float)AVISO_MS);
+        }
+        delay(8);
+        return;
+    }
+
     if (s_phase == PHASE_LAUNCHER) {
         // Igual que configuracion: pantalla quieta, solo resolver el toque.
         const TouchEvent ev = touchLoop();
@@ -535,6 +614,17 @@ void loop() {
     }
 
     wifiLoop();
+
+    // Un aviso interrumpe, pero SÓLO desde acá: si esto viviera antes del
+    // switch de fases, un aviso podría aparecer en medio de una descarga de
+    // firmware o del aprovisionamiento.
+    if (notifRevision() != s_notifRev) {
+        s_notifRev = notifRevision();
+        if (s_app != APP_AVISOS && notifPendiente()) {
+            entrarAviso();
+            return;
+        }
+    }
 
     // touchLoop() consume el evento: una sola llamada por vuelta y se reparte
     // el resultado, porque la segunda ya devolveria TOUCH_NONE.
@@ -559,7 +649,7 @@ void loop() {
                 // en cuanto cambia la revisión, más abajo.
                 const int8_t fila = uiTodoHit(ev.x, ev.y);
                 if (fila >= 0) todoToggle((uint8_t)fila);
-            } else {
+            } else if (s_app != APP_AVISOS) {
                 advance();
             }
             break;
@@ -568,7 +658,9 @@ void loop() {
     }
 
     const uint32_t sinceRotate = now - s_lastRotate;
-    if (s_app != APP_TAREAS && sinceRotate >= FEED_ROTATE_MS) advance();
+    if (s_app != APP_TAREAS && s_app != APP_AVISOS && sinceRotate >= FEED_ROTATE_MS) {
+        advance();
+    }
 
     // La lista también cambia desde el teléfono, en otra tarea. Repintar acá y
     // no allá evita que dos tareas dibujen sobre el mismo panel a la vez.
@@ -609,7 +701,8 @@ void loop() {
     bool busy = false;
     switch (s_app) {
         case APP_PADEL:  busy = uiPadelTick(progreso); break;
-        case APP_TAREAS: break;                        // pantalla quieta
+        case APP_TAREAS:
+        case APP_AVISOS: break;                        // pantallas quietas
         default:         busy = uiFercedTick(nowEpoch(), progreso); break;
     }
     delay(busy ? 1 : 8);

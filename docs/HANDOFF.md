@@ -23,10 +23,10 @@ no se deducen del código.
 ## Qué es
 
 Una Lemon Box (MaTouch ESP32-S3 4.0", 480x480 táctil) con firmware propio de
-Ferced. Desde la 1.2.0 tiene **tres apps**: noticias (un titular cada 17 s, con
-miniatura), pádel (el orden de juego del circuito profesional) y tareas (una
-lista que se edita desde el teléfono, servida por el propio aparato). Se pasa de
-una a otra deslizando, o desde un selector.
+Ferced. Desde la 1.3.0 tiene **cuatro apps**: noticias (un titular cada 17 s,
+con miniatura), pádel (el orden de juego del circuito profesional), tareas (una
+lista que se edita desde el teléfono) y avisos (los agentes de Claude y Codex
+avisan cuando terminan). Se pasa de una a otra deslizando, o desde un selector.
 
 Tres piezas:
 
@@ -58,13 +58,16 @@ anda aporta ~4 de los 20 ítems, todos con imagen real del tweet.
 **App de tareas**, servida por el propio ESP32 en el puerto 80. Ver "La app de
 tareas".
 
+**Avisos de los agentes**, en `POST /api/notify` del mismo servidor. Ver "Los
+avisos".
+
 **OTA por WiFi, probado en el aparato.** El proxy sirve `/v1/firmware` y
 `/v1/firmware/bin` desde `C:\ferced\firmware`, y el aparato tiene el botón
 «Buscar actualización». La 1.1.0 y la 1.1.1 se instalaron así, sin tocar el USB.
 Ver "El OTA".
 
 **Firmware** con animación escalonada, miniaturas de 64x64 y reconexión
-automática de WiFi. 18,8% de flash, 23,5% de RAM. Animación a 35,5 fps medidos
+automática de WiFi. 19,8% de flash, 24,6% de RAM. Animación a 35,5 fps medidos
 sobre un techo de panel de 42.
 
 **Los gestos**, que ahora son cinco:
@@ -114,6 +117,8 @@ python tools\fetch_fixture.py     # baja contenido real del proxy, una vez
 .\shot.ps1 -Advance 1             # compila, corre, captura item 1
 .\shot.ps1 -Padel -Advance 1      # pádel: 0 es el torneo, 1.. los partidos
 .\shot.ps1 -Tareas                # la lista de tareas (fixture: sim/data/todo.txt)
+.\shot.ps1 -Aviso                 # la tarjeta que interrumpe
+.\shot.ps1 -Avisos                # la lista de avisos (fixture: sim/data/avisos.txt)
 .\shot.ps1 -Launcher              # el selector de apps
 .\shot.ps1 -Config                # la pantalla de configuración
 ```
@@ -411,6 +416,55 @@ Para iterar la página sin flashear, `scratchpad/extraer_pagina.py` la saca del
 `.cpp` y le enchufa un simulacro de la API para abrirla en el navegador. Sacarla
 del `.cpp` y no tener una copia es a propósito: una copia se desincroniza, igual
 que pasaría con `ui_ferced.cpp` y el simulador.
+
+### Los avisos
+
+Los agentes —Claude Code, Codex, o cualquier cosa que sepa hacer un pedido
+HTTP— avisan a la cajita cuando terminan una tarea. El aviso **interrumpe** lo
+que haya en pantalla durante 25 segundos, con una barra que se agota, y
+cualquier gesto lo cierra. Después queda en la lista de la app AVISOS.
+
+```
+POST http://ferced.local/api/notify?src=claude&t=Termin%C3%B3&b=detalle
+GET  http://ferced.local/api/notify?src=claude&t=...        (también sirve)
+```
+
+**Ni el POST ni el GET exigen el encabezado `X-Ferced`, a diferencia del resto
+de la API.** Es deliberado y es la decisión central de todo esto: quien va a
+llamar a esta URL es un hook de una línea que se instala una vez y se olvida, y
+pedirle una bandera de más es fricción que se paga todos los días. El riesgo
+que se acepta es que una web del navegador haga aparecer un cartel; el de que
+borre la lista de tareas, no, y por eso ahí el encabezado sigue.
+
+Se acepta **GET además de POST** por lo mismo: hay entornos que sólo saben
+pedir una URL.
+
+**Los avisos no se persisten.** Uno de "terminó la compilación" de antes de un
+reinicio no le sirve a nadie: lo que importa de una notificación es que llegue
+ahora. Guardarla en flash sería gastar escrituras para mostrar ruido.
+
+**El aviso interrumpe sólo desde `PHASE_RUNNING`.** El chequeo vive después del
+`switch` de fases a propósito: si estuviera antes, un aviso podría aparecer en
+medio de una descarga de firmware o del aprovisionamiento.
+
+**mDNS** para que la dirección no dependa del DHCP: el aparato responde a
+`ferced.local` además de a su IP. Un hook que se instala una vez no puede
+romperse porque el router cambió de humor. Si mDNS no levanta, el log lo dice y
+queda la IP.
+
+Cómo se engancha desde Claude Code, en `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "Stop": [{ "hooks": [{ "type": "command",
+      "command": "curl -s -m 2 --get --data-urlencode 'src=claude' --data-urlencode 'Termino la tarea' --data-urlencode \"b=$(basename \\\"$PWD\\\")\" http://ferced.local/api/notify || true" }] }]
+  }
+}
+```
+
+El `|| true` no es adorno: si la cajita está apagada, el hook no puede hacer
+fallar el turno del agente.
 
 ### La cuota de Sorsa
 
@@ -1011,7 +1065,9 @@ llega — en los dos casos, andá a buscar el dato crudo.
 | `src/ui_padel.cpp` | La app de pádel |
 | `src/ui_todo.cpp` | La app de tareas |
 | `src/todo_store.cpp` | La lista y su persistencia en NVS |
-| `src/todo_server.cpp` | El editor que hospeda el aparato, con la página adentro |
+| `src/web_server.cpp` | El servidor del aparato: editor de tareas y entrada de avisos |
+| `src/notif_store.cpp` | Los avisos en memoria |
+| `src/ui_notif.cpp` | La tarjeta que interrumpe y la lista |
 | `src/ui_launcher.cpp` | El selector de apps |
 | `src/ferced_main.cpp` | Máquina de estados: provisioning, WiFi, apps, gestos |
 | `src/feed_client.cpp` | Cliente HTTP del feed y las imágenes |
