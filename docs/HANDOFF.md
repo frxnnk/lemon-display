@@ -1,9 +1,20 @@
 # ferced-display — traspaso
 
-Estado al 2026-08-03. Rama `feat/ferced-display` del clon de `frxnnk/lemon-display`.
+Estado al 2026-08-05. Rama `feat/ferced-display` del clon de `frxnnk/lemon-display`.
 
 Leé esto entero antes de tocar nada. La mitad de los problemas de este proyecto
 no se deducen del código.
+
+## Si venís a retomar: las tres cosas que importan hoy
+
+1. **El OTA está construido pero NO verificado en el aparato.** Todo el camino
+   —endpoints, descarga con CA validada, botón, red de rollback— está escrito,
+   compilado y desplegado. Nunca corrió una actualización de verdad. La prueba
+   que falta, y que **no es opcional**, está en "Verificar el OTA".
+2. **La fuente de X está caída por cuota agotada.** El feed sirve sólo RSS. Ver
+   "La cuota de Sorsa".
+3. **El USB de este aparato es poco confiable.** Ver las trampas del hardware
+   antes de pelearte con él una hora, como ya pasó.
 
 ---
 
@@ -34,6 +45,13 @@ automático, corriendo como `NT AUTHORITY\LocalService`, escuchando **sólo en
 127.0.0.1:9110** detrás de Caddy. 70 tests en Go.
 
 **Cuatro fuentes RSS** intercaladas: BBC Mundo, La Nación, BBC Tech, Xataka.
+
+**Una fuente de X por búsqueda**, hoy **caída** (ver "La cuota de Sorsa"). Cuando
+anda aporta ~4 de los 20 ítems, todos con imagen real del tweet.
+
+**OTA por WiFi**, desplegado y sin verificar en el aparato. El proxy sirve
+`/v1/firmware` y `/v1/firmware/bin` desde `C:\ferced\firmware`, y el aparato
+tiene el botón «Buscar actualización». Ver "El OTA".
 
 **Firmware** con animación escalonada, miniaturas de 64x64 y reconexión
 automática de WiFi. 16,9% de flash, 19% de RAM. Animación a 35,5 fps medidos
@@ -122,6 +140,103 @@ $p.Close()
 
 Resetear con esptool cierra y reabre el puerto (re-enumera), así que para ver el
 arranque hay que reabrir en bucle hasta que aparezca de nuevo.
+
+### El OTA
+
+Construido el 2026-08-04, desplegado, **sin verificar en el aparato**. Diseño en
+`docs/plans/2026-08-04-ota-design.md`, plan en `2026-08-04-ota.md`.
+
+**Cómo funciona.** El aparato pide `/v1/firmware` al proxy —con el mismo Bearer
+token que el feed—, compara la versión con `FERCED_VERSION` y, si hay una mayor,
+descarga `/v1/firmware/bin` a la partición inactiva. Se dispara a mano desde la
+pantalla de configuración; no chequea solo.
+
+**Publicar una versión nueva:**
+
+```powershell
+# 1. Subir VERSION en tools/inject_version.py y COMMITEAR antes de compilar
+python -m platformio run -e ferced_display_vps
+# 2. Subir el binario y la version al VPS
+scp -i $env:USERPROFILE\.ssh\id_ed25519_franco_vps .pio\build\ferced_display_vps\firmware.bin Administrator@173.212.246.68:C:/ferced/firmware/firmware.bin
+# 3. version.txt tiene que decir lo mismo que VERSION
+```
+
+**Compilá siempre con el árbol limpio.** Con cambios sin commitear el sello queda
+`-dirty` y el aparato termina mostrando un commit que no existe, que es
+exactamente la confusión que el sello existe para evitar. Ya pasó una vez y hubo
+que republicar.
+
+**Tres decisiones que conviene no revertir:**
+
+- **La descarga valida el certificado** (`setCACert(LE_ROOTS)`), a diferencia del
+  feed, que usa `setInsecure()`. Para noticias públicas el token ya autentica y
+  el contenido no es ejecutable; un binario sí lo es. Van las dos raíces de Let's
+  Encrypt porque el servidor sirve una cadena u otra según lo que negocie el
+  cliente.
+- **`Update.end()` se llama recién después de verificar el sha256.** Es lo que
+  marca la partición nueva como arrancable: hacerlo antes sería dejar el aparato
+  apuntando a un binario que no se sabe qué es.
+- **La confirmación del arranque no va al bootear.** Ver abajo.
+
+**La red de rollback, y la trampa de Arduino.** Con `CONFIG_APP_ROLLBACK_ENABLE`
+el bootloader deja la partición nueva en `PENDING_VERIFY`: si nadie la confirma,
+el próximo arranque vuelve sola a la anterior.
+
+Arduino la anulaba. En `initArduino()` confirma apenas bootea, con lo cual un
+firmware que arranca y se queda sin red quedaba fijado igual — justo el caso que
+la red tiene que atrapar. Esa llamada está envuelta en
+`if(!verifyRollbackLater())`, y esa función es **débil**: `ferced_main.cpp` la
+define fuerte devolviendo `true` para que Arduino se abstenga. La confirmación se
+da en `refreshFeed()`, cuando el primer feed vuelve con éxito.
+
+Un flasheo por USB **no** deja la partición en `PENDING_VERIFY`, así que después
+de flashear a mano no vas a ver `[OTA] arranque confirmado` por serie. Eso es
+correcto, no un bug.
+
+**El log de `[fw]` no anota el user agent**, a diferencia del de `[feed]`. Como
+el aparato y la PC de casa salen por la misma IP pública, en el log **no se
+distingue un pedido del aparato de uno hecho a mano con curl o PowerShell**. Eso
+arruinó un diagnóstico el 2026-08-05: se contaron pedidos creyendo que eran del
+aparato y varios eran propios. Agregar el user agent a esa línea es de una línea
+y vale la pena antes de la próxima sesión de depuración.
+
+### Verificar el OTA — lo que falta y no es opcional
+
+Nunca corrió una actualización real. Faltan dos pruebas y la segunda es la que
+importa:
+
+1. **Camino feliz.** Publicar una versión mayor, tocar el botón, ver el progreso
+   y que el aparato vuelva con la versión nueva en la pantalla de configuración.
+2. **Rollback a propósito.** Compilar un firmware con versión mayor y el SSID
+   roto adrede, publicarlo, aplicarlo, y confirmar que el aparato arranca, no
+   consigue red y **vuelve solo al anterior**.
+
+**Si la segunda no pasa, frená y no confíes en el OTA.** Un firmware malo sin
+rollback deja el aparato sin ninguna vía de entrada salvo el USB, que en este
+aparato es justamente lo poco confiable. Sin esa prueba, la red de seguridad es
+una suposición.
+
+### La cuota de Sorsa
+
+**Estado al 2026-08-05: agotada.** La fuente de X devuelve 403 en cada refresco,
+con `{"message":"request limit exceeded"}`. Hasta `/v3/key-usage-info` responde
+403, así que no se puede consultar cuánto queda ni cuándo se repone.
+
+El mezclador degrada bien: el feed sigue sirviendo 20 ítems, todos de RSS.
+
+**La causa es el diseño, no un accidente.** El mixer tiene **un solo TTL para
+todas las fuentes** (`poolTTL`, 10 minutos), así que la búsqueda de X sale
+**144 veces por día**. Antes del 2026-08-04 el proxy no le pegaba a Sorsa ni una
+vez: `SORSA_LIST_ID` nunca estuvo configurado y la fuente de tendencias no está
+activa.
+
+**El arreglo propuesto y no implementado:** un envoltorio que implemente
+`feed.Source`, guarde su propio TTL y devuelva lo cacheado mientras no venza.
+Con una hora serían 24 por día, y en la práctica no se nota: los tweets de la
+NASA no cambian cada diez minutos. Son pocas líneas y no toca el mixer.
+
+Falta saber el límite real del plan y cada cuánto se repone. Eso lo tiene que
+mirar el usuario en su cuenta de Sorsa.
 
 ### Operar el proxy
 
@@ -574,6 +689,17 @@ desincroniza y el simulador empieza a mentir.
 
 **Medir antes de optimizar.** El paso "slots en secuencia" empeoró el framerate
 y sólo se supo por la telemetría. Sin medir se habría quedado el bug adentro.
+
+**Verificá que el instrumento distinga lo que decís que distingue.** El 2026-08-05
+se intentó diagnosticar el botón del OTA contando pedidos en el log del proxy,
+sin notar que esa línea no anota el user agent y que el aparato y la PC comparten
+IP pública. La mitad de los pedidos contados eran propios. Antes de sacar una
+conclusión de un log, preguntate si el log puede sostenerla.
+
+Lo mismo con la captura por serie de esa sesión: se perdió una línea que el
+firmware imprime de forma incondicional, y por un rato pareció que el firmware
+no la había impreso. Cuando el dato falta, la primera sospecha va sobre el
+instrumento, no sobre el aparato.
 
 **Y desconfiá del instrumento también.** Al arreglar la ISR de VSync el
 instrumento marcó 45 fps sobre un panel de 42: imposible, y la pista de que
