@@ -830,6 +830,32 @@ No chequea solo.
 **El rollback nunca se probó.** Si publicás algo que arranca pero se queda sin
 red, la red de seguridad es una suposición. Ver `docs/HANDOFF.md`.
 
+### Si el aparato dice «no se pudo conectar o el TLS falló»
+
+Ese texto es literal de `explicarHTTP()` en `ota_ferced.cpp`, y es el caso
+`HTTPC_ERROR_CONNECTION_REFUSED` (-1). **El -1 no distingue** entre «no hay ruta
+al host» y «el certificado no valida»: son el mismo número. Por eso ahora está
+`porQueFallo()`, que imprime por serie el código de mbedTLS y el heap libre.
+`-0x2700` es `X509_CERT_VERIFY_FAILED`, o sea la cadena.
+
+Lo que pasó el 2026-08-06, por si vuelve: Let's Encrypt está migrando a las
+raíces de la generación Y y `feed.ferced.com` ya sirve una cadena de cuatro
+
+```
+feed.ferced.com → YE2 → ISRG Root YE → ISRG Root X2 (firmada por X1)
+```
+
+Con X1 y X2 pineadas eso *debería* validar igual, porque termina en algo que
+encadena a X1. Se agregaron YE e YR de todos modos —`tools/fetch_le_roots.py`
+ya las baja— porque acortan el camino y porque el día que LE deje de
+cross-firmarlas el aparato se queda sin poder actualizarse, que es la peor
+forma de enterarse: rompe justo el mecanismo con el que se arregla.
+
+**Ojo con el orden.** El arreglo del OTA viaja *dentro* del firmware nuevo, así
+que si el OTA está roto no hay forma de que se arregle solo. Ahí es USB una vez
+y listo. El feed no sirve de contraejemplo: usa `setInsecure()`, así que puede
+andar con la cadena rota.
+
 Uso actual: **19,8% de flash, 24,6% de RAM**. Hay lugar de sobra.
 
 ---
