@@ -5,6 +5,7 @@
 // Los datos llegan armados a proposito: si esta pantalla consultara WiFi o NVS
 // adentro no compilaria en el simulador, que solo tiene shims de graficos.
 struct ConfigInfo {
+    const char* nombre;     // como se llama el aparato; vacio si no tiene
     const char* version;
     const char* commit;
     const char* built;

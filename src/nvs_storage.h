@@ -14,6 +14,14 @@ void     nvsLoadWifi(char* ssid, size_t ssidLen, char* pass, size_t passLen);
 void     nvsSaveWifi(const char* ssid, const char* pass);
 void     nvsForgetWifi();
 
+// Nombre del aparato. Lo elige quien lo configura, y sobrevive a un reaparear
+// —al borrar el WiFi el aparato vuelve a la pantalla del QR, pero sigue siendo
+// el mismo aparato y se sigue llamando igual—. Vacio significa sin nombre, y
+// entonces manda la marca.
+#define NVS_NOMBRE_LEN 20
+void     nvsGetNombre(char* out, size_t outLen);
+void     nvsSetNombre(const char* nombre);
+
 // Display
 uint8_t  nvsGetBrightness();
 void     nvsSetBrightness(uint8_t val);

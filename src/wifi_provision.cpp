@@ -8,6 +8,8 @@
 #include "ferced_config.h"
 #include "ui_ferced.h"
 #include "data/ferced_mark_11.h"
+#include "ui_provision.h"
+#include "nvs_storage.h"
 #else
 #include "data/lemon_logo.h"
 #endif
@@ -24,7 +26,18 @@
 // desincronizarlos rompe el provisioning en silencio — el QR manda el telefono
 // a una red que no existe y no hay ningun error que lo delate.
 #ifdef FERCED_DISPLAY
-static const char* AP_SSID = FERCED_AP_SSID;
+static char s_apSsid[40] = FERCED_AP_SSID;
+static const char* AP_SSID = s_apSsid;
+
+// El SSID lleva el nombre del aparato si tiene: la red que ve el telefono se
+// llama "Ferced-Fran" y no "Ferced-Setup", que con dos cajas en la misma casa
+// es la diferencia entre saber cual es y adivinar.
+static void armarSsid() {
+    char n[NVS_NOMBRE_LEN];
+    nvsGetNombre(n, sizeof(n));
+    if (n[0]) snprintf(s_apSsid, sizeof(s_apSsid), "Ferced-%s", n);
+    else      snprintf(s_apSsid, sizeof(s_apSsid), "%s", FERCED_AP_SSID);
+}
 static const char* AP_PASS = FERCED_AP_PASS;
 #else
 static const char* AP_SSID = "Lemon-Setup";
@@ -180,6 +193,7 @@ input:focus{border-color:var(--g)}
 <div id="fm" class="pn">
 <h3 id="sn"></h3>
 <div class="pw"><input type="password" id="pw" placeholder="Contrase&#241;a" autocomplete="off"><button type="button" class="ey" onclick="tp()">mostrar</button></div>
+<div class="pw"><input type="text" id="nb" placeholder="Nombre del aparato (opcional)" maxlength="19" autocomplete="off" autocapitalize="words"></div>
 <button class="bt bp" onclick="go()">Conectar</button>
 <button class="bt bg" onclick="bk()">Volver</button>
 </div>
@@ -195,7 +209,7 @@ function sc(){document.getElementById('rb').textContent='Buscando...';fetch('/sc
 function pk(s){sel=s;document.getElementById('sn').textContent=s;document.getElementById('ls').style.display='none';document.getElementById('rb').style.display='none';document.getElementById('fm').classList.add('on');setTimeout(()=>document.getElementById('pw').focus(),120)}
 function bk(){document.getElementById('fm').classList.remove('on');document.getElementById('ls').style.display='';document.getElementById('rb').style.display='';document.getElementById('pw').value=''}
 function tp(){let i=document.getElementById('pw'),b=document.querySelector('.ey');if(i.type==='password'){i.type='text';b.textContent='ocultar'}else{i.type='password';b.textContent='mostrar'}}
-function go(){let p=document.getElementById('pw').value;document.getElementById('fm').classList.remove('on');document.getElementById('rs').classList.add('on');document.getElementById('rb').style.display='none';fetch('/connect?ssid='+encodeURIComponent(sel)+'&pass='+encodeURIComponent(p)).then(()=>{document.querySelector('#rs .sp').style.display='none';let m=document.getElementById('rm');m.className='ok';m.textContent='\u00a1Credenciales guardadas!'}).catch(()=>{let m=document.getElementById('rm');m.className='er';m.textContent='Error. Intenta de nuevo.'})}
+function go(){let p=document.getElementById('pw').value;document.getElementById('fm').classList.remove('on');document.getElementById('rs').classList.add('on');document.getElementById('rb').style.display='none';fetch('/connect?ssid='+encodeURIComponent(sel)+'&pass='+encodeURIComponent(p)+'&nombre='+encodeURIComponent(document.getElementById('nb').value)).then(()=>{document.querySelector('#rs .sp').style.display='none';let m=document.getElementById('rm');m.className='ok';m.textContent='\u00a1Credenciales guardadas!'}).catch(()=>{let m=document.getElementById('rm');m.className='er';m.textContent='Error. Intenta de nuevo.'})}
 lg();sc();
 </script>
 </body>
@@ -234,6 +248,7 @@ void provisionStart() {
 
     // Start AP+STA mode so we can scan for networks
     WiFi.mode(WIFI_AP_STA);
+    armarSsid();
     WiFi.softAP(AP_SSID, AP_PASS);
     Serial.printf("[Provision] AP started: %s / %s\n", AP_SSID, AP_PASS);
     Serial.printf("[Provision] AP IP: %s\n", WiFi.softAPIP().toString().c_str());
@@ -275,6 +290,16 @@ void provisionStart() {
             String p = req->getParam("pass")->value();
             strncpy(rxSSID, s.c_str(), sizeof(rxSSID) - 1);
             strncpy(rxPass, p.c_str(), sizeof(rxPass) - 1);
+#ifdef FERCED_DISPLAY
+            // El nombre es opcional y se guarda en el acto: es del aparato, no
+            // de la conexion, asi que sobrevive a un reaparear. Vacio no pisa el
+            // que ya hubiera.
+            if (req->hasParam("nombre")) {
+                String n = req->getParam("nombre")->value();
+                n.trim();
+                if (n.length() > 0) nvsSetNombre(n.c_str());
+            }
+#endif
             hasCredentials = true;
             Serial.printf("[Provision] Got credentials: SSID=%s\n", rxSSID);
             req->send(200, "text/plain", "OK");
@@ -334,60 +359,54 @@ bool provisionTick() {
 }
 
 void provisionDrawQR() {
-    // QR content: WiFi config string
     char qrData[96];
+    armarSsid();
     snprintf(qrData, sizeof(qrData), "WIFI:S:%s;T:WPA;P:%s;;", AP_SSID, AP_PASS);
 
-    // Create QR code (version 6 = 41x41 modules)
     QRCode qrcode;
-    uint8_t qrcodeData[qrcode_getBufferSize(6)];
+    uint8_t qrcodeData[qrcode_getBufferSize(6)];   // version 6 = 41x41 modulos
     qrcode_initText(&qrcode, qrcodeData, 6, ECC_LOW, qrData);
 
-    int modules = qrcode.size;  // 41
-    int pixPerModule = 5;  // More compact (was 6)
-    int qrSize = modules * pixPerModule;  // 205
-    int padding = 12;
-    int totalSize = qrSize + 2 * padding;  // 229
+#ifdef FERCED_DISPLAY
+    // El dibujo vive en ui_provision.cpp, sobre el sprite, como el resto de las
+    // pantallas. Aca solo se resuelve el QR y se pasan los modulos ya calculados:
+    // asi el simulador puede componer esta pantalla sin saber nada de WiFi, que
+    // es lo que hacia que fuera la unica que nunca se habia podido mirar sin
+    // flashear el aparato.
+    static uint8_t modulos[41 * 41];
+    const uint8_t lado = qrcode.size < 41 ? qrcode.size : 41;
+    for (uint8_t y = 0; y < lado; y++) {
+        for (uint8_t x = 0; x < lado; x++) {
+            modulos[y * lado + x] = qrcode_getModule(&qrcode, x, y) ? 1 : 0;
+        }
+    }
 
-    int qrX = (SCREEN_W - totalSize) / 2;
-    int qrY = 90;
+    char nombre[NVS_NOMBRE_LEN];
+    nvsGetNombre(nombre, sizeof(nombre));
+    uiProvisionDraw(modulos, lado, nombre, AP_SSID, AP_PASS, "http://192.168.4.1");
+    return;
+#else
+    // El portal de Lemon conserva su pantalla de siempre.
+    const int modules = qrcode.size;
+    const int pixPerModule = 5;
+    const int qrSize = modules * pixPerModule;
+    const int padding = 12;
+    const int totalSize = qrSize + 2 * padding;
+    const int qrX = (SCREEN_W - totalSize) / 2;
+    const int qrY = 90;
 
-    // Clear screen (VSync to avoid bounce on RGB panel)
+    uiAnimInvalidate();
     displayWaitVSync();
     tft.fillScreen(PV::bg());
 
-#ifdef FERCED_DISPLAY
-    // Mark a escala 2 con el wordmark al lado, centrados como un bloque.
-    {
-        const int markW = 11 * 2, markH = 28 * 2;
-        tft.setTextDatum(lgfx::middle_left);
-        tft.setTextColor(PV::t1(), PV::bg());
-        const int gap = 14;
-        const int wordW = tft.textWidth("FERCED", &SatoshiBold24);
-        const int blockX = (SCREEN_W - (markW + gap + wordW)) / 2;
-        drawFercedMark(blockX, 16, 2);
-        tft.drawString("FERCED", blockX + markW + gap, 16 + markH / 2, &SatoshiBold24);
-    }
-#else
-    // ── Full imagotipo 244x56 centered at top ──
     int logoX = (SCREEN_W - 244) / 2;
     drawLemonImagotipo244(tft, logoX, 16);
-#endif
 
-    // ── Glass card containing QR code ──
-    int cardW = totalSize + 24;
-    int cardH = totalSize + 24;
-    int cardX = (SCREEN_W - cardW) / 2;
-    int cardY = qrY - 12;
-
-    // Card border + fill
+    int cardW = totalSize + 24, cardH = totalSize + 24;
+    int cardX = (SCREEN_W - cardW) / 2, cardY = qrY - 12;
     tft.fillSmoothRoundRect(cardX, cardY, cardW, cardH, 16, PV::border());
     tft.fillSmoothRoundRect(cardX + 1, cardY + 1, cardW - 2, cardH - 2, 15, PV::card());
-
-    // White QR background (rounded)
     tft.fillSmoothRoundRect(qrX, qrY, totalSize, totalSize, 8, 0xFFFF);
-
-    // Draw QR modules
     for (int y = 0; y < modules; y++) {
         for (int x = 0; x < modules; x++) {
             if (qrcode_getModule(&qrcode, x, y)) {
@@ -397,26 +416,16 @@ void provisionDrawQR() {
             }
         }
     }
-
-    // ── Instructions with typographic hierarchy ──
     int textY = cardY + cardH + 16;
-
-    // Title
     tft.setTextColor(PV::t1(), PV::bg());
     tft.setTextDatum(lgfx::top_center);
     tft.drawString("Configurar WiFi", SCREEN_W / 2, textY, &SatoshiMedium18);
-
-    // Subtitle
     textY += 26;
     tft.setTextColor(PV::t2(), PV::bg());
     tft.drawString("Escanea el QR o conectate a:", SCREEN_W / 2, textY, &Satoshi12);
-
-    // URL in accent color
     textY += 24;
     tft.setTextColor(PV::accent(), PV::bg());
     tft.drawString("http://192.168.4.1", SCREEN_W / 2, textY, &SatoshiMedium18);
-
-    // Credentials in caption style
     textY += 32;
     tft.setTextColor(PV::t3(), PV::bg());
     char cred[64];
@@ -425,6 +434,7 @@ void provisionDrawQR() {
     textY += 14;
     snprintf(cred, sizeof(cred), "Clave: %s", AP_PASS);
     tft.drawString(cred, SCREEN_W / 2, textY, &Satoshi9);
+#endif
 }
 
 bool provisionHasCredentials() {

@@ -18,6 +18,8 @@ extern bool g_config;
 extern int  g_progreso;
 extern bool g_padel;
 extern bool g_launcher;
+extern bool g_desdeLauncher;
+extern bool g_setup;
 extern bool g_tareas;
 extern bool g_avisos;
 extern bool g_aviso;
@@ -47,6 +49,10 @@ int main(int argc, char** argv) {
             g_padel = true;
         } else if (std::strcmp(argv[i], "--launcher") == 0) {
             g_launcher = true;
+        } else if (std::strcmp(argv[i], "--desde-launcher") == 0) {
+            g_desdeLauncher = true;
+        } else if (std::strcmp(argv[i], "--setup") == 0) {
+            g_setup = true;
         } else if (std::strcmp(argv[i], "--tareas") == 0) {
             g_tareas = true;
         } else if (std::strcmp(argv[i], "--avisos") == 0) {

@@ -5,6 +5,8 @@
 #   .\shot.ps1 -Advance 3      -> cuarto item
 #   .\shot.ps1 -Advance 3 -Mid -> a mitad de la animacion del cuarto item
 #   .\shot.ps1 -Config         -> pantalla de configuracion
+#   .\shot.ps1 -DesdeLauncher  -> entra a la app pasando por el selector, para
+#                                 verificar que la ola no deje filas sin pintar
 #   .\shot.ps1 -Progreso 45    -> configuracion con la descarga del OTA al 45%
 #   .\shot.ps1 -NoBuild        -> sin recompilar
 
@@ -14,6 +16,8 @@ param(
     [switch]$Config,
     [switch]$Padel,
     [switch]$Launcher,
+    [switch]$DesdeLauncher,
+    [switch]$Setup,
     [switch]$Tareas,
     [switch]$Avisos,
     [switch]$Aviso,
@@ -46,6 +50,10 @@ if ($Aviso)    { $simArgs += "--aviso" }
 if ($Hacia -ge 0)    { $simArgs += "--hacia=$Hacia" }
 if ($Congelar -ge 0) { $simArgs += "--congelar=$Congelar" }
 if ($Launcher) { $simArgs += "--launcher" }
+# Entra a la app pasando por el selector: si alguna banda del escalonado no
+# cubre su parte de las 480 filas, en la captura queda un jiron del selector.
+if ($DesdeLauncher) { $simArgs += "--desde-launcher" }
+if ($Setup) { $simArgs += "--setup" }
 if ($Config) { $simArgs += "--config" }
 # --progreso ya implica la pantalla de configuracion del lado del simulador.
 if ($Progreso -ge 0) { $simArgs += "--progreso=$Progreso" }

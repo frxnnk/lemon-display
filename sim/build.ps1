@@ -39,12 +39,14 @@ $sources = @(
     "$sim\src\sim_notif.cpp",
     "$sim\src\sim_stubs.cpp",
     "$root\src\ui_anim.cpp",
+    "$root\src\ui_chrome.cpp",
     "$root\src\ui_ferced.cpp",
     "$root\src\ui_padel.cpp",
     "$root\src\ui_todo.cpp",
     "$root\src\ui_notif.cpp",
     "$root\src\ui_launcher.cpp",
-    "$root\src\ui_config.cpp"
+    "$root\src\ui_config.cpp",
+    "$root\src\ui_provision.cpp"
 ) + $lgfxSrc
 
 $incs = @(
@@ -62,6 +64,14 @@ $libs  = @("-L`"$sdlRoot\lib`"", '-lmingw32', '-lSDL2main', '-lSDL2', '-lsetupap
 # LovyanGFX trae 10 archivos en C (qrcode, jpeg, png, qoi, fuentes CJK). Van
 # compilados como C, no como C++, asi que se hacen en una pasada aparte.
 $cSrc = Get-ChildItem "$($lgfx.FullName)\src" -Recurse -Filter '*.c' | ForEach-Object { $_.FullName }
+
+# La libreria de QR, que es un solo .c. Se compila aca para que el simulador
+# pueda dibujar el QR DE VERDAD en la pantalla de aprovisionamiento, y no un
+# patron de mentira: era la unica pantalla del aparato que no se podia mirar sin
+# flashear, y por eso la unica que nunca se habia verificado.
+$qr = Join-Path $root ".pio\libdeps\ferced_display\QRCode\src\qrcode.c"
+if (Test-Path $qr) { $cSrc += $qr }
+else { Write-Host "  (sin QRCode: la pantalla de setup va a salir sin codigo)" }
 $cObjs = @()
 Write-Host "compilando $($cSrc.Count) archivos C..."
 foreach ($f in $cSrc) {
@@ -84,7 +94,8 @@ Write-Host "`ncompilando $($sources.Count) archivos C++..."
 $argv = @()
 $argv += $flags
 $argv += @("-I$sim\shim", "-I$sim\src", "-I$root\src",
-           "-I$($lgfx.FullName)\src", "-I$sdlRoot\include", "-I$sdlRoot\include\SDL2")
+           "-I$($lgfx.FullName)\src", "-I$sdlRoot\include", "-I$sdlRoot\include\SDL2",
+           "-I$root\.pio\libdeps\ferced_display\QRCode\src")
 $argv += $sources
 $argv += $cObjs
 $argv += @('-o', "$obj\ferced-sim.exe")

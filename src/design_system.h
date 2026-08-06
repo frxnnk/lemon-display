@@ -22,6 +22,19 @@ namespace DS {
     inline const lgfx::IFont* fontMono()     { return &fonts::Font2; }                         // Status/loading text
     inline const lgfx::IFont* fontButton()   { return (const lgfx::IFont*)&SatoshiMedium18; } // Button labels
 
+    // ── Escala de Ferced ──
+    // El aparato se mira de reojo desde un metro o dos, no de cerca como una
+    // web. fontHeading() (12pt) alcanza para una etiqueta pero deja un titular
+    // leyendose como parrafo, asi que el titular tiene su propio tamano.
+    inline const lgfx::IFont* fontTitular()  { return (const lgfx::IFont*)&SatoshiMedium28; } // 19pt — titulares
+
+    // La cursiva con gracias es el gesto que ferced.com repite en cada seccion:
+    // una palabra en serif italica dentro de un titular en Satoshi. Aca cumple
+    // la misma funcion —marcar lo que no es dato duro— en los accesorios: la
+    // hora relativa, el numero de un torneo, un estado vacio.
+    inline const lgfx::IFont* fontAcento()   { return (const lgfx::IFont*)&GeorgiaItalic28; } // acento grande
+    inline const lgfx::IFont* fontAcentoSm() { return (const lgfx::IFont*)&GeorgiaItalic16; } // acento chico
+
     // ── Spacing Scale (px) ──
     constexpr int S4   =  4;
     constexpr int S8   =  8;

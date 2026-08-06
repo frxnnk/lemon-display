@@ -28,3 +28,8 @@ void uiNotifDrawLista();
 
 // Qué fila cae bajo un toque en la lista, o -1.
 int8_t uiNotifHit(int16_t x, int16_t y);
+
+// true si el toque cayo en el boton de cerrar de la tarjeta que interrumpe.
+// Antes cualquier toque la cerraba, asi que un roce se llevaba el aviso puesto
+// antes de que llegaras a leerlo.
+bool uiNotifHitCerrar(int16_t x, int16_t y);

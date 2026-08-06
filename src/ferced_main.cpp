@@ -62,7 +62,10 @@ static uint32_t s_todoRev = 0;
 // Cuánto queda un aviso en pantalla antes de cerrarse solo. Un cuarto de minuto
 // alcanza para levantar la vista y leerlo, y no tanto como para tapar la
 // pantalla si uno no está.
-#define AVISO_MS 25000UL
+// Nueve segundos. Eran veinticinco, que con un aviso corto —"terminé la tarea"—
+// es un cartel tapando la pantalla mucho después de que lo leiste. Ahora ademas
+// hay un boton para cerrarlo antes.
+#define AVISO_MS 9000UL
 static uint32_t s_notifRev = 0;
 static uint32_t s_avisoDesde = 0;
 
@@ -248,9 +251,15 @@ static void advance() {
 }
 
 static void enterApp(AppId app) {
-    // Cambiar de app cambia el dibujo entero: lo que quede del anterior no tiene
-    // nada que ver con lo que viene.
-    if (app != s_app) uiAnimInvalidate();
+    // Cambiar de app cambia el dibujo entero, así que se pide la cortina: la
+    // pantalla nueva baja por bandas de arriba hacia abajo en vez de aparecer de
+    // golpe. Un deslizamiento pide un movimiento, y el vertical es el único que
+    // entra en el presupuesto del panel.
+    //
+    // Las apps animadas —noticias y pádel— consumen el pedido sin usarlo en
+    // uiAnimBegin(): su propia ola ya baja de arriba hacia abajo y sería el
+    // mismo gesto dos veces. Las estáticas lo usan en uiAnimReveal().
+    if (app != s_app) uiAnimCurtainOnce();
 
     s_app = app;
     s_phase = PHASE_RUNNING;
@@ -326,6 +335,10 @@ static void enterLauncher() {
     s_phase = PHASE_LAUNCHER;
     AppInfo apps[APP_COUNT];
     llenarApps(apps);
+    // El selector también entra con cortina: se abre con un deslizamiento hacia
+    // arriba, así que aparecer de golpe rompía la relación entre el gesto y lo
+    // que pasa en pantalla.
+    uiAnimCurtainOnce();
     uiLauncherDraw(apps, APP_COUNT, s_app);
 }
 
@@ -371,7 +384,10 @@ static void enterConfig() {
     const UiFrameStats st = uiAnimStats();
     const float fps = st.periodUs100 > 0 ? 10000.0f / (float)st.periodUs100 : 0.0f;
 
+    char nombre[NVS_NOMBRE_LEN];
+    nvsGetNombre(nombre, sizeof(nombre));
     const ConfigInfo info = {
+        nombre,
         FERCED_VERSION, FERCED_COMMIT, FERCED_BUILD_DATE,
         wifiSSID(), ip.c_str(), endpointHost(),
         millis() / 1000,
@@ -440,6 +456,27 @@ void setup() {
     Serial.println("\n=== ferced-display ===");
 
     nvsInit();
+
+#ifdef FERCED_REGALO
+    // Firmware de un solo uso para dejar el aparato listo para regalar: le pone
+    // nombre, le borra las tareas y los avisos del dueño anterior y le olvida el
+    // WiFi, para que arranque en la pantalla del QR como recién sacado de la
+    // caja.
+    //
+    // Va como entorno de compilación aparte y NO se deja puesto: se flashea
+    // este, se espera a que haga lo suyo, y se vuelve a flashear el normal. Sin
+    // guarda ni bandera en NVS, porque no hace falta ninguna si el firmware no
+    // se queda: una guarda mal puesta borraría el WiFi de quien lo reciba.
+    Serial.println("[REGALO] preparando el aparato...");
+    nvsSetNombre(FERCED_REGALO);
+    while (todoCount() > 0) todoRemove(0);
+    notifBorrarTodos();
+    nvsForgetWifi();
+    Serial.printf("[REGALO] listo: se llama \"%s\", sin tareas, sin avisos y sin WiFi.\n",
+                  FERCED_REGALO);
+    Serial.println("[REGALO] AHORA flashear el firmware normal (ferced_display_vps).");
+#endif
+
     Colors::setTheme(Colors::THEME_DARK);
     displaySetup();
     displaySetupVSync();
@@ -562,13 +599,17 @@ void loop() {
     }
 
     if (s_phase == PHASE_AVISO) {
-        // Cualquier gesto lo cierra: cerrarlo ES la respuesta al gesto, así que
-        // no se encadena con otra acción. Tocar para cambiar de app justo cuando
-        // aparece un cartel sería hacer dos cosas de un toque.
+        // Lo cierra el botón, un deslizamiento —que es deliberado— o el tiempo.
+        // Antes lo cerraba CUALQUIER toque, así que un roce se llevaba el aviso
+        // puesto antes de que llegaras a leerlo. Un toque fuera del botón ahora
+        // no hace nada, que es lo que corresponde en algo que se abrió encima.
         const TouchEvent ev = touchLoop();
         const uint32_t pasado = now - s_avisoDesde;
+        const bool cerrar = pasado >= AVISO_MS ||
+                            (ev.gesture == TOUCH_TAP && uiNotifHitCerrar(ev.x, ev.y)) ||
+                            (ev.gesture != TOUCH_NONE && ev.gesture != TOUCH_TAP);
 
-        if (ev.gesture != TOUCH_NONE || pasado >= AVISO_MS) {
+        if (cerrar) {
             notifMarcarTodosLeidos();
             s_notifRev = notifRevision();
             s_phase = PHASE_RUNNING;

@@ -11,6 +11,7 @@
 #include <WiFiClientSecure.h>
 #include <esp_task_wdt.h>
 #include <mbedtls/sha256.h>
+#include <esp_heap_caps.h>
 #include <cstdlib>
 #include <cstring>
 
@@ -66,6 +67,30 @@ static bool abrirProxy(const char* url, WiFiClient& plano, WiFiClientSecure& tls
         http.addHeader("Authorization", "Bearer " FEED_TOKEN);
     }
     return true;
+}
+
+// Lo que HTTPClient devuelve cuando falla el TLS es -1, y -1 no dice nada: es
+// el mismo numero para "no hay ruta al host" que para "el certificado no
+// valida". mbedTLS SI sabe cual de las dos fue, y WiFiClientSecure lo guarda;
+// hay que ir a buscarlo a mano.
+//
+// Existe porque se perdio una tarde entera con esto: en pantalla decia "no se
+// pudo conectar o el TLS fallo" —que es literalmente las dos cosas a la vez— y
+// no habia forma de saber cual sin poder reproducirlo. El heap va al lado
+// porque el handshake con validacion de cadena es de los picos de memoria mas
+// grandes del firmware, y una cadena de cuatro certificados es bastante mas de
+// lo que habia cuando esto se escribio.
+static void porQueFallo(WiFiClientSecure& tls, int code) {
+    char err[128] = {0};
+    const int mb = tls.lastError(err, sizeof(err));
+    Serial.printf("[OTA] fallo: http=%d mbedtls=%d (-0x%04X) \"%s\"\n",
+                  code, mb, mb < 0 ? -mb : mb, err[0] ? err : "sin detalle");
+    Serial.printf("[OTA] heap libre %u, bloque mas grande %u\n",
+                  (unsigned)ESP.getFreeHeap(),
+                  (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    // -0x2700 es X509_CERT_VERIFY_FAILED: la cadena no valida contra las raices
+    // embebidas. Si aparece eso, regenerar con tools/fetch_le_roots.py, que ya
+    // trae tambien las raices de la generacion Y.
 }
 
 // Traduce el codigo a algo que se entienda mirando la pantalla. -1 y -11 son
@@ -208,6 +233,7 @@ static bool pedirMeta(char* version, size_t versionLen,
     const int code = http.GET();
     if (code != HTTP_CODE_OK) {
         explicarHTTP(detalle, detalleLen, code);
+        porQueFallo(tls, code);
         http.end();
         return false;
     }
@@ -318,6 +344,7 @@ bool otaAplicar(void (*progreso)(int pct), char* detalle, size_t detalleLen) {
     const int code = http.GET();
     if (code != HTTP_CODE_OK) {
         explicarHTTP(detalle, detalleLen, code);
+        porQueFallo(tls, code);
         http.end();
         return false;
     }
