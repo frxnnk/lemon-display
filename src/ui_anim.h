@@ -82,10 +82,14 @@ uint32_t uiAnimTotalMs(uint8_t slots);
 // en este panel el trabajo tirado se paga en frames perdidos.
 bool uiAnimTouches(const UiBand& b, int y0, int y1);
 
-// Declara que lo que hay en el panel no lo dibujo la app que esta por entrar,
-// asi que la proxima transicion tiene que limpiar todo. Lo llaman las pantallas
-// que dibujan directo sobre tft —configuracion, selector, tareas— y el cambio
-// de app. Que lo declare quien ensucia es mas robusto que acordarse afuera.
+// Declara que lo que hay en el panel no lo dibujo el sprite, asi que la proxima
+// transicion tiene que limpiar todo antes de empujar bandas.
+//
+// Queda un solo llamador: la pantalla de aprovisionamiento, que dibuja directo
+// sobre tft porque el simulador no la puede correr. Todas las demas componen
+// sobre el sprite, asi que lo que hay en el sprite es lo que hay en el panel y
+// no hay nada que declarar. Que lo declare quien ensucia, y no quien viene
+// despues, es lo que hace imposible olvidarselo.
 void uiAnimInvalidate();
 
 // Arranca el reloj de la transicion. Devuelve true si limpio la pantalla
@@ -117,6 +121,31 @@ void uiAnimPresent(int y, int h);
 // arranque. Los frames sin banda no se cuentan: falsearian la media hacia abajo
 // y taparian el costo real de los que si pintan.
 void uiAnimCountFrame(uint32_t t0);
+
+// Muestra el sprite entero, que ya tiene la pantalla nueva compuesta.
+//
+// Las pantallas estaticas —el selector, tareas, avisos, configuracion— dibujan
+// sobre el sprite igual que las animadas y terminan aca. Antes dibujaban
+// directo sobre tft, lo que dejaba el sprite con contenido que ya no estaba en
+// el panel y obligaba a uiAnimInvalidate() para que la siguiente animacion no
+// empujara fantasmas. Componiendo siempre sobre el sprite ese problema no
+// existe: lo que hay en el sprite es lo que hay en el panel, siempre.
+//
+// Con la cortina pedida el revelado baja por bandas en vez de aparecer de
+// golpe. Cuesta lo mismo en total —los mismos 460 KB— pero repartido en frames
+// que entran en el presupuesto, asi que el aparato sigue atendiendo el tactil
+// mientras pasa y el cambio de app se lee como un movimiento y no como un corte.
+void uiAnimReveal();
+
+// Pide que el proximo revelado sea con cortina. Lo llama el cambio de app, que
+// es quien sabe que la pantalla entera cambia de tema; un repintado dentro de
+// la misma pantalla —marcar una tarea, mover la barra de un aviso— no lo pide y
+// sale instantaneo, que es lo correcto para una respuesta a un toque.
+//
+// La bandera vive aca y no en cada pantalla para que el que decide sea el que
+// sabe: las pantallas no tienen por que enterarse de por que las estan
+// dibujando.
+void uiAnimCurtainOnce();
 
 // Cierra la transicion: publica las estadisticas y las imprime por serie.
 void uiAnimPublishStats();

@@ -10,6 +10,8 @@
 #include "ui_config.h"
 #include "ui_ferced.h"
 #include "ui_launcher.h"
+#include "ui_provision.h"
+#include <qrcode.h>
 #include "ui_notif.h"
 #include "ui_padel.h"
 #include "ui_todo.h"
@@ -42,6 +44,15 @@ bool     g_config     = false;   // arrancar en la pantalla de configuracion
 int      g_progreso   = -1;      // 0..100: congela la franja de estado del OTA
 bool     g_padel      = false;   // arrancar en la app de padel
 bool     g_launcher   = false;   // arrancar en el selector de apps
+
+// Dibuja PRIMERO el selector y recién después entra a la app pedida, que es lo
+// que pasa de verdad cuando el usuario elige una app. Sirve para lo único que no
+// se puede verificar mirando una pantalla sola: que las bandas del escalonado
+// cubran las 480 filas. Si alguna fila no tiene dueño, en la captura queda un
+// jirón del selector —que es una pantalla llena y clara— sobre el fondo de la
+// app nueva, y se ve de lejos.
+bool     g_desdeLauncher = false;
+bool     g_setup      = false;   // la pantalla del QR de aprovisionamiento
 bool     g_tareas     = false;   // arrancar en la lista de tareas
 bool     g_avisos     = false;   // arrancar en la lista de avisos
 bool     g_aviso      = false;   // la tarjeta que interrumpe
@@ -65,6 +76,7 @@ static uint32_t nowEpoch() { return (uint32_t)time(nullptr); }
 // Datos falsos: lo que se verifica aca es la disposicion, no los valores.
 static void mostrarConfig() {
     static const ConfigInfo demo = {
+        "Fran",
         "1.1.0", "e96efeb-dirty", "2026-08-05 04:20",
         "MiWiFi", "192.168.1.41", "feed.ferced.com",
         8073, 35.4f, 20, true
@@ -77,8 +89,30 @@ static void mostrarConfig() {
     if (g_progreso >= 0) uiConfigEstado("Descargando 1.1.1", g_progreso);
 }
 
-// Igual que llenarApps() del firmware, con los mismos datos que tendria arriba.
+// La pantalla de aprovisionamiento con el QR de verdad. El simulador compila la
+// misma libreria de QR que el firmware, asi que lo que se ve aca es lo que se
+// va a ver en el aparato —y se puede escanear del monitor para comprobar que el
+// codigo es valido, que es la unica parte que el layout no dice—.
+static void mostrarSetup() {
+    static uint8_t modulos[41 * 41];
+    QRCode qr;
+    // La version 6 son 41x41 modulos; el buffer de la libreria no es constexpr,
+    // asi que se dimensiona con el maximo y se le pasa ese.
+    static uint8_t datos[1024];
+    qrcode_initText(&qr, datos, 6, ECC_LOW, "WIFI:S:Ferced-Fran;T:WPA;P:ferced1234;;");
+    const uint8_t lado = qr.size < 41 ? qr.size : 41;
+    for (uint8_t y = 0; y < lado; y++) {
+        for (uint8_t x = 0; x < lado; x++) {
+            modulos[y * lado + x] = qrcode_getModule(&qr, x, y) ? 1 : 0;
+        }
+    }
+    s_estatica = true;
+    uiProvisionDraw(modulos, lado, "Fran", "Ferced-Fran", "ferced1234",
+                    "http://192.168.4.1");
+}
+
 static void mostrarLauncher() {
+    uiAnimCurtainOnce();   // igual que enterLauncher() en el firmware
     AppInfo apps[APP_COUNT];
     apps[APP_NOTICIAS].nombre = "NOTICIAS";
     apps[APP_NOTICIAS].inicial = 'N';
@@ -188,6 +222,10 @@ static const char* nombreApp(uint8_t a) {
 static void cambiarApp() {
     s_app = (uint8_t)((s_app + 1) % APP_COUNT);
     std::printf("  app: %s\n", nombreApp(s_app));
+    // Lo mismo que hace enterApp() en el firmware. Si el simulador no pidiera la
+    // cortina, las transiciones entre apps se verian aca distinto de como se ven
+    // en el aparato, que es justo lo que un simulador no puede permitirse.
+    uiAnimCurtainOnce();
     show();
     s_lastRotate = millisNow();
 }
@@ -250,6 +288,7 @@ void setup() {
     todoLoad();
     simNotifLoad();
     applyArgs();
+    if (g_desdeLauncher) mostrarLauncher();
     show();
     s_lastRotate = millisNow();
 
@@ -271,9 +310,17 @@ void setup() {
     }
 
     if (g_aviso) {
+        // Se deja terminar de entrar la pantalla de abajo ANTES de mostrar el
+        // aviso. Sin esto el sprite estaba en negro y el globo salia flotando
+        // sobre nada, que es justo lo contrario de lo que hay que verificar: el
+        // aviso se dibuja ENCIMA de lo que estabas mirando y esa es toda la
+        // gracia. El simulador tiene que mostrar eso o no sirve.
+        const uint32_t fin = millisNow() + 1600;
+        while (millisNow() < fin) uiFercedTick(nowEpoch(), 0.45f);
         s_estatica = true;
         uiNotifDrawCard(notifPendiente(), 0.62f);
     }
+    if (g_setup) mostrarSetup();
     if (g_config) mostrarConfig();
     if (g_launcher) mostrarLauncher();
 }

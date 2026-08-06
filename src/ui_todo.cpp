@@ -1,25 +1,30 @@
 #include "ui_todo.h"
 #include "config.h"
 #include "design_system.h"
-#include "data/ferced_mark_11.h"
+#include "ui_chrome.h"
 
 #include <Arduino.h>
 #include <cstdio>
 #include <cstring>
 
 using namespace FercedColors;
+using namespace FercedChrome;
+
+// Se compone sobre el sprite, igual que las pantallas animadas, y se muestra
+// con uiAnimReveal(). Antes esta pantalla dibujaba directo sobre tft y dejaba
+// el sprite con contenido que ya no estaba en el panel, lo que obligaba a
+// declarar uiAnimInvalidate() para que la siguiente animacion no empujara
+// fantasmas. Componiendo siempre sobre el sprite el problema no existe.
 
 namespace {
 
-constexpr int MARGIN = 28;
-constexpr int MARK_W = 11;
-constexpr int MARK_H = 28;
-constexpr int CHIP_Y = 30;
-constexpr int CHIP_H = 28;
+LGFX_Sprite& g = uiSprite;
 
-constexpr int FILA_Y0 = 96;
+constexpr int MARK_W = 11;
+
+constexpr int FILA_Y0 = 100;
 constexpr int FILA_H  = 46;
-constexpr int MAX_FILAS = 7;          // 96 + 7*46 = 418, y el pie va en 440
+constexpr int MAX_FILAS = 7;          // 100 + 7*46 = 422, y el pie va en 428
 
 constexpr int CAJA = 22;              // lado de la casilla
 constexpr int CAJA_R = 7;
@@ -27,104 +32,71 @@ constexpr int CAJA_X = MARGIN;
 constexpr int TEXTO_X = MARGIN + CAJA + 20;
 constexpr int TEXTO_W = SCREEN_W - MARGIN - TEXTO_X;
 
-constexpr int PIE_Y = 440;
+constexpr int PIE_Y = 428;
 
 uint8_t s_filas = 0;   // cuántas se dibujaron: sin esto un toque abajo del
                        // último ítem marcaría una tarea que no está en pantalla
 bool    s_ready = false;
-
-void marca(int x, int y) {
-    for (int py = 0; py < MARK_H; py++) {
-        for (int px = 0; px < MARK_W; px++) {
-            const uint16_t c = pgm_read_word(&ferced_mark_11[py * MARK_W + px]);
-            if (c == 0x0000) continue;
-            tft.drawPixel(x + px, y + py, c);
-        }
-    }
-}
-
-// Recorta con puntos suspensivos midiendo el candidato ya con los puntos, para
-// que el resultado nunca se pase. Misma técnica que la pantalla de
-// configuración, donde los SSID largos se iban del margen.
-void dibujarRecortado(int x, int y, int ancho, const char* texto, const lgfx::IFont* font) {
-    if (tft.textWidth(texto, font) <= ancho) {
-        tft.drawString(texto, x, y, font);
-        return;
-    }
-    char buf[TODO_TEXT_LEN + 4];
-    size_t cabe = 0;
-    for (size_t n = 1; texto[n] != '\0' && n < sizeof(buf) - 4; n++) {
-        snprintf(buf, sizeof(buf), "%.*s...", (int)n, texto);
-        if (tft.textWidth(buf, font) > ancho) break;
-        cabe = n;
-    }
-    snprintf(buf, sizeof(buf), "%.*s...", (int)cabe, texto);
-    tft.drawString(buf, x, y, font);
-}
 
 // Casilla vacía en contorno, hecha en negativo cuando está marcada. Es el mismo
 // recurso que usa el selector para señalar la app activa: contraste en vez de
 // color, que en esta identidad está reservado para estados.
 void casilla(int x, int y, bool hecha) {
     if (hecha) {
-        tft.fillSmoothRoundRect(x, y, CAJA, CAJA, CAJA_R, FG);
+        g.fillSmoothRoundRect(x, y, CAJA, CAJA, CAJA_R, FG);
         // Un tilde dibujado a mano: dos líneas gruesas. Las fuentes no tienen
         // el glifo, y traerlo sólo para esto no se justifica.
-        for (int g = 0; g < 2; g++) {
-            tft.drawLine(x + 5, y + 11 + g, x + 9, y + 15 + g, CANVAS);
-            tft.drawLine(x + 9, y + 15 + g, x + 16, y + 6 + g, CANVAS);
+        for (int t = 0; t < 2; t++) {
+            g.drawLine(x + 5, y + 11 + t, x + 9, y + 15 + t, CANVAS);
+            g.drawLine(x + 9, y + 15 + t, x + 16, y + 6 + t, CANVAS);
         }
     } else {
-        tft.fillSmoothRoundRect(x, y, CAJA, CAJA, CAJA_R, FG_4);
-        tft.fillSmoothRoundRect(x + 2, y + 2, CAJA - 4, CAJA - 4, CAJA_R - 1, CANVAS);
+        g.fillSmoothRoundRect(x, y, CAJA, CAJA, CAJA_R, FG_4);
+        g.fillSmoothRoundRect(x + 2, y + 2, CAJA - 4, CAJA - 4, CAJA_R - 1, CANVAS);
     }
 }
 
 }  // namespace
 
-void uiTodoSetup() { s_ready = true; }
+void uiTodoSetup() { uiAnimSetup(); s_ready = true; }
 
 uint8_t uiTodoVisibles() { return MAX_FILAS; }
 
 void uiTodoDraw(const char* direccion) {
     if (!s_ready) return;
 
-    // Esta pantalla dibuja directo sobre tft, asi que el sprite de la
-    // animacion queda con contenido que ya no esta en el panel. Declararlo
-    // aca y no en quien llama hace imposible olvidarselo.
-    uiAnimInvalidate();
-    displayWaitVSync();
-    tft.fillScreen(CANVAS);
+    g.fillScreen(CANVAS);
 
-    // Chip: cuántas quedan, que es lo único que importa de un vistazo.
-    char chip[40];
+    const uint8_t total = todoCount();
     const uint8_t pend = todoPending();
-    if (todoCount() == 0)   snprintf(chip, sizeof(chip), "TAREAS");
-    else if (pend == 0)     snprintf(chip, sizeof(chip), "TAREAS  ·  TODO HECHO");
-    else if (pend == 1)     snprintf(chip, sizeof(chip), "TAREAS  ·  1 PENDIENTE");
-    else                    snprintf(chip, sizeof(chip), "TAREAS  ·  %u PENDIENTES", pend);
+    const uint8_t hechas = total - pend;
 
-    tft.setFont(DS::fontCaption());
-    const int chipW = tft.textWidth(chip) + 26;
-    tft.fillSmoothRoundRect(MARGIN, CHIP_Y, chipW, CHIP_H, CHIP_H / 2, SURFACE);
-    tft.setTextDatum(lgfx::middle_left);
-    tft.setTextColor(FG_3, SURFACE);
-    tft.drawString(chip, MARGIN + 13, CHIP_Y + CHIP_H / 2);
+    char cuenta[32] = {0};
+    if (total == 0)      snprintf(cuenta, sizeof(cuenta), "VACÍA");
+    else if (pend == 0)  snprintf(cuenta, sizeof(cuenta), "TODO HECHO");
+    else if (pend == 1)  snprintf(cuenta, sizeof(cuenta), "1 PENDIENTE");
+    else                 snprintf(cuenta, sizeof(cuenta), "%u PENDIENTES", pend);
 
-    marca(SCREEN_W - MARGIN - MARK_W, CHIP_Y);
+    uiEyebrow(g, "TAREAS", cuenta, 1.0f);
+    uiMark(g, SCREEN_W - MARGIN - MARK_W, 20, 1.0f);
 
-    s_filas = todoCount() < MAX_FILAS ? todoCount() : MAX_FILAS;
+    s_filas = total < MAX_FILAS ? total : MAX_FILAS;
 
-    if (todoCount() == 0) {
-        tft.setTextDatum(lgfx::top_left);
-        tft.setFont(DS::fontHeading());
-        tft.setTextColor(FG_2, CANVAS);
-        tft.drawString("Sin tareas.", MARGIN, 180);
-        tft.setFont(DS::fontBody());
-        tft.setTextColor(FG_3, CANVAS);
-        tft.drawString("Agregalas desde el teléfono:", MARGIN, 222);
-        tft.setTextColor(FG, CANVAS);
-        tft.drawString(direccion ? direccion : "", MARGIN, 250);
+    if (total == 0) {
+        // El estado vacío no es un error, así que se dice con la voz de la
+        // marca: la cursiva con gracias, la misma que ferced.com usa para la
+        // palabra que lleva el peso de cada título.
+        g.setTextDatum(lgfx::top_left);
+        g.setFont(DS::fontAcento());
+        g.setTextColor(FG_2, CANVAS);
+        g.drawString("nada pendiente.", MARGIN, 190);
+        g.setFont(DS::fontBody());
+        g.setTextColor(FG_3, CANVAS);
+        g.drawString("Agregalas desde el teléfono:", MARGIN, 250);
+        g.setTextColor(FG, CANVAS);
+        g.drawString(direccion ? direccion : "", MARGIN, 278);
+        uiRail(g, RAIL_Y, 0.0f);
+        uiAnimReveal();
         return;
     }
 
@@ -135,35 +107,38 @@ void uiTodoDraw(const char* direccion) {
 
         casilla(CAJA_X, y + (FILA_H - CAJA) / 2 - 4, it->done);
 
-        tft.setTextDatum(lgfx::top_left);
-        tft.setTextColor(it->done ? FG_4 : FG, CANVAS);
+        g.setTextDatum(lgfx::top_left);
+        g.setFont(DS::fontHeading());
+        g.setTextColor(it->done ? FG_4 : FG, CANVAS);
         const int ty = y + 6;
-        dibujarRecortado(TEXTO_X, ty, TEXTO_W, it->text, DS::fontHeading());
+        const int w = uiTextoRecortado(g, it->text, TEXTO_X, ty, TEXTO_W);
 
         // Tachado: la mitad del renglón, del ancho real del texto dibujado.
-        if (it->done) {
-            int w = tft.textWidth(it->text, DS::fontHeading());
-            if (w > TEXTO_W) w = TEXTO_W;
-            tft.drawFastHLine(TEXTO_X, ty + 13, w, FG_4);
-        }
+        if (it->done && w > 0) g.drawFastHLine(TEXTO_X, ty + 13, w, FG_4);
     }
 
     // Las que no entraron. Callarlas sería mentir sobre cuántas hay.
-    if (todoCount() > MAX_FILAS) {
-        tft.setFont(DS::fontBody());
-        tft.setTextDatum(lgfx::top_left);
-        tft.setTextColor(FG_4, CANVAS);
+    if (total > MAX_FILAS) {
+        g.setFont(DS::fontCaption());
+        g.setTextDatum(lgfx::top_left);
+        g.setTextColor(FG_4, CANVAS);
         char mas[32];
-        snprintf(mas, sizeof(mas), "+%u más", (unsigned)(todoCount() - MAX_FILAS));
-        tft.drawString(mas, TEXTO_X, FILA_Y0 + MAX_FILAS * FILA_H + 2);
+        snprintf(mas, sizeof(mas), "+%u más", (unsigned)(total - MAX_FILAS));
+        g.drawString(mas, TEXTO_X, FILA_Y0 + MAX_FILAS * FILA_H - 12);
     }
 
-    tft.setFont(DS::fontCaption());
-    tft.setTextDatum(lgfx::top_left);
-    tft.setTextColor(FG_4, CANVAS);
-    tft.drawString(direccion ? direccion : "", MARGIN, PIE_Y);
-    tft.setTextDatum(lgfx::top_right);
-    tft.drawString("tocá una tarea para marcarla", SCREEN_W - MARGIN, PIE_Y);
+    g.setFont(DS::fontCaption());
+    g.setTextDatum(lgfx::top_left);
+    g.setTextColor(FG_4, CANVAS);
+    g.drawString(direccion ? direccion : "", MARGIN, PIE_Y);
+    g.setTextDatum(lgfx::top_right);
+    g.drawString("tocá una tarea para marcarla", SCREEN_W - MARGIN, PIE_Y);
+
+    // El riel del pie mide lo hecho sobre el total. En noticias marca cuánto
+    // falta para el próximo titular; acá, cuánto llevás. Es el mismo elemento en
+    // el mismo renglón, midiendo lo que cada pantalla tiene para medir.
+    uiRail(g, RAIL_Y, total > 0 ? (float)hechas / (float)total : 0.0f);
+    uiAnimReveal();
 }
 
 int8_t uiTodoHit(int16_t x, int16_t y) {

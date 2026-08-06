@@ -1,187 +1,174 @@
 #include "ui_launcher.h"
 #include "config.h"
 #include "design_system.h"
-#include "data/ferced_mark_11.h"
+#include "ui_chrome.h"
 
 #include <Arduino.h>
 #include <cstdio>
 #include <cstring>
 
 using namespace FercedColors;
+using namespace FercedChrome;
 
-// El selector es la única pantalla del aparato que muestra la marca completa y
-// no contenido. Acá el aparato habla de sí mismo, así que se permite el
-// wordmark y el encabezado.
+// El selector es la única pantalla del aparato —junto con configuración— que
+// muestra la marca completa y no contenido. Acá el aparato habla de sí mismo,
+// así que se permite el isotipo a color y el wordmark. En las pantallas de
+// contenido la marca vuelve a ser la de 11x28 en blanco, arriba a la derecha:
+// ahí el protagonista es el titular.
 //
-// Cada app es una tarjeta con monograma. La que está corriendo se dibuja en
+// Cada app es una baldosa con monograma. La que está corriendo se dibuja en
 // negativo —monograma relleno, texto en blanco— y las demás en contorno. El
 // contraste hace de indicador sin gastar un color de acento, que en esta
 // identidad está reservado para estados.
 //
-// Se dibuja directo sobre tft y no sobre el sprite: es una pantalla estática,
-// como la de configuración, y así no compite con el buffer de la animación.
+// La grilla es de dos columnas. Antes era una lista de una columna con la
+// altura repartida entre las apps, y con la cuarta las tarjetas bajaban a 60 px
+// y el bloque de texto se cruzaba con el borde. Con dos columnas entran seis
+// sin apretar nada.
 
 namespace {
 
-constexpr int MARGIN = 28;
-constexpr int MARK_W = 11;
-constexpr int MARK_H = 28;
-constexpr int HEAD_Y = 38;
-constexpr int RULE_Y = 100;
+LGFX_Sprite& g = uiSprite;
 
-constexpr int CARD_X = MARGIN;
-constexpr int CARD_W = SCREEN_W - 2 * MARGIN;   // 424
+constexpr int RULE = 112;
 
-// La grilla se calcula a partir de cuántas apps hay, no está fijada para dos.
-// Con la altura clavada en 104, la tercera tarjeta se salía de la pantalla y se
-// comía los puntos y el pie: 140 + 2*(104+20) + 104 = 492 sobre un panel de 480.
-constexpr int CARD_Y0  = 120;
-constexpr int CARD_FIN = 408;                   // desde acá abajo van puntos y pie
-constexpr int CARD_GAP = 16;
+constexpr int GRID_Y0  = 130;
+constexpr int GRID_FIN = 404;
+constexpr int GAP      = 20;
 
-// Altos reales del texto, medidos: con esto el bloque se arma en vez de
-// suponerse. Con cuatro apps la tarjeta baja a 60 px y un bloque fijo de 48 se
-// cruzaba con el borde de abajo.
-constexpr int NOMBRE_H = 26;   // SatoshiMedium18
-constexpr int ESTADO_H = 20;   // Satoshi12
-
-constexpr int MONO_MAX = 54;                    // lado del monograma
-constexpr int TEXT_X = CARD_X + 20 + MONO_MAX + 20;
-
-constexpr int DOTS_Y = 424;
-constexpr int HINT_Y = 446;
-
-constexpr uint8_t MAX_APPS = 4;
+constexpr int HINT_Y = 422;
 
 uint8_t s_n = 0;
 uint8_t s_actual = 0;
 bool    s_ready = false;
 
+uint8_t columnas() { return s_n > 1 ? 2 : 1; }
+uint8_t renglones() { return (uint8_t)((s_n + columnas() - 1) / columnas()); }
+
+int cardW() {
+    const uint8_t c = columnas();
+    return (SCREEN_W - 2 * MARGIN - (c - 1) * GAP) / c;
+}
+
 int cardH() {
     if (s_n == 0) return 0;
-    const int alto = (CARD_FIN - CARD_Y0 - (s_n - 1) * CARD_GAP) / s_n;
-    return alto > 126 ? 126 : alto;   // con una sola app, una tarjeta gigante queda ridícula
+    const uint8_t r = renglones();
+    const int alto = (GRID_FIN - GRID_Y0 - (r - 1) * GAP) / r;
+    return alto > 150 ? 150 : alto;   // con una sola app, una baldosa gigante queda ridícula
 }
 
-int cardY(uint8_t i) { return CARD_Y0 + i * (cardH() + CARD_GAP); }
-
-void marca(int x, int y) {
-    for (int py = 0; py < MARK_H; py++) {
-        for (int px = 0; px < MARK_W; px++) {
-            const uint16_t c = pgm_read_word(&ferced_mark_11[py * MARK_W + px]);
-            if (c == 0x0000) continue;
-            tft.drawPixel(x + px, y + py, c);
-        }
-    }
-}
+int cardX(uint8_t i) { return MARGIN + (i % columnas()) * (cardW() + GAP); }
+int cardY(uint8_t i) { return GRID_Y0 + (i / columnas()) * (cardH() + GAP); }
 
 // LovyanGFX no tiene drawSmoothRoundRect: el borde de 1 px se arma con dos
 // rellenos concéntricos, como ya lo resuelven la tarjeta del QR y los botones
 // de la pantalla de configuración.
-void marco(int x, int y, int w, int h, int r, uint16_t color) {
-    tft.fillSmoothRoundRect(x, y, w, h, r, color);
-    tft.fillSmoothRoundRect(x + 1, y + 1, w - 2, h - 2, r - 1, CANVAS);
+void marco(int x, int y, int w, int h, int r, uint16_t color, uint16_t dentro) {
+    g.fillSmoothRoundRect(x, y, w, h, r, color);
+    g.fillSmoothRoundRect(x + 1, y + 1, w - 2, h - 2, r - 1, dentro);
 }
 
-void tarjeta(uint8_t i, const AppInfo& app) {
-    const int y = cardY(i);
-    const int h = cardH();
-    const bool activa = i == s_actual;
-    const int radio = h / 4 < DS::RADIUS_LG ? h / 4 : DS::RADIUS_LG;
-
-    marco(CARD_X, y, CARD_W, h, radio, activa ? FG_2 : LINE);
-
-    // El monograma se achica si la tarjeta no le da lugar, en vez de desbordar.
-    int mono = h - 24;
-    if (mono > MONO_MAX) mono = MONO_MAX;
-    const int mx = CARD_X + 20 + (MONO_MAX - mono) / 2;   // la columna de texto no se mueve
-    const int my = y + (h - mono) / 2;
-    const char inicial[2] = {app.inicial, '\0'};
+void monograma(int x, int y, int lado, char inicial, bool activa) {
     if (activa) {
-        tft.fillSmoothRoundRect(mx, my, mono, mono, mono / 4, FG);
-        tft.setTextColor(CANVAS, FG);
+        g.fillSmoothRoundRect(x, y, lado, lado, lado / 4, FG);
+        g.setTextColor(CANVAS, FG);
     } else {
-        marco(mx, my, mono, mono, mono / 4, LINE);
-        tft.setTextColor(FG_3, CANVAS);
+        marco(x, y, lado, lado, lado / 4, LINE, CANVAS);
+        g.setTextColor(FG_3, CANVAS);
     }
-    tft.setFont(DS::fontHeading());
-    tft.setTextDatum(lgfx::middle_center);
-    tft.drawString(inicial, mx + mono / 2, my + mono / 2);
+    const char txt[2] = {inicial, '\0'};
+    g.setFont(DS::fontHeading());
+    g.setTextDatum(lgfx::middle_center);
+    g.drawString(txt, x + lado / 2, y + lado / 2);
+}
 
-    // Nombre y estado centrados como bloque, con el aire entre los dos apretado
-    // cuando la tarjeta es baja. Así se ve equilibrada con dos apps y no se sale
-    // del marco con cuatro.
-    const int aire = h >= 90 ? 6 : 2;
-    const int bloque = NOMBRE_H + aire + ESTADO_H;
-    const int ty = y + (h - bloque) / 2;
+void baldosa(uint8_t i, const AppInfo& app) {
+    const int x = cardX(i), y = cardY(i);
+    const int w = cardW(), h = cardH();
+    const bool activa = i == s_actual;
+    const int radio = h / 5 < DS::RADIUS_LG ? h / 5 : DS::RADIUS_LG;
 
-    tft.setTextDatum(lgfx::top_left);
-    tft.setFont(DS::fontHeading());
-    tft.setTextColor(activa ? FG : FG_2, CANVAS);
-    tft.drawString(app.nombre, TEXT_X, ty);
+    marco(x, y, w, h, radio, activa ? FG_2 : LINE, activa ? SURFACE : CANVAS);
+    const uint16_t fondo = activa ? SURFACE : CANVAS;
+
+    // Con seis apps la baldosa baja de 100 px y el monograma arriba ya no entra
+    // con el texto debajo: ahí se pasa a la disposición horizontal, que es la
+    // que tenía la lista de una columna.
+    const bool vertical = h >= 100;
+    const int lado = vertical ? 40 : (h - 28 > 40 ? 40 : h - 28);
+    int tx, ty;
+
+    if (vertical) {
+        monograma(x + 18, y + 18, lado, app.inicial, activa);
+        tx = x + 18;
+        ty = y + h - 56;
+    } else {
+        monograma(x + 16, y + (h - lado) / 2, lado, app.inicial, activa);
+        tx = x + 16 + lado + 14;
+        ty = y + h / 2 - 22;
+    }
+
+    const int maxW = x + w - 14 - tx;
+    g.setTextDatum(lgfx::top_left);
+    g.setFont(DS::fontHeading());
+    g.setTextColor(activa ? FG : FG_2, fondo);
+    uiTextoRecortado(g, app.nombre, tx, ty, maxW);
 
     if (app.estado[0]) {
-        tft.setFont(DS::fontBody());
-        tft.setTextColor(FG_3, CANVAS);
-        tft.drawString(app.estado, TEXT_X, ty + NOMBRE_H + aire);
+        g.setFont(DS::fontCaption());
+        g.setTextColor(FG_3, fondo);
+        uiTextoRecortado(g, app.estado, tx, ty + 28, maxW);
     }
 }
 
 }  // namespace
 
-void uiLauncherSetup() { s_ready = true; }
+void uiLauncherSetup() { uiAnimSetup(); s_ready = true; }
 
 void uiLauncherDraw(const AppInfo* apps, uint8_t n, uint8_t actual) {
     if (!s_ready || !apps) return;
-    if (n > MAX_APPS) n = MAX_APPS;
+    if (n > UI_LAUNCHER_MAX_APPS) n = UI_LAUNCHER_MAX_APPS;
     s_n = n;
     s_actual = actual < n ? actual : 0;
 
-    // Esta pantalla dibuja directo sobre tft, asi que el sprite de la
-    // animacion queda con contenido que ya no esta en el panel. Declararlo
-    // aca y no en quien llama hace imposible olvidarselo.
-    uiAnimInvalidate();
-    displayWaitVSync();
-    tft.fillScreen(CANVAS);
+    g.fillScreen(CANVAS);
 
-    marca(MARGIN, HEAD_Y);
-    tft.setFont(DS::fontHeading());
-    tft.setTextDatum(lgfx::middle_left);
-    tft.setTextColor(FG, CANVAS);
-    tft.drawString("FERCED", MARGIN + MARK_W + 12, HEAD_Y + MARK_H / 2);
+    uiMarkColor(g, MARGIN, 28);
+    g.setFont(DS::fontDataLg());
+    g.setTextDatum(lgfx::middle_left);
+    g.setTextColor(FG, CANVAS);
+    g.drawString("FERCED", MARGIN + UI_MARK_C_W + 18, 28 + UI_MARK_C_H / 2);
 
-    tft.setFont(DS::fontCaption());
-    tft.setTextDatum(lgfx::middle_right);
-    tft.setTextColor(FG_4, CANVAS);
-    tft.drawString("APLICACIONES", SCREEN_W - MARGIN, HEAD_Y + MARK_H / 2);
+    g.setFont(DS::fontCaption());
+    g.setTextDatum(lgfx::middle_right);
+    g.setTextColor(FG_4, CANVAS);
+    g.drawString("APLICACIONES", SCREEN_W - MARGIN, 28 + UI_MARK_C_H / 2);
 
-    tft.drawFastHLine(MARGIN, RULE_Y, SCREEN_W - 2 * MARGIN, LINE);
+    g.drawFastHLine(MARGIN, RULE, SCREEN_W - 2 * MARGIN, LINE);
 
-    for (uint8_t i = 0; i < n; i++) tarjeta(i, apps[i]);
+    for (uint8_t i = 0; i < n; i++) baldosa(i, apps[i]);
 
-    // Puntos de posición: los mismos que marcan en qué app se está cuando se
-    // cambia con un deslizamiento, sin abrir el selector.
-    const int paso = 20;
-    const int x0 = SCREEN_W / 2 - (n - 1) * paso / 2;
-    for (uint8_t i = 0; i < n; i++) {
-        tft.fillCircle(x0 + i * paso, DOTS_Y, i == s_actual ? 4 : 3,
-                       i == s_actual ? FG : FG_4);
-    }
+    g.setFont(DS::fontCaption());
+    g.setTextDatum(lgfx::top_center);
+    g.setTextColor(FG_4, CANVAS);
+    g.drawString("tocá una app  ·  deslizá para cambiar", SCREEN_W / 2, HINT_Y);
 
-    tft.setFont(DS::fontCaption());
-    tft.setTextDatum(lgfx::top_center);
-    tft.setTextColor(FG_4, CANVAS);
-    tft.drawString("tocá una app  ·  deslizá para cambiar", SCREEN_W / 2, HINT_Y);
+    // Acá el riel no mide nada: es la firma. Es la única pantalla, con la de
+    // configuración, donde el espectro entero tiene sentido, porque es donde el
+    // aparato dice de quién es.
+    uiRail(g, RAIL_Y, 1.0f);
+    uiAnimReveal();
 }
 
 int8_t uiLauncherHit(int16_t x, int16_t y) {
-    if (x < CARD_X || x >= CARD_X + CARD_W) return -1;
-    const int h = cardH();
+    const int w = cardW(), h = cardH();
     for (uint8_t i = 0; i < s_n; i++) {
-        const int cy = cardY(i);
-        // La mitad del hueco entre tarjetas cuenta para la de arriba: un dedo
-        // que cae justo en el borde tiene que hacer algo, no nada.
-        if (y >= cy && y < cy + h + CARD_GAP / 2) return (int8_t)i;
+        const int cx = cardX(i), cy = cardY(i);
+        // La mitad del hueco entre baldosas cuenta para la de arriba y la de la
+        // izquierda: un dedo que cae justo en el borde tiene que hacer algo.
+        if (x >= cx && x < cx + w + GAP / 2 && y >= cy && y < cy + h + GAP / 2) {
+            return (int8_t)i;
+        }
     }
     return -1;
 }
