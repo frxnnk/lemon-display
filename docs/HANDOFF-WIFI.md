@@ -1,15 +1,30 @@
 # ferced-display — traspaso: la red se cae
 
-Estado al 2026-08-07, firmware 1.4.5. Rama `feat/ferced-display`.
+Estado al 2026-08-07, firmware **1.4.6**. Rama `feat/ferced-display`.
 
 Este documento es para quien venga a averiguar **por qué el aparato se queda sin
-red cada tanto**. No lo resuelve: lo deja planteado con los datos que hay y, más
-importante, con los que faltan.
+red cada tanto**. La pregunta que hay que contestar es «¿el receptor o el
+router?».
 
-**La pregunta que hay que contestar es «¿el receptor o el router?», y hoy NO se
-puede contestar.** No porque sea difícil, sino porque el firmware no registra
-las tres cosas que lo dirimirían. Están listadas en el punto 3 y son media hora
-de trabajo.
+**Actualización 2026-08-07 (más tarde): las tres instrumentaciones del punto 3
+y los dos arreglos del punto 4 ya están en la 1.4.6**, flasheada y verificada
+por serie (y publicada en el canal OTA del VPS). O sea:
+
+- `[Boot] motivo=N (nombre)` sale al arrancar. Ojo: un reset por esptool da
+  `0 (desconocido)` — esa es su firma normal, no un misterio. Lo que discrimina
+  es un 6 (brownout), un 4 (panic) o un 3 (software) en un reinicio espontáneo.
+- `[WiFi] caida: reason=N rssi=N t=N` sale en cada desconexión. El RSSI es el
+  muestreado hasta 5 s antes de la caída (en el momento de la caída ya no hay
+  enlace que medir). La tabla del punto 3b es la clave de lectura.
+- La señal en dBm está en la pantalla de configuración, bloque de red, fila
+  SEÑAL.
+- `WiFi.setSleep(false)` puesto y el tope del backoff bajado de 5 min a 60 s.
+
+**Lo que falta es sólo el paso 3 del plan: dejarlo capturando y leer la tabla.**
+Hay un capturador con hora de pared por línea en `tools/capture_serie.ps1`
+(escribe en `output/serie-*.log`; mientras corre retiene COM3, pararlo antes de
+flashear). La hora de pared detecta reinicios aunque no se capture el arranque:
+los millis del aparato van para atrás.
 
 Leé el punto 2 antes de proponer una causa: hay cuatro sospechosos ya
 descartados con evidencia, y volver sobre ellos es tiempo perdido.
@@ -96,9 +111,10 @@ explicar el reinicio; no explica los cortes.
 
 ---
 
-## 3. Lo que falta medir, que es por qué no se puede contestar la pregunta
+## 3. Lo que faltaba medir — **implementado en la 1.4.6, ver arriba**
 
-Tres datos. Ninguno existe hoy en el build de Ferced.
+Tres datos. Los tres están en la 1.4.6; queda esta sección porque las tablas de
+lectura siguen siendo la clave del diagnóstico.
 
 ### a) El motivo del reinicio
 
@@ -159,9 +175,9 @@ analizador de WiFi.
 
 ---
 
-## 4. Dos cosas para arreglar igual, independientemente del diagnóstico
+## 4. Dos cosas para arreglar igual — **hechas en la 1.4.6**
 
-Las dos son de una línea y las dos empeoran el problema hoy.
+Las dos eran de una línea y las dos empeoraban el problema.
 
 ### El ahorro de energía del WiFi está prendido
 
