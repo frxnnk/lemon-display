@@ -698,9 +698,22 @@ void loop() {
             break;
     }
 
-    const uint32_t sinceRotate = now - s_lastRotate;
+    uint32_t sinceRotate = now - s_lastRotate;
     if (s_app != APP_TAREAS && s_app != APP_AVISOS && sinceRotate >= FEED_ROTATE_MS) {
         advance();
+        // Hay que recalcularlo: advance() acaba de mover s_lastRotate y todo lo
+        // que sigue mira este valor. Con el viejo —que por definicion vale
+        // 17.000 y pico— el prefetch de mas abajo daba por cumplida su espera de
+        // dos segundos y bajaba la imagen JUSTO despues de arrancar la
+        // animacion, que es exactamente lo que esos dos segundos existen para
+        // evitar. Se veia como que uno de cada dos titulares aparecia de golpe:
+        // la telemetria lo delataba con transiciones de frames=1 alternadas con
+        // las de 40, porque el GET bloqueante se comia la ventana entera de la
+        // ola. Y de paso el riel arrancaba lleno en vez de vacio.
+        //
+        // millis() y no `now`: `now` es de antes del advance(), asi que la resta
+        // daria negativa y, en unsigned, gigante.
+        sinceRotate = millis() - s_lastRotate;
     }
 
     // La lista también cambia desde el teléfono, en otra tarea. Repintar acá y
