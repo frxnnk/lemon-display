@@ -26,6 +26,34 @@ Hay un capturador con hora de pared por línea en `tools/capture_serie.ps1`
 flashear). La hora de pared detecta reinicios aunque no se capture el arranque:
 los millis del aparato van para atrás.
 
+**Actualización 2026-08-07 (mediodía): la primera noche de captura salió
+LIMPIA, y eso ya es un veredicto parcial.** 1.502 líneas entre las 04:45 y las
+11:32: ni una `[WiFi] caida`, ni un `[Boot]`, ni un solo `HTTP -1` — contra el
+error de DNS/TLS cada 100–150 s que había antes. Con una sola variable grande
+cambiada, **el sospechoso principal del lado del aparato pasa a ser el modem
+sleep que `WiFi.setSleep(false)` apagó**. Una noche no es una semana: si vuelve
+una caída, el `reason` ya queda registrado.
+
+Del lado de la casa (medido desde la PC ese mismo mediodía):
+
+- El router es un **Askey GPON HGU de Movistar** (192.168.1.1, `micro_httpd`,
+  UPnP lo confirma). Un solo AP físico con dos radios: `a0:8a:06:90:9e:bf` en
+  2,4 GHz y `...:be` en 5 GHz — MACs consecutivas, sin señales de mesh.
+- **El router no se reinicia**: el `BOOTID` de su MiniUPnPd es un epoch y da
+  30-jun-2026, la misma noche del último cluster de desconexiones que Windows
+  registró en la PC (00:36–01:11). Desde entonces, cero evento 8003.
+- O sea que los «cortes» que se perciben en la PC **no son desasociaciones**.
+  Candidatos: la PC está en **5 GHz canal 100 — canal DFS** (un radar o un
+  falso positivo obliga al AP a cambiar de canal y son segundos de silencio,
+  sin evento de desconexión) con señal justa (−77 dBm), o microcortes del WAN.
+- Para dirimirlo quedó `tools/ping_monitor.ps1` corriendo en la PC: 1 ping/s a
+  192.168.1.1 y a 8.8.8.8, registra sólo cortes con duración
+  (`output/ping-*.log`). Gateway y afuera caen juntos → WiFi/router; sólo
+  afuera → WAN/ISP; nada mientras el usuario percibió un corte → mirar la
+  banda de 5 GHz de la PC, no la red.
+- El arreglo barato si es DFS: **fijar el canal de 5 GHz en 36–48** desde la
+  página del router. La cajita es sólo 2,4 GHz y no la toca.
+
 Leé el punto 2 antes de proponer una causa: hay cuatro sospechosos ya
 descartados con evidencia, y volver sobre ellos es tiempo perdido.
 
