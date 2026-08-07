@@ -62,10 +62,16 @@ static uint32_t s_todoRev = 0;
 // Cuánto queda un aviso en pantalla antes de cerrarse solo. Un cuarto de minuto
 // alcanza para levantar la vista y leerlo, y no tanto como para tapar la
 // pantalla si uno no está.
-// Nueve segundos. Eran veinticinco, que con un aviso corto —"terminé la tarea"—
-// es un cartel tapando la pantalla mucho después de que lo leiste. Ahora ademas
-// hay un boton para cerrarlo antes.
-#define AVISO_MS 9000UL
+// Veinte segundos. La cuenta cambio dos veces y por buenos motivos: eran 25
+// cuando el aviso tapaba la pantalla entera, o sea 25 segundos sin poder ver
+// nada, y ahi bajaron a 9. Pero ahora es un cartel en la esquina que deja ver
+// lo que habia atras, asi que ya no cuesta nada tenerlo puesto: lo que costaba
+// era la interrupcion, no el tiempo. Con 9 se iba antes de que levantaras la
+// vista.
+//
+// Se puede cerrar antes con la cruz, asi que este numero es un techo, no una
+// espera obligada.
+#define AVISO_MS 20000UL
 static uint32_t s_notifRev = 0;
 static uint32_t s_avisoDesde = 0;
 
