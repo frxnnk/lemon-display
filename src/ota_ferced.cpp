@@ -385,6 +385,22 @@ bool otaAplicar(void (*progreso)(int pct), char* detalle, size_t detalleLen) {
         return false;
     };
 
+    // Igual que fallar() pero diciendo EN QUE BYTE se corto. Sin eso, "la
+    // descarga se corto" es indistinguible entre cortarse siempre en el mismo
+    // punto —memoria, un limite del servidor— y cortarse en cualquier lado
+    // —la red—, que piden arreglos opuestos. El porcentaje va tambien porque es
+    // lo unico que se ve sin consola serie.
+    auto cortado = [&](const char* texto, size_t enByte) {
+        const int pct = declarado > 0 ? (int)((enByte * 100) / (size_t)declarado) : 0;
+        snprintf(detalle, detalleLen, "%s al %d%%", texto, pct);
+        Serial.printf("[OTA] %s: %u de %d bytes (%d%%), heap %u\n",
+                      texto, (unsigned)enByte, declarado, pct,
+                      (unsigned)ESP.getFreeHeap());
+        Update.abort();
+        http.end();
+        return false;
+    };
+
     Serial.printf("[OTA] bajando %s, %d bytes\n", version, declarado);
 
     OtaSha256 hash;
@@ -396,13 +412,28 @@ bool otaAplicar(void (*progreso)(int pct), char* detalle, size_t detalleLen) {
     while (escrito < (size_t)declarado) {
         const size_t hay = stream->available();
         if (hay == 0) {
-            if (!esperarDatos(stream)) return fallar("la descarga se quedo sin datos");
+            if (!esperarDatos(stream)) return cortado("se quedo sin datos", escrito);
             continue;
         }
 
         const size_t pedir = hay < BUF_LEN ? hay : BUF_LEN;
         const int leido = stream->readBytes(buf.p, pedir);
-        if (leido <= 0) return fallar("la descarga se corto");
+        if (leido <= 0) {
+            // Cero NO quiere decir que se corto. readBytes vuelve con cero
+            // cuando se cumple el timeout del stream sin que llegue nada, y
+            // available() puede haber contado un registro TLS que todavia no
+            // termino de descifrarse. Un bache de un segundo en el medio de
+            // 1,4 MB es normal, y abortar por eso obliga a bajar el binario
+            // entero de nuevo.
+            //
+            // Se reintenta por la misma puerta que el caso available()==0: si
+            // en ESPERA_DATOS_MS no llega un byte, ahi si esta cortado.
+            if (!stream->connected() && stream->available() == 0) {
+                return cortado("el servidor cerro la conexion", escrito);
+            }
+            if (!esperarDatos(stream)) return cortado("se quedo sin datos", escrito);
+            continue;
+        }
 
         hash.agregar(buf.p, (size_t)leido);
         if (Update.write(buf.p, (size_t)leido) != (size_t)leido) {

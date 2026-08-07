@@ -7,7 +7,7 @@ el caso mas enganoso.
 import subprocess
 from datetime import datetime
 
-VERSION = "1.4.1"
+VERSION = "1.4.2"
 
 
 def _git(*args):

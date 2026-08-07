@@ -74,15 +74,24 @@ constexpr Rect BTN_CLOSE   = { 296,    368, 152, BTN_H };
 constexpr Rect BTN_UPDATE  = { MARGEN, 422, 248, BTN_H };
 constexpr Rect BTN_FORGET  = { 296,    422, 152, BTN_H };
 
-// La franja de estado. Vive entre los datos y los botones y en reposo esta
-// vacia; durante una actualizacion es lo UNICO que se repinta. El renglon de
-// Satoshi12 ocupa los primeros 24 px y la barra los ultimos 8.
-constexpr Rect ESTADO   = { MARGEN, 322, ANCHO, 36 };
+// La franja de estado OCUPA el bloque de los numeros vivos.
+//
+// Antes vivia sola en 322, entre el bloque de datos y los botones: un renglon
+// chico y sin rotulo flotando en el aire, que ademas quedaba pegado a los
+// botones y se leia como parte de ellos. Y era lo mas importante que podia
+// pasar en la pantalla dicho en el cuerpo mas chico que hay.
+//
+// Que se ponga encima del bloque vivo no es un truco de espacio: ese bloque es
+// justamente "lo que se mueve mientras la mirás", y mientras baja una
+// actualizacion lo que se mueve es la actualizacion. Hereda su rotulo en
+// versalitas y su tipografia, asi que al aparecer no cambia la forma de la
+// pantalla, cambia el contenido de un bloque que ya estaba.
+constexpr Rect ESTADO   = { MARGEN, VIVO_Y - 8, ANCHO, 76 };
 constexpr int BARRA_H   = 8;
 constexpr int BARRA_Y   = ESTADO.y + ESTADO.h - BARRA_H;
 // Aire para el porcentaje alineado a la derecha, para que un texto largo no se
-// le meta encima.
-constexpr int PCT_W     = 60;
+// le meta encima. En cursiva a 18 pt "100 %" mide 78.
+constexpr int PCT_W     = 96;
 
 bool dentro(const Rect& r, int16_t x, int16_t y) {
     return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
@@ -201,18 +210,29 @@ void uiConfigEstado(const char* texto, int pct, bool error) {
 
     if (pct > 100) pct = 100;
 
+    // Rotulo en versalitas, el mismo recurso que titula todos los bloques de la
+    // pantalla. Sin el, el mensaje era un renglon suelto que no se sabia de que
+    // hablaba.
     g.setTextDatum(lgfx::top_left);
-    g.setFont(DS::fontBody());
-    g.setTextColor(error ? DANGER : FG, CANVAS);
-    uiTextoRecortado(g, texto, ESTADO.x, ESTADO.y,
-                     pct < 0 ? ESTADO.w : ESTADO.w - PCT_W);
+    g.setFont(DS::fontCaption());
+    g.setTextColor(error ? DANGER : FG_4, CANVAS);
+    g.drawString(error ? "NO SE PUDO" : "ACTUALIZACIÓN", ESTADO.x, VIVO_Y);
+
+    // El mensaje toma el lugar y el tamano de los numeros vivos. Un error suele
+    // ser largo —"se corto al 45%"— asi que va en la tipografia de titulo, que
+    // entra; el estado normal es corto y luce mejor en la cursiva de la marca.
+    const int anchoTexto = (pct < 0 ? ESTADO.w : ESTADO.w - PCT_W);
+    g.setFont(error ? DS::fontHeading() : DS::fontAcento());
+    g.setTextColor(error ? FG_2 : FG, CANVAS);
+    uiTextoRecortado(g, texto, ESTADO.x, VIVO_Y + 18, anchoTexto);
 
     if (pct >= 0) {
         char pctTxt[8];
         snprintf(pctTxt, sizeof(pctTxt), "%d %%", pct);
+        g.setFont(DS::fontAcento());
         g.setTextDatum(lgfx::top_right);
-        g.setTextColor(FG_3, CANVAS);
-        g.drawString(pctTxt, ESTADO.x + ESTADO.w, ESTADO.y, &Satoshi12);
+        g.setTextColor(FG, CANVAS);
+        g.drawString(pctTxt, ESTADO.x + ESTADO.w, VIVO_Y + 18);
 
         // Riel completo y encima el tramo hecho, con el espectro de la marca: es
         // la misma barra que marca el paso del tiempo en las demas pantallas,
