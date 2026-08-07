@@ -12,6 +12,7 @@ struct ConfigInfo {
     const char* ssid;
     const char* ip;
     const char* endpoint;   // solo el host
+    int32_t     rssi;       // dBm; 0 = sin dato (offline)
     uint32_t    uptimeS;
     float       fps;
     uint8_t     items;

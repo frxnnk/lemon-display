@@ -3,6 +3,7 @@
 #include <cstring>
 #include <ctime>
 #include <esp_ota_ops.h>
+#include <esp_system.h>
 #include <esp_task_wdt.h>
 
 #include "apps.h"
@@ -396,6 +397,7 @@ static void enterConfig() {
         nombre,
         FERCED_VERSION, FERCED_COMMIT, FERCED_BUILD_DATE,
         wifiSSID(), ip.c_str(), endpointHost(),
+        online ? wifiRSSI() : 0,
         millis() / 1000,
         fps,
         feedCount(),
@@ -457,9 +459,29 @@ static void actualizarFeed() {
     uiConfigEstado(linea, -1, !ok);
 }
 
+// Sin esto un brownout (6), un panic (4) y un reinicio por software (3) son
+// indistinguibles, y ya hubo un reinicio espontaneo sin motivo capturado. El
+// numero es el de esp_reset_reason_t; el nombre es para leer el log de un
+// vistazo.
+static const char* motivoReset(esp_reset_reason_t r) {
+    switch (r) {
+        case ESP_RST_POWERON:   return "encendido";
+        case ESP_RST_SW:        return "software";
+        case ESP_RST_PANIC:     return "panic";
+        case ESP_RST_INT_WDT:   return "wdt-interrupcion";
+        case ESP_RST_TASK_WDT:  return "wdt-tarea";
+        case ESP_RST_WDT:       return "wdt-otro";
+        case ESP_RST_BROWNOUT:  return "brownout";
+        case ESP_RST_DEEPSLEEP: return "deepsleep";
+        default:                return "desconocido";
+    }
+}
+
 void setup() {
     Serial.begin(115200);
     Serial.println("\n=== ferced-display ===");
+    const esp_reset_reason_t rr = esp_reset_reason();
+    Serial.printf("[Boot] motivo=%d (%s)\n", (int)rr, motivoReset(rr));
 
     nvsInit();
 

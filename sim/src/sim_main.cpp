@@ -79,7 +79,7 @@ static void mostrarConfig() {
         "Fran",
         "1.1.0", "e96efeb-dirty", "2026-08-05 04:20",
         "MiWiFi", "192.168.1.41", "feed.ferced.com",
-        8073, 35.4f, 20, true
+        -62, 8073, 35.4f, 20, true
     };
     s_estatica = true;
     uiConfigDraw(demo);

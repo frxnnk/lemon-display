@@ -3,8 +3,11 @@
 #include <esp_netif.h>
 
 static unsigned long lastReconnectAttempt = 0;
-static unsigned long reconnectInterval = 10000; // Starts at 10s, doubles up to 5min
-static const unsigned long RECONNECT_MAX = 300000; // 5 min cap
+static unsigned long reconnectInterval = 10000; // Starts at 10s, doubles up to 60s
+// 60 s y no 5 min: el aparato vive enchufado y reintentar no cuesta nada. Con
+// el tope en 5 min, un bache de diez segundos podia dejarlo desconectado cinco
+// minutos porque le tocaba esperar.
+static const unsigned long RECONNECT_MAX = 60000;
 
 // Stored credentials for auto-reconnect
 static char storedSSID[33] = {0};
@@ -16,6 +19,26 @@ static bool dnsApplied = false;
 static unsigned long connectStartMs = 0;
 static const unsigned long CONNECT_TIMEOUT_MS = 15000;
 static bool asyncConnecting = false;
+
+// Ultimo RSSI muestreado con la asociacion viva. En el evento de desconexion
+// WiFi.RSSI() ya no tiene enlace que medir: lo que discrimina es la senal que
+// habia justo antes de la caida.
+static int32_t s_lastRssi = 0;
+static unsigned long s_lastRssiSample = 0;
+static bool s_eventsHooked = false;
+
+// El wifi_err_reason_t del SDK es el dato mas discriminante de todos y sin
+// este manejador se tira: 200/201 apuntan al receptor y a la senal, 2/3 a que
+// el AP lo echo, 8 a que el firmware se fue solo.
+static void hookWifiEvents() {
+    if (s_eventsHooked) return;
+    s_eventsHooked = true;
+    WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t info) {
+        Serial.printf("[WiFi] caida: reason=%d rssi=%ld t=%lu\n",
+                      (int)info.wifi_sta_disconnected.reason,
+                      (long)s_lastRssi, (unsigned long)millis());
+    }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+}
 
 static void applyPublicDns() {
     IPAddress dns1(8, 8, 8, 8);
@@ -39,6 +62,11 @@ void wifiSetup(const char* ssid, const char* password) {
     dnsApplied = false;
 
     WiFi.mode(WIFI_STA);
+    hookWifiEvents();
+    // El modem sleep viene activado por default y es causa conocida de beacons
+    // perdidos y desconexiones. Este aparato vive enchufado a la pared: no
+    // tiene ningun motivo para ahorrar energia.
+    WiFi.setSleep(false);
     WiFi.setAutoReconnect(false);  // Don't auto-reconnect until confirmed working
     WiFi.begin(ssid, password);
 
@@ -66,6 +94,13 @@ void wifiLoop() {
     if (WiFi.status() == WL_CONNECTED) {
         if (!dnsApplied) {
             applyPublicDns();
+        }
+        // Se muestrea seguido para que el manejador de desconexion tenga la
+        // senal de justo antes de la caida, no la de hace media hora.
+        const unsigned long nowRssi = millis();
+        if (nowRssi - s_lastRssiSample >= 5000) {
+            s_lastRssiSample = nowRssi;
+            s_lastRssi = WiFi.RSSI();
         }
         // Reset backoff on successful connection
         reconnectInterval = 10000;
@@ -161,6 +196,8 @@ void wifiConnectAsync(const char* ssid, const char* password) {
 
     WiFi.disconnect();
     WiFi.mode(WIFI_STA);
+    hookWifiEvents();
+    WiFi.setSleep(false);
     WiFi.setAutoReconnect(true);
     WiFi.begin(ssid, password);
 
