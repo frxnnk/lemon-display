@@ -47,7 +47,11 @@ constexpr int COL1_X    = MARGEN;
 constexpr int COL2_X    = MARGEN + COL_W + 24;
 constexpr int DATO_Y0   = 118;
 constexpr int DATO_LH   = 25;
-constexpr int SEP_Y     = 222;
+// La columna de red tiene cuatro filas desde que existe SEÑAL, asi que el
+// separador y el bloque vivo bajaron 28 px. El aire que se comieron estaba
+// entre la franja de estado y los botones, que ahora quedan a 28 px en vez
+// de 56.
+constexpr int SEP_Y     = 250;
 
 // ── Bloque de lo que se mueve, en tres columnas ──
 // Los anchos no son tercios iguales, y estan medidos con tools/medir_texto.py
@@ -55,7 +59,7 @@ constexpr int SEP_Y     = 222;
 // 416/3 el encendido salia recortado a "2 h 14 m..." mientras al lado sobraban
 // noventa pixeles de aire. Los margenes que quedan cubren el peor caso de cada
 // uno: "999 h 59 min" mide 204 y "999" mide 60.
-constexpr int VIVO_Y    = 244;
+constexpr int VIVO_Y    = 272;
 constexpr int VIVO_X[3] = { MARGEN, MARGEN + 214, MARGEN + 348 };
 constexpr int VIVO_W[3] = { 206, 126, 68 };
 
@@ -170,6 +174,17 @@ void uiConfigDraw(const ConfigInfo& info) {
     y += DATO_LH + 6;
     dato(COL1_X, y, COL_W, "COMPILADO", info.built);
     dato(COL2_X, y, COL_W, "FEED",      info.endpoint);
+    y += DATO_LH + 6;
+    // La senal decide si las caidas de red tienen misterio o no: por debajo de
+    // -75 dBm todo lo demas es esperable. Por eso vive en la pantalla y no
+    // solo en la serie.
+    char senal[16];
+    if (info.online && info.rssi != 0) {
+        snprintf(senal, sizeof(senal), "%ld dBm", (long)info.rssi);
+    } else {
+        snprintf(senal, sizeof(senal), "-");
+    }
+    dato(COL2_X, y, COL_W, "SEÑAL", senal);
 
     g.drawFastHLine(MARGEN, SEP_Y, ANCHO, LINE);
 
