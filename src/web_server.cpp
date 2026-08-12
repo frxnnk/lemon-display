@@ -109,41 +109,52 @@ setInterval(function(){if(!document.hidden)api('/api/todos')},5000);
 
 // ── JSON ─────────────────────────────────────────────────────────────────────
 
-static void escapar(String& out, const char* s) {
+static void escapar(Print& out, const char* s) {
     for (const unsigned char* p = (const unsigned char*)s; *p; p++) {
         switch (*p) {
-            case '"':  out += "\\\""; break;
-            case '\\': out += "\\\\"; break;
+            case '"':  out.print("\\\""); break;
+            case '\\': out.print("\\\\"); break;
+            case '\n': out.print("\\n"); break;
             default:
-                if (*p < 0x20) out += ' ';
-                else           out += (char)*p;
+                if (*p < 0x20) out.print(' ');
+                else           out.write(*p);
         }
     }
 }
 
-static String listaJSON() {
-    String out;
-    out.reserve(64 + todoCount() * (TODO_TEXT_LEN + 16));
-    out += "{\"items\":[";
-    for (uint8_t i = 0; i < todoCount(); i++) {
-        const TodoItem* it = todoItem(i);
-        if (i) out += ',';
-        out += "{\"t\":\"";
-        escapar(out, it->text);
-        out += "\",\"d\":";
-        out += it->done ? "true" : "false";
-        out += '}';
-    }
-    out += "],\"max\":";
-    out += TODO_MAX_ITEMS;
-    out += '}';
-    return out;
-}
-
 static void responderLista(AsyncWebServerRequest* req) {
-    AsyncWebServerResponse* r = req->beginResponse(200, "application/json", listaJSON());
-    r->addHeader("Cache-Control", "no-store");
-    req->send(r);
+    AsyncResponseStream* out = req->beginResponseStream("application/json");
+    out->print("{\"v\":2,\"rev\":");
+    out->print(todoRevision());
+    out->print(",\"max\":");
+    out->print(TODO_MAX_ITEMS);
+    out->print(",\"items\":[");
+    for (uint8_t i = 0; i < todoCount(); ++i) {
+        const TodoItem* it = todoItem(i);
+        if (!it) continue;
+        if (i) out->print(',');
+        out->print("{\"id\":"); out->print(it->id);
+        out->print(",\"title\":\""); escapar(*out, it->title);
+        out->print("\",\"description\":\""); escapar(*out, it->description);
+        out->print("\",\"done\":"); out->print(it->done ? "true" : "false");
+        out->print(",\"collapsed\":"); out->print(it->collapsed ? "true" : "false");
+        out->print(",\"due\":"); out->print(it->dueEpoch);
+        out->print(",\"reminder\":"); out->print(it->reminderEpoch);
+        out->print(",\"reminderFired\":"); out->print(it->reminderFired ? "true" : "false");
+        out->print(",\"subtasks\":[");
+        for (uint8_t s = 0; s < it->subCount; ++s) {
+            if (s) out->print(',');
+            const TodoSubtask& sub = it->subtasks[s];
+            out->print("{\"id\":"); out->print(sub.id);
+            out->print(",\"title\":\""); escapar(*out, sub.title);
+            out->print("\",\"done\":"); out->print(sub.done ? "true" : "false");
+            out->print('}');
+        }
+        out->print("]}");
+    }
+    out->print("]}");
+    out->addHeader("Cache-Control", "no-store");
+    req->send(out);
 }
 
 // Devuelve false y ya respondió si el pedido no trae el encabezado propio.
@@ -151,15 +162,50 @@ static bool autorizado(AsyncWebServerRequest* req) {
     if (req->hasHeader(HEADER_GUARD)) return true;
     Serial.printf("[Todo] %s sin %s: lo rechazo\n",
                   req->client()->remoteIP().toString().c_str(), HEADER_GUARD);
-    req->send(403, "text/plain", "falta el encabezado " + String(HEADER_GUARD));
+    req->send(403, "application/json", "{\"error\":\"falta X-Ferced\"}");
+    return false;
+}
+
+static void errorJSON(AsyncWebServerRequest* req, int status, const char* message) {
+    String body = "{\"error\":\"";
+    for (const char* p = message; p && *p; ++p) {
+        if (*p == '"' || *p == '\\') body += '\\';
+        body += *p;
+    }
+    body += "\"}";
+    req->send(status, "application/json", body);
+}
+
+static const AsyncWebParameter* parametro(AsyncWebServerRequest* req, const char* name) {
+    const AsyncWebParameter* value = req->getParam(name);
+    if (!value) value = req->getParam(name, true);
+    return value;
+}
+
+static bool entero(AsyncWebServerRequest* req, const char* name, uint32_t& value,
+                   bool optional = false) {
+    const AsyncWebParameter* p = parametro(req, name);
+    if (!p) { value = 0; return optional; }
+    if (p->value().length() == 0) { value = 0; return optional; }
+    char* end = nullptr;
+    const unsigned long parsed = strtoul(p->value().c_str(), &end, 10);
+    if (!end || *end != '\0') return false;
+    value = static_cast<uint32_t>(parsed);
+    return true;
+}
+
+static bool booleano(AsyncWebServerRequest* req, const char* name, bool& value) {
+    const AsyncWebParameter* p = parametro(req, name);
+    if (!p) return false;
+    if (p->value() == "1" || p->value() == "true") { value = true; return true; }
+    if (p->value() == "0" || p->value() == "false") { value = false; return true; }
     return false;
 }
 
 // El índice puede venir por query o por cuerpo según el cliente; se aceptan los
 // dos para no depender de cómo arme el pedido quien lo mande.
 static int indiceDe(AsyncWebServerRequest* req) {
-    const AsyncWebParameter* p = req->getParam("i");
-    if (!p) p = req->getParam("i", true);
+    const AsyncWebParameter* p = parametro(req, "i");
     if (!p) return -1;
     const long v = p->value().toInt();
     return (v < 0 || v > 255) ? -1 : (int)v;
@@ -179,6 +225,137 @@ void webServerStart() {
     });
 
     server->on("/api/todos", HTTP_GET, [](AsyncWebServerRequest* req) {
+        responderLista(req);
+    });
+
+    server->on("/api/tasks/create", HTTP_POST, [](AsyncWebServerRequest* req) {
+        if (!autorizado(req)) return;
+        const AsyncWebParameter* title = parametro(req, "title");
+        const AsyncWebParameter* description = parametro(req, "description");
+        uint32_t due = 0, reminder = 0;
+        if (!title || !entero(req, "due", due, true) || !entero(req, "reminder", reminder, true)) {
+            errorJSON(req, 400, "datos invalidos"); return;
+        }
+        if (!todoAddFull(title->value().c_str(), description ? description->value().c_str() : "", due, reminder)) {
+            errorJSON(req, 409, "lista llena o titulo vacio"); return;
+        }
+        responderLista(req);
+    });
+
+    server->on("/api/tasks/update", HTTP_POST, [](AsyncWebServerRequest* req) {
+        if (!autorizado(req)) return;
+        uint32_t id = 0, due = 0, reminder = 0;
+        const AsyncWebParameter* title = parametro(req, "title");
+        const AsyncWebParameter* description = parametro(req, "description");
+        if (!title || !entero(req, "id", id) || !entero(req, "due", due, true) ||
+            !entero(req, "reminder", reminder, true) ||
+            !todoUpdate(id, title->value().c_str(), description ? description->value().c_str() : "", due, reminder)) {
+            errorJSON(req, 400, "tarea o datos invalidos"); return;
+        }
+        responderLista(req);
+    });
+
+    server->on("/api/tasks/delete", HTTP_POST, [](AsyncWebServerRequest* req) {
+        if (!autorizado(req)) return;
+        uint32_t id = 0;
+        if (!entero(req, "id", id) || !todoRemoveById(id)) { errorJSON(req, 404, "tarea inexistente"); return; }
+        responderLista(req);
+    });
+
+    server->on("/api/tasks/done", HTTP_POST, [](AsyncWebServerRequest* req) {
+        if (!autorizado(req)) return;
+        uint32_t id = 0; bool done = false;
+        if (!entero(req, "id", id) || !booleano(req, "done", done) || !todoSetDone(id, done)) {
+            errorJSON(req, 400, "estado invalido"); return;
+        }
+        responderLista(req);
+    });
+
+    server->on("/api/tasks/move", HTTP_POST, [](AsyncWebServerRequest* req) {
+        if (!autorizado(req)) return;
+        uint32_t id = 0, position = 0;
+        if (!entero(req, "id", id) || !entero(req, "position", position) ||
+            position > 255 || !todoMove(id, static_cast<uint8_t>(position))) {
+            errorJSON(req, 400, "posicion invalida"); return;
+        }
+        responderLista(req);
+    });
+
+    server->on("/api/tasks/collapse", HTTP_POST, [](AsyncWebServerRequest* req) {
+        if (!autorizado(req)) return;
+        uint32_t id = 0; bool collapsed = false;
+        if (!entero(req, "id", id) || !booleano(req, "collapsed", collapsed) ||
+            !todoSetCollapsed(id, collapsed)) {
+            errorJSON(req, 400, "estado invalido"); return;
+        }
+        responderLista(req);
+    });
+
+    server->on("/api/tasks/snooze", HTTP_POST, [](AsyncWebServerRequest* req) {
+        if (!autorizado(req)) return;
+        uint32_t id = 0, minutes = 10;
+        if (!entero(req, "id", id) || !entero(req, "minutes", minutes, true)) {
+            errorJSON(req, 400, "datos invalidos"); return;
+        }
+        if (minutes == 0) minutes = 10;
+        const time_t now = time(nullptr);
+        if (now < 1600000000 || minutes > 1440 ||
+            !todoSnooze(id, static_cast<uint32_t>(now) + minutes * 60UL)) {
+            errorJSON(req, 409, "reloj no sincronizado o tarea invalida"); return;
+        }
+        responderLista(req);
+    });
+
+    server->on("/api/subtasks/create", HTTP_POST, [](AsyncWebServerRequest* req) {
+        if (!autorizado(req)) return;
+        uint32_t taskId = 0;
+        const AsyncWebParameter* title = parametro(req, "title");
+        if (!title || !entero(req, "taskId", taskId) ||
+            !todoAddSubtask(taskId, title->value().c_str())) {
+            errorJSON(req, 409, "tarea llena, inexistente o titulo vacio"); return;
+        }
+        responderLista(req);
+    });
+
+    server->on("/api/subtasks/update", HTTP_POST, [](AsyncWebServerRequest* req) {
+        if (!autorizado(req)) return;
+        uint32_t taskId = 0, id = 0;
+        const AsyncWebParameter* title = parametro(req, "title");
+        if (!title || !entero(req, "taskId", taskId) || !entero(req, "id", id) ||
+            !todoUpdateSubtask(taskId, id, title->value().c_str())) {
+            errorJSON(req, 400, "subtarea invalida"); return;
+        }
+        responderLista(req);
+    });
+
+    server->on("/api/subtasks/delete", HTTP_POST, [](AsyncWebServerRequest* req) {
+        if (!autorizado(req)) return;
+        uint32_t taskId = 0, id = 0;
+        if (!entero(req, "taskId", taskId) || !entero(req, "id", id) ||
+            !todoRemoveSubtask(taskId, id)) {
+            errorJSON(req, 404, "subtarea inexistente"); return;
+        }
+        responderLista(req);
+    });
+
+    server->on("/api/subtasks/done", HTTP_POST, [](AsyncWebServerRequest* req) {
+        if (!autorizado(req)) return;
+        uint32_t taskId = 0, id = 0; bool done = false;
+        if (!entero(req, "taskId", taskId) || !entero(req, "id", id) ||
+            !booleano(req, "done", done) || !todoSetSubtaskDone(taskId, id, done)) {
+            errorJSON(req, 400, "estado invalido"); return;
+        }
+        responderLista(req);
+    });
+
+    server->on("/api/subtasks/move", HTTP_POST, [](AsyncWebServerRequest* req) {
+        if (!autorizado(req)) return;
+        uint32_t taskId = 0, id = 0, position = 0;
+        if (!entero(req, "taskId", taskId) || !entero(req, "id", id) ||
+            !entero(req, "position", position) || position > 255 ||
+            !todoMoveSubtask(taskId, id, static_cast<uint8_t>(position))) {
+            errorJSON(req, 400, "posicion invalida"); return;
+        }
         responderLista(req);
     });
 
