@@ -29,6 +29,12 @@ constexpr int MAX_LINES = 8;
 constexpr int DETAIL_DESCRIPTION_LINES = 24;
 constexpr int DETAIL_DESCRIPTION = 1;
 constexpr int MAX_HITS = 24;
+constexpr int REMINDER_X = 24;
+constexpr int REMINDER_Y = 62;
+constexpr int REMINDER_W = SCREEN_W - REMINDER_X * 2;
+constexpr int REMINDER_H = 356;
+constexpr int REMINDER_BUTTON_Y = 338;
+constexpr int REMINDER_BUTTON_H = 54;
 
 struct HitRegion {
     int16_t x0, y0, x1, y1;
@@ -366,3 +372,78 @@ void uiTodoOpen(uint32_t taskId) { detail = true; detailId = taskId; detailScrol
 void uiTodoBack() { detail = false; detailId = 0; drawList(); }
 bool uiTodoIsDetail() { return detail; }
 uint8_t uiTodoVisibles() { return hitCount; }
+
+void uiTodoDrawReminder(const TodoItem* item) {
+    if (!ready || !item) return;
+
+    // Es una tarjeta que interrumpe cualquier app, no una pantalla nueva: el
+    // sprite conserva lo que se estaba mirando y la tarjeta se apoya encima.
+    g.fillSmoothRoundRect(REMINDER_X + 4, REMINDER_Y + 6,
+                          REMINDER_W, REMINDER_H, 26, SURFACE);
+    g.fillSmoothRoundRect(REMINDER_X, REMINDER_Y,
+                          REMINDER_W, REMINDER_H, 26, FG);
+
+    const uint16_t inkMuted = uiAnimLerp(CANVAS, FG, 0.46f);
+    g.setTextDatum(lgfx::top_left);
+    g.setFont(DS::fontCaption());
+    g.setTextColor(inkMuted, FG);
+    g.drawString("RECORDATORIO", REMINDER_X + 24, REMINDER_Y + 24);
+
+    // Campana abstracta, dibujada sin depender de glifos de la fuente.
+    const int bellX = REMINDER_X + REMINDER_W - 43;
+    const int bellY = REMINDER_Y + 30;
+    g.drawCircle(bellX, bellY, 10, CANVAS);
+    g.fillRect(bellX - 10, bellY, 21, 10, CANVAS);
+    g.fillSmoothCircle(bellX, bellY + 13, 3, CANVAS);
+
+    g.setFont(DS::fontHeading());
+    char titleLines[5][TODO_TITLE_LEN];
+    const int titleCount = wrapped(item->title, REMINDER_W - 48, titleLines, 5);
+    g.setTextColor(CANVAS, FG);
+    for (int i = 0; i < titleCount; ++i) {
+        g.drawString(titleLines[i], REMINDER_X + 24, REMINDER_Y + 62 + i * 27);
+    }
+
+    char when[32] = {};
+    dateTimeText(item->reminderEpoch, when, sizeof(when));
+    g.setFont(DS::fontCaption());
+    g.setTextColor(inkMuted, FG);
+    if (when[0]) g.drawString(when, REMINDER_X + 24, REMINDER_Y + 208);
+    if (item->subCount) {
+        uint8_t complete = 0;
+        for (uint8_t i = 0; i < item->subCount; ++i) if (item->subtasks[i].done) ++complete;
+        char progress[32];
+        std::snprintf(progress, sizeof(progress), "%u/%u SUBTAREAS", complete, item->subCount);
+        g.setTextDatum(lgfx::top_right);
+        g.drawString(progress, REMINDER_X + REMINDER_W - 24, REMINDER_Y + 208);
+    }
+
+    const int completeX = 48, completeW = 122;
+    const int snoozeX = 180, snoozeW = 118;
+    const int openX = 308, openW = 124;
+    const uint16_t pale = uiAnimLerp(CANVAS, FG, 0.90f);
+    g.fillSmoothRoundRect(completeX, REMINDER_BUTTON_Y, completeW, REMINDER_BUTTON_H, 14, CANVAS);
+    g.fillSmoothRoundRect(snoozeX, REMINDER_BUTTON_Y, snoozeW, REMINDER_BUTTON_H, 14, pale);
+    g.fillSmoothRoundRect(openX, REMINDER_BUTTON_Y, openW, REMINDER_BUTTON_H, 14, pale);
+    g.setFont(DS::fontCaption());
+    g.setTextDatum(lgfx::middle_center);
+    g.setTextColor(FG, CANVAS);
+    g.drawString("COMPLETAR", completeX + completeW / 2, REMINDER_BUTTON_Y + REMINDER_BUTTON_H / 2);
+    g.setTextColor(FG, pale);
+    g.drawString("+10 MIN", snoozeX + snoozeW / 2, REMINDER_BUTTON_Y + REMINDER_BUTTON_H / 2);
+    g.drawString("ABRIR", openX + openW / 2, REMINDER_BUTTON_Y + REMINDER_BUTTON_H / 2);
+
+    uiRailEn(g, REMINDER_X + 24, REMINDER_W - 48,
+             REMINDER_Y + REMINDER_H - 14, 1.0f);
+    uiAnimReveal();
+}
+
+TodoReminderAction uiTodoReminderTap(int16_t x, int16_t y) {
+    if (y < REMINDER_BUTTON_Y || y > REMINDER_BUTTON_Y + REMINDER_BUTTON_H) {
+        return TODO_REMINDER_NONE;
+    }
+    if (x >= 36 && x <= 174) return TODO_REMINDER_COMPLETE;
+    if (x >= 176 && x <= 302) return TODO_REMINDER_SNOOZE;
+    if (x >= 304 && x <= 444) return TODO_REMINDER_OPEN;
+    return TODO_REMINDER_NONE;
+}

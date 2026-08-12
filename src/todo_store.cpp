@@ -166,6 +166,9 @@ const TodoItem* todoItem(uint8_t index) {
 }
 
 const TodoItem* todoGetById(uint32_t id) { return todoModelFind(state, id); }
+const TodoItem* todoFindDueReminder(uint32_t nowEpoch) {
+    return todoModelFindDueReminder(state, nowEpoch);
+}
 
 uint32_t todoAddFull(const char* title, const char* description,
                      uint32_t dueEpoch, uint32_t reminderEpoch) {

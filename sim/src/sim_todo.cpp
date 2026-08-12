@@ -37,6 +37,7 @@ uint8_t todoPending() {
 }
 const TodoItem* todoItem(uint8_t index) { return index < state.count ? &state.items[index] : nullptr; }
 const TodoItem* todoGetById(uint32_t id) { return todoModelFind(state, id); }
+const TodoItem* todoFindDueReminder(uint32_t nowEpoch) { return todoModelFindDueReminder(state, nowEpoch); }
 
 void todoLoad() {
     todoModelInit(state);

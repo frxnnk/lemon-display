@@ -56,6 +56,7 @@ bool     g_setup      = false;   // la pantalla del QR de aprovisionamiento
 bool     g_tareas     = false;   // arrancar en la lista de tareas
 bool     g_tareaDetalle = false; // abrir la primera tarea
 bool     g_tareaScroll = false;  // desplazar la lista para capturar el segundo tramo
+bool     g_recordatorio = false; // tarjeta de tarea encima de la app actual
 bool     g_avisos     = false;   // arrancar en la lista de avisos
 bool     g_aviso      = false;   // la tarjeta que interrumpe
 
@@ -311,6 +312,20 @@ void setup() {
         while (millisNow() < corte) uiFercedTick(nowEpoch(), 0.0f);
         s_estatica = true;
         std::printf("  transicion congelada a los %d ms\n", g_congelar > 0 ? g_congelar : 250);
+    }
+
+    if (g_recordatorio && todoCount() > 0) {
+        // La pantalla animada de abajo debe terminar primero; de lo contrario
+        // su tick vuelve a pintar encima y hace desaparecer la tarjeta.
+        if (!s_estatica) {
+            const uint32_t fin = millisNow() + 1600;
+            while (millisNow() < fin) {
+                if (s_app == APP_PADEL) uiPadelTick(0.45f);
+                else                    uiFercedTick(nowEpoch(), 0.45f);
+            }
+        }
+        s_estatica = true;
+        uiTodoDrawReminder(todoItem(0));
     }
 
     if (g_aviso) {

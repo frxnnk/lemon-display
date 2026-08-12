@@ -237,3 +237,15 @@ bool todoModelSnooze(TodoState& state, uint32_t taskId, uint32_t reminderEpoch) 
     item->reminderFired = false;
     return true;
 }
+
+const TodoItem* todoModelFindDueReminder(const TodoState& state, uint32_t nowEpoch) {
+    if (nowEpoch == 0) return nullptr;
+    for (uint8_t i = 0; i < state.count; ++i) {
+        const TodoItem& item = state.items[i];
+        if (!item.done && item.reminderEpoch != 0 &&
+            !item.reminderFired && item.reminderEpoch <= nowEpoch) {
+            return &item;
+        }
+    }
+    return nullptr;
+}
