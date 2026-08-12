@@ -38,6 +38,7 @@ $sources = @(
     "$sim\src\sim_todo.cpp",
     "$sim\src\sim_notif.cpp",
     "$sim\src\sim_stubs.cpp",
+    "$root\src\todo_model.cpp",
     "$root\src\ui_anim.cpp",
     "$root\src\ui_chrome.cpp",
     "$root\src\ui_ferced.cpp",
