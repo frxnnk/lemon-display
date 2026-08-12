@@ -19,6 +19,8 @@ param(
     [switch]$DesdeLauncher,
     [switch]$Setup,
     [switch]$Tareas,
+    [switch]$TareaDetalle,
+    [switch]$TareaScroll,
     [switch]$Avisos,
     [switch]$Aviso,
     [int]$Hacia = -1,
@@ -45,6 +47,8 @@ if (-not $NoBuild) {
 $simArgs = @("--still", "--item=$Advance")
 if ($Padel)    { $simArgs += "--padel" }
 if ($Tareas)   { $simArgs += "--tareas" }
+if ($TareaDetalle) { $simArgs += "--tarea-detalle" }
+if ($TareaScroll)  { $simArgs += "--tarea-scroll" }
 if ($Avisos)   { $simArgs += "--avisos" }
 if ($Aviso)    { $simArgs += "--aviso" }
 if ($Hacia -ge 0)    { $simArgs += "--hacia=$Hacia" }
