@@ -153,6 +153,16 @@ struct StockWatchlist {
     uint8_t count;
 };
 
+#define NEWS_TITLE_LEN    100
+#define NEWS_DATE_LEN     24
+#define NEWS_MAX_ITEMS    3
+
+struct StockNews {
+    char title[NEWS_TITLE_LEN];
+    char pubDate[NEWS_DATE_LEN];
+    bool valid;
+};
+
 // ── Prediction history ring buffer ──
 #define PRED_HISTORY_MAX 20
 

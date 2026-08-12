@@ -42,7 +42,8 @@ public:
         {
             auto cfg = _bus_instance.config();
             cfg.panel = &_panel_instance;
-            cfg.freq_write = 14000000;
+            // Leave PSRAM/GDMA headroom while Wi-Fi and partial UI redraws run.
+            cfg.freq_write = 12000000;
 
             cfg.pin_d0  = GPIO_NUM_6;  // B0
             cfg.pin_d1  = GPIO_NUM_7;  // B1

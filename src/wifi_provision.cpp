@@ -4,7 +4,15 @@
 #include "colors.h"
 #include "config.h"
 #include "design_system.h"
+#ifdef FERCED_DISPLAY
+#include "ferced_config.h"
+#include "ui_ferced.h"
+#include "data/ferced_mark_11.h"
+#include "ui_provision.h"
+#include "nvs_storage.h"
+#else
 #include "data/lemon_logo.h"
+#endif
 
 #include <WiFi.h>
 #include <DNSServer.h>
@@ -13,8 +21,28 @@
 #include <Arduino.h>
 
 // ── AP Configuration ──
+// Unica fuente del SSID y la clave: el softAP, el QR y los dos carteles de la
+// pantalla salen de aca. Estaban escritos a mano en cuatro lugares distintos, y
+// desincronizarlos rompe el provisioning en silencio — el QR manda el telefono
+// a una red que no existe y no hay ningun error que lo delate.
+#ifdef FERCED_DISPLAY
+static char s_apSsid[40] = FERCED_AP_SSID;
+static const char* AP_SSID = s_apSsid;
+
+// El SSID lleva el nombre del aparato si tiene: la red que ve el telefono se
+// llama "Ferced-Fran" y no "Ferced-Setup", que con dos cajas en la misma casa
+// es la diferencia entre saber cual es y adivinar.
+static void armarSsid() {
+    char n[NVS_NOMBRE_LEN];
+    nvsGetNombre(n, sizeof(n));
+    if (n[0]) snprintf(s_apSsid, sizeof(s_apSsid), "Ferced-%s", n);
+    else      snprintf(s_apSsid, sizeof(s_apSsid), "%s", FERCED_AP_SSID);
+}
+static const char* AP_PASS = FERCED_AP_PASS;
+#else
 static const char* AP_SSID = "Lemon-Setup";
 static const char* AP_PASS = "lemon1234";
+#endif
 static const int   DNS_PORT = 53;
 
 // ── State ──
@@ -25,20 +53,90 @@ static char              rxSSID[33] = "";
 static char              rxPass[65] = "";
 static bool              running    = false;
 
-// ── Captive portal HTML (PROGMEM) — dark theme, official logo, responsive ──
+// ── Marca ──
+// El portal es uno solo: solo cambian el nombre, la paleta, el pie y el logo.
+// Van como literales adyacentes, que el compilador concatena, asi que sigue
+// siendo un unico buffer en PROGMEM y no hay costo en tiempo de ejecucion.
+#ifdef FERCED_DISPLAY
+  #define BRAND_NAME "Ferced"
+  #define BRAND_SITE "ferced.com"
+  // El acento es blanco. El verde de la paleta Ferced esta reservado para
+  // estado (exito), no para cromo: por eso --g y --ok son distintos, cosa que
+  // en Lemon no hacia falta porque el verde era las dos cosas.
+  // Los grises son blanco con alpha sobre el canvas, como manda la identidad.
+  #define BRAND_VARS "--g:#fff;--bg:#0e1011;--c:#0a0a0a;--s:#16181a;" \
+                     "--b:rgba(255,255,255,.10);--t1:#fff;" \
+                     "--t2:rgba(255,255,255,.55);--t3:rgba(255,255,255,.40);" \
+                     "--ok:#34d399;--er:#f87171"
+  #define BRAND_THEME "#0e1011"
+  // Sin canvas ni endpoint /logo: el mark vive en 11x28 y agrandarlo a un
+  // encabezado da una mancha. El wordmark tipografico es la misma familia
+  // visual que el chip de la pantalla y queda nitido en cualquier tamano.
+  #define BRAND_MARK "<div class=\"wm\">FERCED</div>"
+#else
+  #define BRAND_NAME "Lemon"
+  #define BRAND_SITE "lemon.me"
+  #define BRAND_VARS "--g:#00F068;--bg:#000;--c:#080C08;--s:#1A1A1A;" \
+                     "--b:#2A2C2A;--t1:#fff;--t2:#868686;--t3:#5B5B5B;" \
+                     "--ok:#00F068;--er:#FF1A3B"
+  #define BRAND_THEME "#000"
+  #define BRAND_MARK "<canvas id=\"lg\" width=\"244\" height=\"56\" style=\"height:32px;width:auto\"></canvas>"
+#endif
+
+// Paleta de la pantalla de provisioning: un solo juego de nombres, dos marcas.
+// Van como funciones y no como constantes porque Colors:: son `extern uint16_t`
+// que setea el tema en tiempo de ejecucion, asi que no son constexpr.
+namespace PV {
+#ifdef FERCED_DISPLAY
+    inline uint16_t bg()     { return FercedColors::CANVAS; }
+    inline uint16_t card()   { return FercedColors::CARD; }
+    inline uint16_t border() { return FercedColors::LINE; }
+    inline uint16_t t1()     { return FercedColors::FG; }
+    inline uint16_t t2()     { return FercedColors::FG_3; }
+    inline uint16_t t3()     { return FercedColors::FG_4; }
+    // Blanco, no verde: en la identidad Ferced el verde es estado, no cromo.
+    inline uint16_t accent() { return FercedColors::FG; }
+#else
+    inline uint16_t bg()     { return Colors::BG_BASE; }
+    inline uint16_t card()   { return Colors::BG_CARD; }
+    inline uint16_t border() { return Colors::CARD_BORDER; }
+    inline uint16_t t1()     { return Colors::TEXT_PRIMARY; }
+    inline uint16_t t2()     { return Colors::TEXT_SECONDARY; }
+    inline uint16_t t3()     { return Colors::TEXT_TERTIARY; }
+    inline uint16_t accent() { return Colors::LEMON_GREEN; }
+#endif
+}
+
+#ifdef FERCED_DISPLAY
+// El mark mide 11x28 y esta pensado para verse chico. Se dibuja a escala entera
+// para no interpolar: agrandar un bitmap de ese tamano con suavizado lo
+// ensucia. Al lado va el wordmark, que es lo que carga la marca.
+static void drawFercedMark(int x, int y, int scale) {
+    for (int py = 0; py < 28; py++) {
+        for (int px = 0; px < 11; px++) {
+            const uint16_t c = pgm_read_word(&ferced_mark_11[py * 11 + px]);
+            if (c == 0x0000) continue;
+            tft.fillRect(x + px * scale, y + py * scale, scale, scale, c);
+        }
+    }
+}
+#endif
+
+// ── Captive portal HTML (PROGMEM) — dark theme, responsive ──
 static const char PORTAL_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<meta name="theme-color" content="#000">
+<meta name="theme-color" content=")rawliteral" BRAND_THEME R"rawliteral(">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<title>Lemon · WiFi</title>
+<title>)rawliteral" BRAND_NAME R"rawliteral( · WiFi</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-:root{--g:#00F068;--bg:#000;--c:#080C08;--s:#1A1A1A;--b:#2A2C2A;--t1:#fff;--t2:#868686;--t3:#5B5B5B}
+:root{)rawliteral" BRAND_VARS R"rawliteral(}
+.wm{font-size:22px;font-weight:600;letter-spacing:.18em;color:var(--t1)}
 html,body{height:100%}
 body{background:var(--bg);color:var(--t1);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;padding:0 16px;padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(16px,env(safe-area-inset-bottom))}
 .hd{text-align:center;padding:24px 0 16px;width:100%}
@@ -75,8 +173,8 @@ input:focus{border-color:var(--g)}
 .sp{display:inline-block;width:40px;height:40px;border:3px solid var(--b);border-top-color:var(--g);border-radius:50%;animation:r .7s linear infinite}
 @keyframes r{to{transform:rotate(360deg)}}
 .st p{margin-top:16px;color:var(--t2);font-size:14px}
-.ok{color:var(--g)!important;font-weight:500}
-.er{color:#FF1A3B!important}
+.ok{color:var(--ok)!important;font-weight:500}
+.er{color:var(--er)!important}
 .em{text-align:center;color:var(--t3);padding:32px 16px;font-size:14px}
 .rf{display:block;margin:0 auto;background:none;border:1px solid var(--b);border-radius:10px;color:var(--t2);font-size:13px;padding:8px 24px;cursor:pointer;flex-shrink:0;transition:background .12s}
 .rf:active{background:var(--s)}
@@ -87,7 +185,7 @@ input:focus{border-color:var(--g)}
 </head>
 <body>
 <div class="hd">
-<div class="lo"><canvas id="lg" width="244" height="56" style="height:32px;width:auto"></canvas></div>
+<div class="lo">)rawliteral" BRAND_MARK R"rawliteral(</div>
 <p class="sb">Configurar WiFi</p>
 </div>
 <div class="ct">
@@ -95,22 +193,23 @@ input:focus{border-color:var(--g)}
 <div id="fm" class="pn">
 <h3 id="sn"></h3>
 <div class="pw"><input type="password" id="pw" placeholder="Contrase&#241;a" autocomplete="off"><button type="button" class="ey" onclick="tp()">mostrar</button></div>
+<div class="pw"><input type="text" id="nb" placeholder="Nombre del aparato (opcional)" maxlength="19" autocomplete="off" autocapitalize="words"></div>
 <button class="bt bp" onclick="go()">Conectar</button>
 <button class="bt bg" onclick="bk()">Volver</button>
 </div>
 <div id="rs" class="pn"><div class="st"><div class="sp"></div><p id="rm">Conectando...</p></div></div>
 <button class="rf" onclick="sc()" id="rb">Buscar redes</button>
 </div>
-<div class="ft">v4.0.0 &middot; lemon.me</div>
+<div class="ft">v4.0.0 &middot; )rawliteral" BRAND_SITE R"rawliteral(</div>
 <script>
 let sel='',rc=0;
-function lg(){fetch('/logo').then(r=>r.arrayBuffer()).then(b=>{let d=new Uint16Array(b),c=document.getElementById('lg').getContext('2d'),m=c.createImageData(244,56);for(let i=0;i<d.length;i++){let p=d[i];m.data[i*4]=((p>>11)&31)*255/31|0;m.data[i*4+1]=((p>>5)&63)*255/63|0;m.data[i*4+2]=(p&31)*255/31|0;m.data[i*4+3]=p?255:0}c.putImageData(m,0,0)}).catch(()=>{})}
+function lg(){if(!document.getElementById('lg'))return;fetch('/logo').then(r=>r.arrayBuffer()).then(b=>{let d=new Uint16Array(b),c=document.getElementById('lg').getContext('2d'),m=c.createImageData(244,56);for(let i=0;i<d.length;i++){let p=d[i];m.data[i*4]=((p>>11)&31)*255/31|0;m.data[i*4+1]=((p>>5)&63)*255/63|0;m.data[i*4+2]=(p&31)*255/31|0;m.data[i*4+3]=p?255:0}c.putImageData(m,0,0)}).catch(()=>{})}
 function sb(r){let s=r>-50?4:r>-65?3:r>-75?2:1,h='';for(let i=1;i<=4;i++)h+='<i class="'+(i<=s?'a':'')+'"></i>';return h}
 function sc(){document.getElementById('rb').textContent='Buscando...';fetch('/scan').then(r=>r.json()).then(d=>{document.getElementById('rb').textContent='Buscar redes';if(d.length===0&&rc<3){rc++;document.getElementById('ls').innerHTML='<div class="st"><div class="sp"></div><p>Buscando redes...</p></div>';setTimeout(sc,2000);return}rc=0;let h='';d.forEach(n=>{h+='<div class="nt" onclick="pk(\''+n.s.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">';h+='<div class="nm">'+n.s+'</div><div class="sg">'+sb(n.r)+'</div></div>'});document.getElementById('ls').innerHTML=h||'<div class="em">No se encontraron redes</div>'}).catch(()=>{document.getElementById('rb').textContent='Buscar redes'})}
 function pk(s){sel=s;document.getElementById('sn').textContent=s;document.getElementById('ls').style.display='none';document.getElementById('rb').style.display='none';document.getElementById('fm').classList.add('on');setTimeout(()=>document.getElementById('pw').focus(),120)}
 function bk(){document.getElementById('fm').classList.remove('on');document.getElementById('ls').style.display='';document.getElementById('rb').style.display='';document.getElementById('pw').value=''}
 function tp(){let i=document.getElementById('pw'),b=document.querySelector('.ey');if(i.type==='password'){i.type='text';b.textContent='ocultar'}else{i.type='password';b.textContent='mostrar'}}
-function go(){let p=document.getElementById('pw').value;document.getElementById('fm').classList.remove('on');document.getElementById('rs').classList.add('on');document.getElementById('rb').style.display='none';fetch('/connect?ssid='+encodeURIComponent(sel)+'&pass='+encodeURIComponent(p)).then(()=>{document.querySelector('#rs .sp').style.display='none';let m=document.getElementById('rm');m.className='ok';m.textContent='\u00a1Credenciales guardadas!'}).catch(()=>{let m=document.getElementById('rm');m.className='er';m.textContent='Error. Intenta de nuevo.'})}
+function go(){let p=document.getElementById('pw').value;document.getElementById('fm').classList.remove('on');document.getElementById('rs').classList.add('on');document.getElementById('rb').style.display='none';fetch('/connect?ssid='+encodeURIComponent(sel)+'&pass='+encodeURIComponent(p)+'&nombre='+encodeURIComponent(document.getElementById('nb').value)).then(()=>{document.querySelector('#rs .sp').style.display='none';let m=document.getElementById('rm');m.className='ok';m.textContent='\u00a1Credenciales guardadas!'}).catch(()=>{let m=document.getElementById('rm');m.className='er';m.textContent='Error. Intenta de nuevo.'})}
 lg();sc();
 </script>
 </body>
@@ -149,6 +248,7 @@ void provisionStart() {
 
     // Start AP+STA mode so we can scan for networks
     WiFi.mode(WIFI_AP_STA);
+    armarSsid();
     WiFi.softAP(AP_SSID, AP_PASS);
     Serial.printf("[Provision] AP started: %s / %s\n", AP_SSID, AP_PASS);
     Serial.printf("[Provision] AP IP: %s\n", WiFi.softAPIP().toString().c_str());
@@ -172,7 +272,9 @@ void provisionStart() {
         req->send(200, "application/json", json);
     });
 
+#ifndef FERCED_DISPLAY
     // Serve official 244x56 imagotipo as raw RGB565 binary (decoded by Canvas in portal)
+    // Ferced no lo expone: su portal usa un wordmark tipografico, sin raster.
     webServer->on("/logo", HTTP_GET, [](AsyncWebServerRequest* req) {
         AsyncWebServerResponse* resp = req->beginResponse_P(
             200, "application/octet-stream",
@@ -180,6 +282,7 @@ void provisionStart() {
         resp->addHeader("Cache-Control", "max-age=3600");
         req->send(resp);
     });
+#endif
 
     webServer->on("/connect", HTTP_GET, [](AsyncWebServerRequest* req) {
         if (req->hasParam("ssid") && req->hasParam("pass")) {
@@ -187,6 +290,16 @@ void provisionStart() {
             String p = req->getParam("pass")->value();
             strncpy(rxSSID, s.c_str(), sizeof(rxSSID) - 1);
             strncpy(rxPass, p.c_str(), sizeof(rxPass) - 1);
+#ifdef FERCED_DISPLAY
+            // El nombre es opcional y se guarda en el acto: es del aparato, no
+            // de la conexion, asi que sobrevive a un reaparear. Vacio no pisa el
+            // que ya hubiera.
+            if (req->hasParam("nombre")) {
+                String n = req->getParam("nombre")->value();
+                n.trim();
+                if (n.length() > 0) nvsSetNombre(n.c_str());
+            }
+#endif
             hasCredentials = true;
             Serial.printf("[Provision] Got credentials: SSID=%s\n", rxSSID);
             req->send(200, "text/plain", "OK");
@@ -246,45 +359,54 @@ bool provisionTick() {
 }
 
 void provisionDrawQR() {
-    // QR content: WiFi config string
-    const char* qrData = "WIFI:S:Lemon-Setup;T:WPA;P:lemon1234;;";
+    char qrData[96];
+    armarSsid();
+    snprintf(qrData, sizeof(qrData), "WIFI:S:%s;T:WPA;P:%s;;", AP_SSID, AP_PASS);
 
-    // Create QR code (version 6 = 41x41 modules)
     QRCode qrcode;
-    uint8_t qrcodeData[qrcode_getBufferSize(6)];
+    uint8_t qrcodeData[qrcode_getBufferSize(6)];   // version 6 = 41x41 modulos
     qrcode_initText(&qrcode, qrcodeData, 6, ECC_LOW, qrData);
 
-    int modules = qrcode.size;  // 41
-    int pixPerModule = 5;  // More compact (was 6)
-    int qrSize = modules * pixPerModule;  // 205
-    int padding = 12;
-    int totalSize = qrSize + 2 * padding;  // 229
+#ifdef FERCED_DISPLAY
+    // El dibujo vive en ui_provision.cpp, sobre el sprite, como el resto de las
+    // pantallas. Aca solo se resuelve el QR y se pasan los modulos ya calculados:
+    // asi el simulador puede componer esta pantalla sin saber nada de WiFi, que
+    // es lo que hacia que fuera la unica que nunca se habia podido mirar sin
+    // flashear el aparato.
+    static uint8_t modulos[41 * 41];
+    const uint8_t lado = qrcode.size < 41 ? qrcode.size : 41;
+    for (uint8_t y = 0; y < lado; y++) {
+        for (uint8_t x = 0; x < lado; x++) {
+            modulos[y * lado + x] = qrcode_getModule(&qrcode, x, y) ? 1 : 0;
+        }
+    }
 
-    int qrX = (SCREEN_W - totalSize) / 2;
-    int qrY = 90;
+    char nombre[NVS_NOMBRE_LEN];
+    nvsGetNombre(nombre, sizeof(nombre));
+    uiProvisionDraw(modulos, lado, nombre, AP_SSID, AP_PASS, "http://192.168.4.1");
+    return;
+#else
+    // El portal de Lemon conserva su pantalla de siempre.
+    const int modules = qrcode.size;
+    const int pixPerModule = 5;
+    const int qrSize = modules * pixPerModule;
+    const int padding = 12;
+    const int totalSize = qrSize + 2 * padding;
+    const int qrX = (SCREEN_W - totalSize) / 2;
+    const int qrY = 90;
 
-    // Clear screen (VSync to avoid bounce on RGB panel)
+    uiAnimInvalidate();
     displayWaitVSync();
-    tft.fillScreen(Colors::BG_BASE);
+    tft.fillScreen(PV::bg());
 
-    // ── Full imagotipo 244x56 centered at top ──
     int logoX = (SCREEN_W - 244) / 2;
     drawLemonImagotipo244(tft, logoX, 16);
 
-    // ── Glass card containing QR code ──
-    int cardW = totalSize + 24;
-    int cardH = totalSize + 24;
-    int cardX = (SCREEN_W - cardW) / 2;
-    int cardY = qrY - 12;
-
-    // Card border + fill
-    tft.fillSmoothRoundRect(cardX, cardY, cardW, cardH, 16, Colors::CARD_BORDER);
-    tft.fillSmoothRoundRect(cardX + 1, cardY + 1, cardW - 2, cardH - 2, 15, Colors::BG_CARD);
-
-    // White QR background (rounded)
+    int cardW = totalSize + 24, cardH = totalSize + 24;
+    int cardX = (SCREEN_W - cardW) / 2, cardY = qrY - 12;
+    tft.fillSmoothRoundRect(cardX, cardY, cardW, cardH, 16, PV::border());
+    tft.fillSmoothRoundRect(cardX + 1, cardY + 1, cardW - 2, cardH - 2, 15, PV::card());
     tft.fillSmoothRoundRect(qrX, qrY, totalSize, totalSize, 8, 0xFFFF);
-
-    // Draw QR modules
     for (int y = 0; y < modules; y++) {
         for (int x = 0; x < modules; x++) {
             if (qrcode_getModule(&qrcode, x, y)) {
@@ -294,31 +416,25 @@ void provisionDrawQR() {
             }
         }
     }
-
-    // ── Instructions with typographic hierarchy ──
     int textY = cardY + cardH + 16;
-
-    // Title
-    tft.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_BASE);
+    tft.setTextColor(PV::t1(), PV::bg());
     tft.setTextDatum(lgfx::top_center);
     tft.drawString("Configurar WiFi", SCREEN_W / 2, textY, &SatoshiMedium18);
-
-    // Subtitle
     textY += 26;
-    tft.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_BASE);
+    tft.setTextColor(PV::t2(), PV::bg());
     tft.drawString("Escanea el QR o conectate a:", SCREEN_W / 2, textY, &Satoshi12);
-
-    // URL in accent color
     textY += 24;
-    tft.setTextColor(Colors::LEMON_GREEN, Colors::BG_BASE);
+    tft.setTextColor(PV::accent(), PV::bg());
     tft.drawString("http://192.168.4.1", SCREEN_W / 2, textY, &SatoshiMedium18);
-
-    // Credentials in caption style
     textY += 32;
-    tft.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-    tft.drawString("Red: Lemon-Setup", SCREEN_W / 2, textY, &Satoshi9);
+    tft.setTextColor(PV::t3(), PV::bg());
+    char cred[64];
+    snprintf(cred, sizeof(cred), "Red: %s", AP_SSID);
+    tft.drawString(cred, SCREEN_W / 2, textY, &Satoshi9);
     textY += 14;
-    tft.drawString("Clave: lemon1234", SCREEN_W / 2, textY, &Satoshi9);
+    snprintf(cred, sizeof(cred), "Clave: %s", AP_PASS);
+    tft.drawString(cred, SCREEN_W / 2, textY, &Satoshi9);
+#endif
 }
 
 bool provisionHasCredentials() {

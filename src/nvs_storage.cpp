@@ -559,6 +559,24 @@ void nvsSaveStockSparks(const SparklineData* sparks, const StockWatchlist& wl) {
 
 // Local Studio pairing token
 
+void nvsGetNombre(char* out, size_t outLen) {
+    if (!out || outLen == 0) return;
+    String n = prefs.getString("nombre", "");
+    strncpy(out, n.c_str(), outLen - 1);
+    out[outLen - 1] = '\0';
+}
+
+void nvsSetNombre(const char* nombre) {
+    if (!nombre) return;
+    // Se guarda recortado a lo que la pantalla puede mostrar, no a lo que entre
+    // en NVS: un nombre que no se ve entero es peor que uno cortado a proposito.
+    char buf[NVS_NOMBRE_LEN];
+    strncpy(buf, nombre, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    prefs.putString("nombre", buf);
+    Serial.printf("[NVS] nombre = \"%s\"\n", buf);
+}
+
 bool nvsGetPairingToken(char* out, size_t outLen) {
     if (!out || outLen == 0) return false;
     String token = prefs.getString("pair_tok", "");
@@ -612,6 +630,14 @@ uint8_t nvsGetV2Pair() {
 
 void nvsSetV2Pair(uint8_t pair) {
     prefs.putUChar("v2_pair", pair < BTC_PAIR_COUNT ? pair : 0);
+}
+
+uint8_t nvsGetV2Theme() {
+    return prefs.getUChar("v2_theme", 1);
+}
+
+void nvsSetV2Theme(uint8_t theme) {
+    prefs.putUChar("v2_theme", theme);
 }
 
 void nvsFactoryReset() {

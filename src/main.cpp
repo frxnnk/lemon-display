@@ -2111,7 +2111,6 @@ void loop() {
 #if LEMON_V2_REAL_MODE
     esp_task_wdt_reset();
     v2RuntimeLoop();
-    delay(4);
     return;
 #endif
 
