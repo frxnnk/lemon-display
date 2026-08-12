@@ -111,7 +111,7 @@ void uiTodoDraw(const char* direccion) {
         g.setFont(DS::fontHeading());
         g.setTextColor(it->done ? FG_4 : FG, CANVAS);
         const int ty = y + 6;
-        const int w = uiTextoRecortado(g, it->text, TEXTO_X, ty, TEXTO_W);
+        const int w = uiTextoRecortado(g, it->title, TEXTO_X, ty, TEXTO_W);
 
         // Tachado: la mitad del renglón, del ancho real del texto dibujado.
         if (it->done && w > 0) g.drawFastHLine(TEXTO_X, ty + 13, w, FG_4);
