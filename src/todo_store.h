@@ -12,6 +12,7 @@ uint8_t todoCount();
 uint8_t todoPending();
 const TodoItem* todoItem(uint8_t index);
 const TodoItem* todoGetById(uint32_t id);
+const TodoItem* todoFindDueReminder(uint32_t nowEpoch);
 
 uint32_t todoAddFull(const char* title, const char* description = "",
                      uint32_t dueEpoch = 0, uint32_t reminderEpoch = 0);
@@ -36,4 +37,3 @@ bool todoAdd(const char* title);
 bool todoToggle(uint8_t index);
 bool todoRemove(uint8_t index);
 bool todoClearDone();
-

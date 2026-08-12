@@ -21,6 +21,7 @@ param(
     [switch]$Tareas,
     [switch]$TareaDetalle,
     [switch]$TareaScroll,
+    [switch]$Recordatorio,
     [switch]$Avisos,
     [switch]$Aviso,
     [int]$Hacia = -1,
@@ -49,6 +50,7 @@ if ($Padel)    { $simArgs += "--padel" }
 if ($Tareas)   { $simArgs += "--tareas" }
 if ($TareaDetalle) { $simArgs += "--tarea-detalle" }
 if ($TareaScroll)  { $simArgs += "--tarea-scroll" }
+if ($Recordatorio) { $simArgs += "--recordatorio" }
 if ($Avisos)   { $simArgs += "--avisos" }
 if ($Aviso)    { $simArgs += "--aviso" }
 if ($Hacia -ge 0)    { $simArgs += "--hacia=$Hacia" }

@@ -23,6 +23,7 @@ extern bool g_setup;
 extern bool g_tareas;
 extern bool g_tareaDetalle;
 extern bool g_tareaScroll;
+extern bool g_recordatorio;
 extern bool g_avisos;
 extern bool g_aviso;
 extern int  g_hacia;
@@ -63,6 +64,8 @@ int main(int argc, char** argv) {
         } else if (std::strcmp(argv[i], "--tarea-scroll") == 0) {
             g_tareas = true;
             g_tareaScroll = true;
+        } else if (std::strcmp(argv[i], "--recordatorio") == 0) {
+            g_recordatorio = true;
         } else if (std::strcmp(argv[i], "--avisos") == 0) {
             g_avisos = true;
         } else if (std::strcmp(argv[i], "--aviso") == 0) {

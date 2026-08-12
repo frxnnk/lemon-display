@@ -403,6 +403,9 @@ python tools\fetch_fixture.py     # contenido real del proxy, una sola vez
 .\shot.ps1 -Advance 1             # noticias, ítem 1 (los impares tienen imagen)
 .\shot.ps1 -Padel -Advance 1      # pádel: 0 es el torneo, 1.. los partidos
 .\shot.ps1 -Tareas                # la lista de tareas
+.\shot.ps1 -Tareas -TareaScroll   # lista desplazada
+.\shot.ps1 -Tareas -TareaDetalle  # detalle de tarea
+.\shot.ps1 -Recordatorio          # recordatorio encima de otra app
 .\shot.ps1 -Avisos                # la lista de avisos
 .\shot.ps1 -Aviso                 # la tarjeta que interrumpe
 .\shot.ps1 -Launcher              # el selector de apps
@@ -574,11 +577,19 @@ ve sin ayuda.
 
 ### Tareas — `ui_todo.cpp` (con cortina)
 
-Cejilla «TAREAS» + cuántas quedan a la derecha, 7 filas de 46 px desde `100`,
-casilla de 22 px a la izquierda, texto en `fontHeading()` recortado con puntos
-suspensivos. Hechas: casilla rellena con un tilde dibujado a mano (las fuentes no
-tienen el glifo) y texto tachado con una `drawFastHLine` del ancho real del
-texto. **El riel del pie mide lo hecho sobre el total.**
+Cejilla «TAREAS» + cuántas quedan a la derecha. Las filas tienen altura
+variable: el título se envuelve por ancho real y **nunca usa puntos
+suspensivos**. La lista tiene scroll vertical, subtareas independientes y un
+control para colapsarlas. Hechas: casilla rellena con un tilde dibujado a mano.
+**El riel del pie mide lo hecho sobre el total.**
+
+Tocar el cuerpo abre el detalle: título completo, vencimiento, hora del aviso,
+descripción y subtareas, todo desplazable. La casilla sigue completando sin
+obligar a entrar.
+
+El recordatorio es una tarjeta `PAPEL` que se compone encima de cualquier app y
+detiene su tick mientras está abierta. Tiene tres blancos táctiles de al menos
+44 px: `COMPLETAR`, `+10 MIN` y `ABRIR`.
 
 Lista vacía: «nada pendiente.» en `fontAcento()`.
 

@@ -7,6 +7,7 @@
 #include <esp_task_wdt.h>
 
 #include "apps.h"
+#include "audio_manager.h"
 #include "colors.h"
 #include "display_manager.h"
 #include "feed_client.h"
@@ -35,6 +36,7 @@ enum AppPhase : uint8_t {
     PHASE_CONFIG,
     PHASE_LAUNCHER,
     PHASE_AVISO,
+    PHASE_TODO_REMINDER,
 };
 
 static AppPhase s_phase = PHASE_PROVISION;
@@ -58,6 +60,8 @@ static bool     s_padelTried = false;
 // vez de dejar que esa tarea toque la pantalla —dos tareas dibujando sobre el
 // mismo panel es una carrera— se compara la revisión y repinta el loop.
 static uint32_t s_todoRev = 0;
+static uint32_t s_reminderTaskId = 0;
+static uint32_t s_lastReminderCheck = 0;
 
 // -- Estado de avisos --
 // Cuánto queda un aviso en pantalla antes de cerrarse solo. Un cuarto de minuto
@@ -204,6 +208,23 @@ static bool refreshPadel() {
 static void showTodo() {
     s_todoRev = todoRevision();
     uiTodoDraw(wifiConnected() ? wifiIP().c_str() : "sin red");
+}
+
+static bool entrarRecordatorio(uint32_t epoch) {
+    const TodoItem* due = todoFindDueReminder(epoch);
+    if (!due) return false;
+
+    // Se marca antes de mostrarlo. Si el equipo se reinicia con la tarjeta
+    // abierta, el mismo aviso no vuelve a sonar al arrancar.
+    s_reminderTaskId = due->id;
+    if (!todoMarkReminderFired(s_reminderTaskId)) return false;
+    const TodoItem* item = todoGetById(s_reminderTaskId);
+    if (!item) return false;
+
+    s_phase = PHASE_TODO_REMINDER;
+    uiTodoDrawReminder(item);
+    playAlertUp();
+    return true;
 }
 
 // -- Avisos ------------------------------------------------------------------
@@ -510,6 +531,8 @@ void setup() {
     displaySetupVSync();
     displaySetBrightness(nvsGetBrightness());
     touchSetup();
+    audioSetup();
+    audioSetEnabled(nvsGetSoundEnabled());
     uiFercedSetup();
     uiPadelSetup();
     uiLauncherSetup();
@@ -626,6 +649,37 @@ void loop() {
         return;
     }
 
+    if (s_phase == PHASE_TODO_REMINDER) {
+        const TouchEvent ev = touchLoop();
+        if (ev.gesture == TOUCH_TAP) {
+            const TodoReminderAction action = uiTodoReminderTap(ev.x, ev.y);
+            if (action == TODO_REMINDER_NONE) { delay(8); return; }
+
+            if (action == TODO_REMINDER_COMPLETE) {
+                todoSetDone(s_reminderTaskId, true);
+            } else if (action == TODO_REMINDER_SNOOZE) {
+                todoSnooze(s_reminderTaskId, nowEpoch() + 10 * 60);
+            } else if (action == TODO_REMINDER_OPEN) {
+                const uint32_t id = s_reminderTaskId;
+                s_reminderTaskId = 0;
+                s_phase = PHASE_RUNNING;
+                s_app = APP_TAREAS;
+                s_todoRev = todoRevision();
+                uiTodoOpen(id);
+                s_lastRotate = millis();
+                return;
+            }
+
+            s_reminderTaskId = 0;
+            s_phase = PHASE_RUNNING;
+            showApp();
+            s_lastRotate = millis();
+            return;
+        }
+        delay(8);
+        return;
+    }
+
     if (s_phase == PHASE_AVISO) {
         // Lo cierra el botón, un deslizamiento —que es deliberado— o el tiempo.
         // Antes lo cerraba CUALQUIER toque, así que un roce se llevaba el aviso
@@ -683,6 +737,13 @@ void loop() {
     }
 
     wifiLoop();
+
+    // Se evaluan una vez por segundo y solo en uso normal. Pueden interrumpir
+    // cualquier app, pero nunca pisan configuracion, provision u otro aviso.
+    if (now - s_lastReminderCheck >= 1000) {
+        s_lastReminderCheck = now;
+        if (entrarRecordatorio(nowEpoch())) return;
+    }
 
     // Un aviso interrumpe, pero SÓLO desde acá: si esto viviera antes del
     // switch de fases, un aviso podría aparecer en medio de una descarga de

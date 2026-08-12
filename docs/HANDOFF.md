@@ -121,6 +121,9 @@ python tools\fetch_fixture.py     # baja contenido real del proxy, una vez
 .\shot.ps1 -Advance 1             # compila, corre, captura item 1
 .\shot.ps1 -Padel -Advance 1      # pádel: 0 es el torneo, 1.. los partidos
 .\shot.ps1 -Tareas                # la lista de tareas (fixture: sim/data/todo.txt)
+.\shot.ps1 -Tareas -TareaScroll   # segundo tramo de la lista
+.\shot.ps1 -Tareas -TareaDetalle  # detalle completo de la primera tarea
+.\shot.ps1 -Recordatorio          # recordatorio encima de Noticias
 .\shot.ps1 -Aviso                 # la tarjeta que interrumpe
 .\shot.ps1 -Avisos                # la lista de avisos (fixture: sim/data/avisos.txt)
 .\shot.ps1 -Launcher              # el selector de apps
@@ -385,19 +388,23 @@ propio ESP32.
 
 | Pieza | Dónde |
 |---|---|
-| Lista y persistencia | `src/todo_store.cpp`, en NVS, namespace `ferced_todo` |
-| Servidor y página | `src/todo_server.cpp`, puerto 80, `ESPAsyncWebServer` |
+| Modelo | `src/todo_model.cpp`, IDs estables y límites fijos |
+| Lista y persistencia | `src/todo_store.cpp`, LittleFS `/todo-v2.bin` |
+| Servidor | `src/web_server.cpp`, puerto 80, `ESPAsyncWebServer` |
+| Página | `src/todo_page.h`, embebida en PROGMEM |
 | Pantalla | `src/ui_todo.cpp` |
 
 La página va entera en PROGMEM, sin CDN ni fuentes externas: tiene que servirse
-sin internet. Usa la tipografía del sistema porque embeber Satoshi serían ~100
-KB de flash para algo que se abre de vez en cuando. Toda la app suma **31 KB de
-flash y ~1 KB de RAM**.
+sin internet. Permite título, descripción, vencimiento, recordatorio y hasta
+ocho subtareas de un nivel; también filtra, reordena, colapsa y edita. Usa la
+tipografía del sistema porque embeber Satoshi serían ~100 KB de flash para algo
+que se abre de vez en cuando.
 
-**El namespace de NVS es propio y no el `lemon` del resto**, así que un
-`nvsFactoryReset()` del código heredado no se lleva la lista puesta.
+El formato v2 se guarda con checksum, temporal y backup antes del rename. Al
+primer arranque migra automáticamente la lista v1 del namespace NVS
+`ferced_todo`, conservando texto y estado hecho.
 
-**Cuatro cosas que no son obvias:**
+**Cinco cosas que no son obvias:**
 
 - **Las mutaciones exigen el encabezado `X-Ferced`.** No es autenticación
   —cualquiera en la red de casa puede editar, igual que el portal cautivo— sino
@@ -415,11 +422,14 @@ flash y ~1 KB de RAM**.
   la va pisando. En el loop hay un `switch` por app justamente por esto.
 - **El puerto 80 lo comparte con el portal cautivo** del aprovisionamiento, así
   que `startProvisioning()` baja el editor antes de levantarlo.
+- **Los recordatorios son persistentes y de una sola ejecución.** Con reloj NTP
+  válido, una tarea pendiente interrumpe cualquier app, reproduce un aviso corto
+  y ofrece `Completar`, `+10 min` o `Abrir`. Se marca disparado antes de dibujar
+  para que un reinicio no lo repita; posponer cambia la fecha y rearma el aviso.
 
-Para iterar la página sin flashear, `scratchpad/extraer_pagina.py` la saca del
-`.cpp` y le enchufa un simulacro de la API para abrirla en el navegador. Sacarla
-del `.cpp` y no tener una copia es a propósito: una copia se desincroniza, igual
-que pasaría con `ui_ferced.cpp` y el simulador.
+Para iterar la página sin flashear, `tools/extract_todo_page.py` genera
+`output/todo-preview.html` y le enchufa un simulacro de la API. Sacarla del
+header y no mantener otra copia es a propósito: una copia se desincroniza.
 
 ### Los avisos
 

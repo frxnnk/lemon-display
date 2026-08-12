@@ -49,6 +49,18 @@ int main() {
     assert(task(state, a)->reminderEpoch == 1500);
     assert(!task(state, a)->reminderFired);
 
+    // Solo interrumpen las tareas pendientes cuyo aviso ya vencio. Una tarea
+    // terminada o un aviso ya disparado no pueden reaparecer al reiniciar.
+    assert(todoModelFindDueReminder(state, 1499) == nullptr);
+    assert(todoModelFindDueReminder(state, 1500) == nullptr);
+    assert(todoModelSetTaskDone(state, a, false));
+    assert(todoModelFindDueReminder(state, 1500)->id == a);
+    assert(todoModelMarkReminderFired(state, a));
+    assert(todoModelFindDueReminder(state, 2000) == nullptr);
+    assert(todoModelSetTaskDone(state, a, true));
+    assert(todoModelSnooze(state, a, 2100));
+    assert(todoModelFindDueReminder(state, 2200) == nullptr);
+
     assert(todoModelRemoveSubtask(state, a, s2));
     assert(task(state, a)->subCount == 1);
     assert(todoModelRemoveTask(state, b));

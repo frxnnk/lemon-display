@@ -60,4 +60,4 @@ bool todoModelSetSubtaskDone(TodoState& state, uint32_t taskId, uint32_t subtask
 
 bool todoModelMarkReminderFired(TodoState& state, uint32_t taskId);
 bool todoModelSnooze(TodoState& state, uint32_t taskId, uint32_t reminderEpoch);
-
+const TodoItem* todoModelFindDueReminder(const TodoState& state, uint32_t nowEpoch);

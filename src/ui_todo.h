@@ -20,6 +20,13 @@ struct TodoUiAction {
     uint32_t subtaskId;
 };
 
+enum TodoReminderAction : uint8_t {
+    TODO_REMINDER_NONE,
+    TODO_REMINDER_COMPLETE,
+    TODO_REMINDER_SNOOZE,
+    TODO_REMINDER_OPEN,
+};
+
 void uiTodoSetup();
 void uiTodoDraw(const char* direccion);
 TodoUiAction uiTodoTap(int16_t x, int16_t y);
@@ -28,3 +35,5 @@ void uiTodoOpen(uint32_t taskId);
 void uiTodoBack();
 bool uiTodoIsDetail();
 uint8_t uiTodoVisibles();
+void uiTodoDrawReminder(const TodoItem* item);
+TodoReminderAction uiTodoReminderTap(int16_t x, int16_t y);
