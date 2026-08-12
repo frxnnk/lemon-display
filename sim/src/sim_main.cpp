@@ -54,6 +54,8 @@ bool     g_launcher   = false;   // arrancar en el selector de apps
 bool     g_desdeLauncher = false;
 bool     g_setup      = false;   // la pantalla del QR de aprovisionamiento
 bool     g_tareas     = false;   // arrancar en la lista de tareas
+bool     g_tareaDetalle = false; // abrir la primera tarea
+bool     g_tareaScroll = false;  // desplazar la lista para capturar el segundo tramo
 bool     g_avisos     = false;   // arrancar en la lista de avisos
 bool     g_aviso      = false;   // la tarjeta que interrumpe
 
@@ -290,6 +292,8 @@ void setup() {
     applyArgs();
     if (g_desdeLauncher) mostrarLauncher();
     show();
+    if (g_tareaDetalle && todoCount() > 0) uiTodoOpen(todoItem(0)->id);
+    if (g_tareaScroll) uiTodoScroll(180);
     s_lastRotate = millisNow();
 
     // Se deja terminar la entrada del primer ítem, se pasa al segundo y se

@@ -704,8 +704,19 @@ void loop() {
             return;
         case TOUCH_SWIPE_UP:
         case TOUCH_FLING_UP:
+            if (s_app == APP_TAREAS && ev.y < 420) {
+                uiTodoScroll(ev.gesture == TOUCH_FLING_UP ? 240 : 150);
+                return;
+            }
             enterLauncher();
             return;
+        case TOUCH_SWIPE_DOWN:
+        case TOUCH_FLING_DOWN:
+            if (s_app == APP_TAREAS) {
+                uiTodoScroll(ev.gesture == TOUCH_FLING_DOWN ? -240 : -150);
+                return;
+            }
+            break;
         case TOUCH_SWIPE_LEFT:
             enterApp((AppId)((s_app + 1) % APP_COUNT));
             return;
@@ -716,8 +727,32 @@ void loop() {
             if (s_app == APP_TAREAS) {
                 // Tocar una tarea la marca hecha. La pantalla se repinta sola
                 // en cuanto cambia la revisión, más abajo.
-                const int8_t fila = uiTodoHit(ev.x, ev.y);
-                if (fila >= 0) todoToggle((uint8_t)fila);
+                const TodoUiAction action = uiTodoTap(ev.x, ev.y);
+                const TodoItem* item = todoGetById(action.taskId);
+                switch (action.type) {
+                    case TODO_UI_TOGGLE_TASK:
+                        if (item) todoSetDone(item->id, !item->done);
+                        break;
+                    case TODO_UI_TOGGLE_SUBTASK:
+                        if (item) for (uint8_t i = 0; i < item->subCount; ++i) {
+                            if (item->subtasks[i].id == action.subtaskId) {
+                                todoSetSubtaskDone(item->id, action.subtaskId, !item->subtasks[i].done);
+                                break;
+                            }
+                        }
+                        break;
+                    case TODO_UI_TOGGLE_COLLAPSE:
+                        if (item) todoSetCollapsed(item->id, !item->collapsed);
+                        break;
+                    case TODO_UI_OPEN_DETAIL:
+                        uiTodoOpen(action.taskId);
+                        break;
+                    case TODO_UI_BACK:
+                        uiTodoBack();
+                        break;
+                    default:
+                        break;
+                }
             } else if (s_app != APP_AVISOS) {
                 advance();
             }
