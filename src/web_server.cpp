@@ -7,6 +7,7 @@
 #include <ESPmDNS.h>
 #include <ctime>
 #include <pgmspace.h>
+#include "todo_page.h"
 
 static AsyncWebServer* server = nullptr;
 
@@ -22,7 +23,7 @@ static const char* HEADER_GUARD = "X-Ferced";
 // Va entera acá, sin dependencias externas: el aparato tiene que poder servirla
 // con el VPS caído y sin internet. Tipografía del sistema porque embeber
 // Satoshi serían ~100 KB de flash para una página que se abre de vez en cuando.
-static const char PAGINA[] PROGMEM = R"HTML(<!doctype html>
+static const char PAGINA_OLD[] PROGMEM = R"HTML(<!doctype html>
 <html lang="es"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -122,12 +123,13 @@ static void escapar(Print& out, const char* s) {
     }
 }
 
-static void responderLista(AsyncWebServerRequest* req) {
+static void responderLista(AsyncWebServerRequest* req, uint32_t createdId = 0) {
     AsyncResponseStream* out = req->beginResponseStream("application/json");
     out->print("{\"v\":2,\"rev\":");
     out->print(todoRevision());
     out->print(",\"max\":");
     out->print(TODO_MAX_ITEMS);
+    if (createdId) { out->print(",\"created\":"); out->print(createdId); }
     out->print(",\"items\":[");
     for (uint8_t i = 0; i < todoCount(); ++i) {
         const TodoItem* it = todoItem(i);
@@ -236,10 +238,11 @@ void webServerStart() {
         if (!title || !entero(req, "due", due, true) || !entero(req, "reminder", reminder, true)) {
             errorJSON(req, 400, "datos invalidos"); return;
         }
-        if (!todoAddFull(title->value().c_str(), description ? description->value().c_str() : "", due, reminder)) {
+        const uint32_t createdId = todoAddFull(title->value().c_str(), description ? description->value().c_str() : "", due, reminder);
+        if (!createdId) {
             errorJSON(req, 409, "lista llena o titulo vacio"); return;
         }
-        responderLista(req);
+        responderLista(req, createdId);
     });
 
     server->on("/api/tasks/update", HTTP_POST, [](AsyncWebServerRequest* req) {
