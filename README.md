@@ -134,7 +134,7 @@ A stable USB port after reset = success. Port appearing/disappearing = boot loop
 
 ### GUI Flasher
 
-`tools/lemon_flasher.py` provides a Tkinter GUI for flashing. Run tests with:
+`tools/lemon_flasher.py` provides a Tkinter GUI for flashing. The Codex skill lives in `skills/lemon-box-flasher/` (copy that folder into `~/.agents/skills/lemon-box-flasher` on another PC). Run tests with:
 
 ```bash
 python -m unittest discover -s tools -p "test_*.py"
