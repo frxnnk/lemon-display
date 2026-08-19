@@ -158,7 +158,7 @@ void drawOverview(const UsdtDataSnapshot& data) {
 
     s_canvas.setTextDatum(lgfx::top_left);
     s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-    s_canvas.drawString("LEMON + CRIPTOYA + COINGECKO", SAFE, 368, &Satoshi9);
+    s_canvas.drawString("DATOS DE MERCADO EN VIVO", SAFE, 368, &Satoshi9);
     s_canvas.setTextDatum(lgfx::top_right);
     s_canvas.drawString("TOCA ARRIBA PARA ACTUALIZAR", SCREEN_W - SAFE, 368, &Satoshi9);
 }
@@ -203,12 +203,12 @@ void drawMarkets(const UsdtDataSnapshot& data) {
     }
     drawCard(SAFE, 132, 204, 86, "USDT / ARS", ars, "LEMON", Colors::TEXT_PRIMARY);
     drawCard(252, 132, 204, 86, "USDT / USD", usd, "PEG", Colors::TEXT_PRIMARY);
-    drawCard(SAFE, 232, 204, 86, "24H ARS", change, "COINGECKO",
+    drawCard(SAFE, 232, 204, 86, "24H ARS", change, "VARIACION",
              data.peg.valid && data.peg.change24h < 0 ? Colors::NEGATIVE : TETHER_GREEN);
     drawCard(252, 232, 204, 86, "SPREAD", spread, "BID / ASK", Colors::TEXT_PRIMARY);
     s_canvas.setTextDatum(lgfx::top_left);
     s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-    s_canvas.drawString("PRECIO LIVE LEMON / PEG GLOBAL", SAFE, 368, &Satoshi9);
+    s_canvas.drawString("PRECIO Y PEG EN VIVO", SAFE, 368, &Satoshi9);
 }
 
 void drawRegions(const UsdtDataSnapshot& data) {
@@ -231,7 +231,7 @@ void drawRegions(const UsdtDataSnapshot& data) {
     drawCard(252, 232, 204, 86, "GLOBAL", usd, "USD PEG", Colors::TEXT_PRIMARY);
     s_canvas.setTextDatum(lgfx::top_left);
     s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-    s_canvas.drawString("LATAM VIA LEMON / FX VIA COINGECKO", SAFE, 368, &Satoshi9);
+    s_canvas.drawString("COTIZACIONES REGIONALES", SAFE, 368, &Satoshi9);
 }
 
 void drawSystem(const UsdtDataSnapshot& data, const UsdtDeviceInfo& device) {
