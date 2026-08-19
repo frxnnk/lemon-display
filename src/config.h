@@ -7,8 +7,17 @@
     #define COINGECKO_API_KEY  "YOUR_COINGECKO_DEMO_KEY"
 #endif
 
+// Dedicated offline USDT Control Room mock.
+#ifndef LEMON_USDT_MOCK_MODE
+#define LEMON_USDT_MOCK_MODE 0
+#endif
+
 // ── App version ──
+#if LEMON_USDT_MOCK_MODE
+#define APP_VERSION "5.1.1-usdt-mock.1"
+#else
 #define APP_VERSION "5.1.1-beta.74"
+#endif
 
 // 0 = normal app
 // 1 = minimal static display diagnostic mode
