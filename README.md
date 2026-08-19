@@ -21,6 +21,7 @@ Full pin mapping: [docs/HARDWARE.md](docs/HARDWARE.md)
 | `matouch_esp32s3_40` | Production V1 dashboard (default) |
 | `matouch_esp32s3_40_v2_demo` | V2 offline demo player (deterministic 78s loop) |
 | `matouch_esp32s3_40_v2_real` | V2 real-time runtime (live data, OTA channel `firmware-v2.bin`) |
+| `matouch_esp32s3_40_usdt` | USDT Control Room live (Lemon yield + CriptoYa + CoinGecko, OTA `firmware-usdt.bin`) |
 | `matouch_esp32s3_40_usdt_mock` | USDT Control Room mock (offline, static validation data) |
 
 ## Quick Start
@@ -59,7 +60,7 @@ On first boot the device shows a QR code for WiFi provisioning.
 
 The mock is an offline visual-validation build. It does not call APIs, write
 credentials, or perform trades. It boots directly into the USDT Control Room
-and navigates Overview, Networks, Markets, Regions, Intel, and Alert with
+and navigates Overview, Networks, Markets and Regions with
 swipes or taps. The generated binary is:
 
 ```text
@@ -147,7 +148,7 @@ The device auto-updates from GitHub Releases. No physical access needed.
 
 1. On boot, the device queries `https://api.github.com/repos/frxnnk/lemon-display/releases/latest`
 2. Compares the release tag against `APP_VERSION` in `src/config.h` (semver with prerelease support)
-3. Looks for a specific asset: `firmware.bin` (V1) or `firmware-v2.bin` (V2 real mode)
+3. Looks for a specific asset: `firmware.bin` (V1), `firmware-v2.bin` (V2 real mode) or `firmware-usdt.bin` (USDT mode)
 4. Validates MD5 from the release body (format: `firmware-v2.bin MD5: <hash>`)
 5. Downloads via GitHub CDN (follows 302 redirect) and flashes with `Update` library
 6. Reboots on success
@@ -185,6 +186,7 @@ curl -X POST http://<device-ip>/api/ota -H "Content-Type: application/json" -d '
 |-----------|-----------|-------------------|
 | `matouch_esp32s3_40` | `firmware.bin` | V1 devices only |
 | `matouch_esp32s3_40_v2_real` | `firmware-v2.bin` | V2 devices only |
+| `matouch_esp32s3_40_usdt` | `firmware-usdt.bin` | USDT devices only |
 | `matouch_esp32s3_40_v2_demo` | (no OTA) | Demo mode, no updates |
 
 ## Architecture
