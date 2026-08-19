@@ -21,6 +21,7 @@ Full pin mapping: [docs/HARDWARE.md](docs/HARDWARE.md)
 | `matouch_esp32s3_40` | Production V1 dashboard (default) |
 | `matouch_esp32s3_40_v2_demo` | V2 offline demo player (deterministic 78s loop) |
 | `matouch_esp32s3_40_v2_real` | V2 real-time runtime (live data, OTA channel `firmware-v2.bin`) |
+| `matouch_esp32s3_40_usdt_mock` | USDT Control Room mock (offline, static validation data) |
 
 ## Quick Start
 
@@ -53,6 +54,26 @@ pio device monitor -b 115200
 ```
 
 On first boot the device shows a QR code for WiFi provisioning.
+
+### USDT Control Room mock
+
+The mock is an offline visual-validation build. It does not call APIs, write
+credentials, or perform trades. It boots directly into the USDT Control Room
+and navigates Overview, Networks, Markets, Regions, Intel, and Alert with
+swipes or taps. The generated binary is:
+
+```text
+.pio/build/matouch_esp32s3_40_usdt_mock/firmware.bin
+```
+
+Build it with:
+
+```bash
+pio run -e matouch_esp32s3_40_usdt_mock
+```
+
+Flash only this mock binary at `0x10000` using the normal DIO-safe procedure;
+do not use the older `firmware-v2.bin` asset for this validation.
 
 ## Flashing with esptool (manual / recovery)
 
