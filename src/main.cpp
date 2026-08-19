@@ -25,6 +25,7 @@
 #include "ota_manager.h"
 #include "app_control.h"
 #include "ui_v2_demo.h"
+#include "ui_usdt_mock.h"
 #include "v2_runtime.h"
 #include <esp_task_wdt.h>
 #include <cmath>
@@ -2013,6 +2014,16 @@ void setup() {
     return;
 #endif
 
+#if LEMON_USDT_MOCK_MODE
+    Serial.begin(115200);
+    Serial.println("\n=== Lemon USDT Control Room mock ===");
+    displaySetup();
+    displaySetupVSync();
+    touchSetup();
+    usdtMockSetup();
+    return;
+#endif
+
 #if LEMON_V2_REAL_MODE
     Serial.begin(115200);
     Serial.println("\n=== Lemon Box V2 real canary ===");
@@ -2108,10 +2119,17 @@ void loop() {
     return;
 #endif
 
+#if LEMON_USDT_MOCK_MODE
+    usdtMockTick(millis());
+    TouchEvent mockTouch = touchLoop();
+    usdtMockHandleTouch(mockTouch);
+    delay(4);
+    return;
+#endif
+
 #if LEMON_V2_REAL_MODE
     esp_task_wdt_reset();
     v2RuntimeLoop();
-    delay(4);
     return;
 #endif
 

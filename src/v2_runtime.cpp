@@ -9,11 +9,13 @@
 #include "scheduler.h"
 #include "time_manager.h"
 #include "ui_v2_runtime.h"
+#include "news_client.h"
 #include "wifi_manager.h"
 #include "wifi_provision.h"
 #include "ws_binance.h"
 #include <Arduino.h>
 #include <WiFi.h>
+#include <cstdint>
 #include <cmath>
 #include <esp_task_wdt.h>
 
@@ -25,12 +27,31 @@ static V2RuntimeSnapshot s_snapshot;
 static bool s_provisioning = false;
 static bool s_networkStarted = false;
 static bool s_dirty = true;
+static uint8_t s_drawnScene = 0xFF;
 static uint32_t s_lastClockDrawMs = 0;
 static uint32_t s_lastBtcAttemptMs = 0;
 static uint32_t s_lastLemonAttemptMs = 0;
+static uint32_t s_lastLemonSparkAttemptMs = 0;
 static uint32_t s_lastPairAuxAttemptMs = 0;
 static uint32_t s_lastRenderedWsPriceMs = 0;
 static uint32_t s_lastRotationMs = 0;
+static uint32_t s_lastSparkSyncMs = 0;
+static uint32_t s_lastBtcCardDrawMs = 0;
+static constexpr uint32_t V2_BTC_CARD_REFRESH_MS = 1000;
+static constexpr int64_t V2_INVALID_CARD_KEY =
+    (-9223372036854775807LL - 1);
+static int64_t s_lastPairDisplayKey = V2_INVALID_CARD_KEY;
+static int64_t s_lastPairSparkKey = V2_INVALID_CARD_KEY;
+static int s_lastBidInt = -1;
+static int s_lastAskInt = -1;
+static int s_lastStockPriceCents = -1;
+static uint8_t s_lastFocusedStock = 255;
+static bool s_newsFetchPending = false;
+static bool s_newsForceRefresh = false;
+static uint32_t s_newsRetryAtMs = 0;
+static uint32_t s_newsRetryDelayMs = 0;
+static constexpr uint32_t V2_NEWS_RETRY_FIRST_MS = 5000;
+static constexpr uint32_t V2_NEWS_RETRY_MAX_MS = 60000;
 static float s_geckoPairPrice = 0.0f;
 static uint32_t s_geckoPairLastUpdate = 0;
 static ApiResult s_pairAuxResult = API_NETWORK_ERROR;
@@ -38,11 +59,12 @@ static bool s_bootComplete = false;
 static OtaInfo s_otaInfo = {};
 static uint32_t s_lastOtaCheckMs = 0;
 static uint32_t s_lastOtaProbeMs = 0;
+static bool s_otaCheckPending = false;
 static uint32_t s_otaArmedUntilMs = 0;
 static char s_pendingWifiSsid[33] = {};
 static char s_pendingWifiPass[65] = {};
 static bool s_hasPendingWifi = false;
-static constexpr uint32_t V2_OTA_CHECK_MS = 6UL * 60UL * 60UL * 1000UL;
+static constexpr uint32_t V2_OTA_CHECK_MS = 5UL * 60UL * 1000UL;
 static constexpr uint32_t V2_OTA_PROBE_MS = 60UL * 1000UL;
 
 static void startNetworkServices();
@@ -67,16 +89,35 @@ static bool pairUsesBinance(const PairDef& pair) {
     return pair.source != PAIR_GECKO_ONLY;
 }
 
-static void refreshPairSnapshot(uint32_t nowMs) {
+static int64_t pairDisplayKey(const V2RuntimeSnapshot& snapshot) {
+    if (!snapshot.pairValid) return V2_INVALID_CARD_KEY;
+    uint8_t pairIndex = snapshot.selectedPair < BTC_PAIR_COUNT
+        ? snapshot.selectedPair : 0;
+    const uint8_t decimals = BTC_PAIRS[pairIndex].decimals;
+    const double scale = decimals == 0 ? 1.0
+        : decimals == 1 ? 10.0 : 100.0;
+    return static_cast<int64_t>(
+        llround(static_cast<double>(snapshot.pairPrice) * scale));
+}
+
+static int64_t pairSparkKey(const V2RuntimeSnapshot& snapshot) {
+    const SparklineData& spark = snapshot.pairSpark;
+    if (!spark.valid || spark.count == 0) return V2_INVALID_CARD_KEY;
+    return static_cast<int64_t>(llround(
+        static_cast<double>(spark.points[spark.count - 1]) * 100.0));
+}
+
+static void refreshPairSnapshot(uint32_t nowMs, bool syncSpark = true) {
     uint8_t pairIndex = s_model.selectedPair < BTC_PAIR_COUNT ? s_model.selectedPair : 0;
     const PairDef& pair = BTC_PAIRS[pairIndex];
     bool wsValid = wsBinanceHasPrice();
     uint32_t wsUpdated = wsBinanceLastPriceMs();
+    const bool pairChanged = s_snapshot.selectedPair != pairIndex;
+    if (pairChanged) s_snapshot.pairSpark.valid = false;
     s_snapshot.selectedPair = pairIndex;
     s_snapshot.pairValid = false;
     s_snapshot.pairPrice = 0.0f;
     s_snapshot.pairLastUpdate = 0;
-    s_snapshot.pairSpark.valid = false;
 
     if ((pair.source == PAIR_BINANCE_DIRECT || pair.source == PAIR_BINANCE_INVERT) && wsValid) {
         s_snapshot.pairPrice = wsBinanceGetPrice();
@@ -104,18 +145,24 @@ static void refreshPairSnapshot(uint32_t nowMs) {
     }
 
     if (pairUsesBinance(pair) && wsValid) {
-        wsBinanceGetSparkline(s_snapshot.pairSpark);
-        if (pair.source == PAIR_DERIVED) {
-            if (!s_snapshot.lemon.valid) {
-                s_snapshot.pairSpark.valid = false;
-            } else {
-                float arsPerUsd = (s_snapshot.lemon.bid + s_snapshot.lemon.ask) * 0.5f;
-                s_snapshot.pairSpark.minVal = 1e30f;
-                s_snapshot.pairSpark.maxVal = -1e30f;
-                for (uint16_t i = 0; i < s_snapshot.pairSpark.count; i++) {
-                    s_snapshot.pairSpark.points[i] *= arsPerUsd;
-                    s_snapshot.pairSpark.minVal = min(s_snapshot.pairSpark.minVal, s_snapshot.pairSpark.points[i]);
-                    s_snapshot.pairSpark.maxVal = max(s_snapshot.pairSpark.maxVal, s_snapshot.pairSpark.points[i]);
+        bool refreshSpark = syncSpark &&
+            (pairChanged || millis() - s_lastSparkSyncMs >= 1000 ||
+             !s_snapshot.pairSpark.valid);
+        if (refreshSpark) {
+            s_lastSparkSyncMs = millis();
+            wsBinanceGetSparkline(s_snapshot.pairSpark);
+            if (pair.source == PAIR_DERIVED) {
+                if (!s_snapshot.lemon.valid) {
+                    s_snapshot.pairSpark.valid = false;
+                } else {
+                    float arsPerUsd = (s_snapshot.lemon.bid + s_snapshot.lemon.ask) * 0.5f;
+                    s_snapshot.pairSpark.minVal = 1e30f;
+                    s_snapshot.pairSpark.maxVal = -1e30f;
+                    for (uint16_t i = 0; i < s_snapshot.pairSpark.count; i++) {
+                        s_snapshot.pairSpark.points[i] *= arsPerUsd;
+                        s_snapshot.pairSpark.minVal = min(s_snapshot.pairSpark.minVal, s_snapshot.pairSpark.points[i]);
+                        s_snapshot.pairSpark.maxVal = max(s_snapshot.pairSpark.maxVal, s_snapshot.pairSpark.points[i]);
+                    }
                 }
             }
         }
@@ -134,13 +181,17 @@ static void refreshPairSnapshot(uint32_t nowMs) {
     }
 }
 
-static void refreshSnapshot() {
+static void refreshSnapshot(bool syncSpark = true) {
     uint32_t nowMs = millis();
     s_snapshot.online = wifiConnected();
     s_snapshot.stocksFetching = stocksIsFetching();
     s_snapshot.stockCount = stocksGetWatchlistCount();
     if (s_snapshot.stockCount > V2_TAPE_ROWS) s_snapshot.stockCount = V2_TAPE_ROWS;
     s_snapshot.focusedStock = stocksGetFocusedIdx();
+    const char* focusedSymbol = stocksGetFocusedSymbol();
+    strncpy(s_snapshot.focusedSymbol, focusedSymbol ? focusedSymbol : "",
+            sizeof(s_snapshot.focusedSymbol) - 1);
+    s_snapshot.focusedSymbol[sizeof(s_snapshot.focusedSymbol) - 1] = '\0';
     for (uint8_t i = 0; i < s_snapshot.stockCount; i++) {
         stocksGetSnapshotAt(i, s_snapshot.stocks[i]);
     }
@@ -162,7 +213,7 @@ static void refreshSnapshot() {
         mapFetchStatus(s_snapshot.lemonResult),
         UPDATE_LEMON_MS * 2UL,
         UPDATE_LEMON_MS * 10UL);
-    refreshPairSnapshot(nowMs);
+    refreshPairSnapshot(nowMs, syncSpark);
     const char* time = timeReady() ? getTimeStr(nvsGet24hFormat()) : "--:--:--";
     strncpy(s_snapshot.time, time, sizeof(s_snapshot.time) - 1);
     s_snapshot.time[sizeof(s_snapshot.time) - 1] = '\0';
@@ -172,11 +223,12 @@ static void refreshSnapshot() {
     strncpy(s_snapshot.ip, ip.c_str(), sizeof(s_snapshot.ip) - 1);
     s_snapshot.ip[sizeof(s_snapshot.ip) - 1] = '\0';
     s_snapshot.rssi = wifiConnected() ? wifiRSSI() : 0;
-    s_snapshot.brightness = nvsGetBrightness();
+    s_snapshot.theme = nvsGetV2Theme();
     s_snapshot.rotationSeconds = nvsGetV2RotationSeconds();
     s_snapshot.use24h = nvsGet24hFormat();
     s_snapshot.soundEnabled = audioIsEnabled();
     s_snapshot.wifiResetArmed = s_model.wifiResetArmed;
+    s_snapshot.deviceRestartArmed = s_model.deviceRestartArmed;
     s_snapshot.otaArmed = s_otaArmedUntilMs != 0 && nowMs < s_otaArmedUntilMs;
     s_snapshot.uptimeSeconds = nowMs / 1000;
     s_snapshot.freeHeap = ESP.getFreeHeap();
@@ -184,7 +236,9 @@ static void refreshSnapshot() {
 
 static void drawNow() {
     refreshSnapshot();
-    v2UiDraw(s_snapshot, s_model);
+    bool sceneChanged = s_drawnScene != static_cast<uint8_t>(s_model.scene);
+    s_drawnScene = static_cast<uint8_t>(s_model.scene);
+    v2UiDraw(s_snapshot, s_model, sceneChanged);
     s_dirty = false;
 }
 
@@ -202,6 +256,96 @@ static void fetchLemonNow() {
     s_lastLemonAttemptMs = millis();
     s_snapshot.lemonResult = fetchLemonPrice(s_snapshot.lemon);
     s_snapshot.lemonFetching = false;
+}
+
+static void updateLemonChange24h() {
+    const SparklineData& spark = s_snapshot.lemonSpark;
+    s_snapshot.lemonChange24hValid = false;
+    if (!spark.valid || spark.count < 2) return;
+    const float first = spark.points[0];
+    const float last = spark.points[spark.count - 1];
+    if (!isfinite(first) || !isfinite(last) || first <= 0.0f) return;
+    const float change = ((last - first) / first) * 100.0f;
+    if (!isfinite(change)) return;
+    s_snapshot.lemonChange24h = change;
+    s_snapshot.lemonChange24hValid = true;
+}
+
+static void fetchLemonHistoryNow() {
+    if (!wifiConnected() || stocksIsFetching()) return;
+    s_lastLemonSparkAttemptMs = millis();
+    fetchLemonSparkline(s_snapshot.lemonSpark, 1);
+    updateLemonChange24h();
+}
+
+static void requestNewsFetch(bool forceRefresh = false) {
+    const char* sym = stocksGetFocusedSymbol();
+    if (!sym || !sym[0]) {
+        s_newsFetchPending = false;
+        s_newsForceRefresh = false;
+        s_newsRetryAtMs = 0;
+        s_newsRetryDelayMs = 0;
+        s_snapshot.newsFetching = false;
+        s_snapshot.newsCount = 0;
+        return;
+    }
+
+    uint8_t cachedCount = 0;
+    newsGetCached(sym, s_snapshot.news, NEWS_MAX_ITEMS, cachedCount);
+    if (cachedCount > 0) s_snapshot.newsCount = cachedCount;
+    if (cachedCount == 0) s_snapshot.newsCount = 0;
+
+    const bool cacheFresh = newsCacheIsFresh(sym);
+    s_newsFetchPending = forceRefresh || !cacheFresh;
+    s_newsForceRefresh = forceRefresh;
+    s_newsRetryAtMs = 0;
+    s_newsRetryDelayMs = V2_NEWS_RETRY_FIRST_MS;
+    s_snapshot.newsFetching = s_newsFetchPending && cachedCount == 0;
+    if (s_model.scene == V2_HOME && s_bootComplete) {
+        v2UiUpdateNews(s_snapshot, s_model);
+    }
+}
+
+static void fetchNewsNow() {
+    if (!wifiConnected() || stocksIsFetching()) return;
+    const char* sym = stocksGetFocusedSymbol();
+    if (!sym || !sym[0]) {
+        s_newsFetchPending = false;
+        s_newsForceRefresh = false;
+        s_newsRetryAtMs = 0;
+        s_snapshot.newsFetching = false;
+        return;
+    }
+    apiStop();
+    delay(100);
+    uint8_t count = 0;
+    NewsFetchResult result = newsFetch(
+        sym, s_snapshot.news, NEWS_MAX_ITEMS, count, s_newsForceRefresh);
+    s_snapshot.newsCount = count;
+    s_snapshot.newsFetching = false;
+    if (result == NEWS_FETCH_UPDATED || result == NEWS_FETCH_FRESH_CACHE) {
+        s_newsFetchPending = false;
+        s_newsForceRefresh = false;
+        s_newsRetryAtMs = 0;
+        s_newsRetryDelayMs = V2_NEWS_RETRY_FIRST_MS;
+    } else {
+        if (s_newsRetryDelayMs == 0) {
+            s_newsRetryDelayMs = V2_NEWS_RETRY_FIRST_MS;
+        }
+        s_newsFetchPending = true;
+        s_newsForceRefresh = true;
+        s_newsRetryAtMs = millis() + s_newsRetryDelayMs;
+        uint32_t nextRetryDelayMs = s_newsRetryDelayMs * 2U;
+        s_newsRetryDelayMs = nextRetryDelayMs > V2_NEWS_RETRY_MAX_MS
+            ? V2_NEWS_RETRY_MAX_MS : nextRetryDelayMs;
+        Serial.printf("[News] retry queued in %lus\n",
+                      static_cast<unsigned long>(
+                          (s_newsRetryAtMs - millis()) / 1000UL));
+    }
+    if (s_model.scene == V2_HOME) {
+        refreshSnapshot();
+        v2UiUpdateNews(s_snapshot, s_model);
+    }
 }
 
 static void fetchPairAuxNow() {
@@ -243,10 +387,15 @@ static void configurePairFeed() {
 }
 
 static void checkV2OtaNow(bool bootCheck) {
-    if (!wifiConnected() || stocksIsFetching()) return;
+    if (!wifiConnected()) return;
+    if (stocksIsFetching()) {
+        s_otaCheckPending = true;
+        s_snapshot.otaChecking = true;
+        return;
+    }
+    s_otaCheckPending = false;
     s_snapshot.otaChecking = true;
     if (bootCheck) v2UiDrawLoading("BUSCANDO ACTUALIZACIONES", 38);
-    else v2UiUpdateStatus(s_snapshot, s_model);
 
     if (!bootCheck) {
         scheduler.enable(taskStocks, false);
@@ -272,10 +421,12 @@ static void checkV2OtaNow(bool bootCheck) {
         configurePairFeed();
         stocksSetActive(true);
         scheduler.enable(taskStocks, true);
-        stocksRequestBurst();
     }
     refreshSnapshot();
-    if (!bootCheck) v2UiUpdateStatus(s_snapshot, s_model);
+    if (!bootCheck) {
+        if (s_model.scene == V2_HOME) v2UiUpdateHeader(s_snapshot, s_model);
+        else if (s_model.scene == V2_SETTINGS) s_dirty = true;
+    }
 }
 
 static void installV2OtaNow() {
@@ -300,9 +451,15 @@ static void selectNextPair() {
     s_geckoPairPrice = 0.0f;
     s_geckoPairLastUpdate = 0;
     s_pairAuxResult = API_NETWORK_ERROR;
+    s_lastSparkSyncMs = 0;
+    s_lastPairDisplayKey = V2_INVALID_CARD_KEY;
+    s_lastPairSparkKey = V2_INVALID_CARD_KEY;
     if (s_networkStarted) configurePairFeed();
     refreshSnapshot();
-    v2UiUpdatePair(s_snapshot, s_model);
+    s_lastPairDisplayKey = pairDisplayKey(s_snapshot);
+    s_lastPairSparkKey = pairSparkKey(s_snapshot);
+    s_lastBtcCardDrawMs = millis();
+    v2UiUpdateBtcCard(s_snapshot, s_model);
 }
 
 static void startNetworkServices() {
@@ -322,6 +479,8 @@ static void startNetworkServices() {
     if (!s_bootComplete) v2UiDrawLoading("CARGANDO WATCHLIST", 90);
     stocksSetActive(true);
     scheduler.enable(taskStocks, true);
+    requestNewsFetch();
+    if (s_newsFetchPending) fetchNewsNow();
     stocksRequestBurst();
     if (s_bootComplete) {
         refreshSnapshot();
@@ -388,10 +547,9 @@ static void handleSettingsAction(const TouchEvent& event) {
     uint8_t row = static_cast<uint8_t>((event.y - 126) / 58);
     if (event.gesture == TOUCH_TAP && s_model.settingsPage == 0) {
         if (row == 0) {
-            uint8_t current = nvsGetBrightness();
-            uint8_t next = current < 96 ? 128 : current < 160 ? 192 : current < 224 ? 255 : 64;
-            nvsSetBrightness(next);
-            displaySetBrightness(next);
+            uint8_t next = nvsGetV2Theme() == 1 ? 0 : 1;
+            nvsSetV2Theme(next);
+            v2UiSetTheme(next);
         } else if (row == 1) {
             nvsSet24hFormat(!nvsGet24hFormat());
         } else if (row == 2) {
@@ -408,10 +566,14 @@ static void handleSettingsAction(const TouchEvent& event) {
         s_dirty = true;
     }
     if (s_model.settingsPage == 1 && row == 0 && event.gesture == TOUCH_TAP) {
-        stocksAdvanceFocused();
+        stocksRequestBurst();
         s_dirty = true;
     }
-    if (s_model.settingsPage == 1 && row == 1 && event.gesture == TOUCH_LONG_PRESS) {
+    if (s_model.settingsPage == 1 && row == 1 && event.gesture == TOUCH_TAP) {
+        requestNewsFetch(true);
+        s_dirty = true;
+    }
+    if (s_model.settingsPage == 1 && row == 2 && event.gesture == TOUCH_LONG_PRESS) {
         uint32_t nowMs = millis();
         if (s_model.wifiResetArmed && nowMs < s_model.wifiResetUntilMs) {
             nvsForgetWifi();
@@ -421,8 +583,19 @@ static void handleSettingsAction(const TouchEvent& event) {
         s_model.wifiResetUntilMs = nowMs + 5000;
         s_dirty = true;
     }
-    if (s_model.settingsPage == 2 && row == 2 && s_snapshot.otaAvailable) {
-        if (event.gesture == TOUCH_TAP) {
+    if (s_model.settingsPage == 1 && row == 3 && event.gesture == TOUCH_TAP) {
+        stocksAdvanceFocused();
+        s_lastFocusedStock = 255;
+        s_lastStockPriceCents = -1;
+        requestNewsFetch();
+        s_dirty = true;
+    }
+    if (s_model.settingsPage == 2 && row == 2 &&
+        event.gesture == TOUCH_TAP) {
+        if (!s_snapshot.otaAvailable) {
+            checkV2OtaNow(false);
+            s_dirty = true;
+        } else {
             if (s_snapshot.otaArmed) {
                 installV2OtaNow();
             } else {
@@ -432,19 +605,32 @@ static void handleSettingsAction(const TouchEvent& event) {
             }
         }
     }
+    if (s_model.settingsPage == 2 && row == 4 &&
+        event.gesture == TOUCH_TAP) {
+        uint32_t nowMs = millis();
+        if (s_model.deviceRestartArmed &&
+            nowMs < s_model.deviceRestartUntilMs) {
+            v2UiDrawLoading("REINICIANDO", 100);
+            delay(150);
+            ESP.restart();
+            return;
+        }
+        s_model.deviceRestartArmed = true;
+        s_model.deviceRestartUntilMs = millis() + 5000;
+        s_dirty = true;
+    }
 }
 
 static bool handleHomeUpdateTap(const TouchEvent& event) {
     if (s_model.scene != V2_HOME || event.gesture != TOUCH_TAP ||
-        !s_snapshot.otaAvailable || event.x < 220 || event.x > 448 ||
-        event.y < 70 || event.y > 110) return false;
-    if (s_snapshot.otaArmed) {
-        installV2OtaNow();
-    } else {
-        s_otaArmedUntilMs = millis() + 8000;
-        s_snapshot.otaArmed = true;
-        s_dirty = true;
-    }
+        !s_snapshot.otaAvailable || event.x < 332 || event.x > 402 ||
+        event.y < 18 || event.y > 62) return false;
+    uint32_t nowMs = millis();
+    s_model.scene = V2_SETTINGS;
+    s_model.settingsPage = 2;
+    s_model.sceneEnteredMs = nowMs;
+    s_model.lastInteractionMs = nowMs;
+    s_dirty = true;
     return true;
 }
 
@@ -468,8 +654,37 @@ static void handleTouch() {
         }
     }
     if (event.gesture == TOUCH_TAP && s_model.scene == V2_HOME &&
-        event.y >= 72 && event.y < 248) {
-        selectNextPair();
+        event.y >= 228 && event.y < 300 && s_snapshot.newsCount == 0) {
+        requestNewsFetch(true);
+        s_dirty = true;
+        if (audioIsEnabled()) playTap();
+        return;
+    }
+    if (event.gesture == TOUCH_TAP && s_model.scene == V2_NEWS_READER) {
+        if (event.y >= 120) {
+            s_model.selectedNews = v2NextNews(
+                s_model.selectedNews, s_snapshot.newsCount);
+            s_model.lastInteractionMs = millis();
+            s_dirty = true;
+            if (audioIsEnabled()) playTap();
+            return;
+        }
+    }
+    if (event.gesture == TOUCH_TAP && s_model.scene == V2_HOME) {
+        if (event.y >= 72 && event.y < 228) {
+            stocksAdvanceFocused();
+            s_lastFocusedStock = 255;
+            s_lastStockPriceCents = -1;
+            refreshSnapshot();
+            v2UiUpdateStockHero(s_snapshot, s_model);
+            requestNewsFetch();
+            if (audioIsEnabled()) playTap();
+            return;
+        }
+        if (event.y >= 328 && event.y < 448 && event.x >= 32 && event.x < 232) {
+            selectNextPair();
+            return;
+        }
     }
     handleSettingsAction(event);
     v2HandleGesture(s_model, event.gesture, event.x, event.y, millis());
@@ -478,6 +693,7 @@ static void handleTouch() {
 }
 
 void v2RuntimeSetup() {
+    v2UiSetTheme(nvsGetV2Theme());
     v2UiSetup();
     v2UiDrawLoading("INICIANDO", 0);
     stocksInit();
@@ -537,6 +753,7 @@ void v2RuntimeLoop() {
     }
 
     wifiLoop();
+    v2UiSetDeferred(true);
     bool online = wifiConnected();
     if (online && !s_networkStarted) startNetworkServices();
     if (!online && s_networkStarted) {
@@ -552,18 +769,44 @@ void v2RuntimeLoop() {
     scheduler.tick();
     if (stocksConsumeDirty()) {
         refreshSnapshot();
-        if (s_model.scene == V2_HOME) v2UiUpdateHomeCards(s_snapshot, s_model);
+        if (s_model.scene == V2_HOME) v2UiUpdateStockPrice(s_snapshot, s_model);
         else v2UiUpdateData(s_snapshot, s_model);
     }
-
     uint32_t nowMs = millis();
-    if (online && s_snapshot.otaChecked && !s_snapshot.otaChecking &&
-        !s_snapshot.otaAvailable && nowMs - s_lastOtaProbeMs >= V2_OTA_PROBE_MS &&
-        !stocksIsFetching()) {
-        s_lastOtaProbeMs = nowMs;
-        if (otaLatestTagChanged(OTA_GITHUB_REPO, APP_VERSION)) checkV2OtaNow(false);
+    if (s_newsFetchPending && online && !stocksIsFetching() &&
+        (s_newsRetryAtMs == 0 ||
+         static_cast<int32_t>(nowMs - s_newsRetryAtMs) >= 0)) {
+        fetchNewsNow();
+        nowMs = millis();
+    }
+
+    if (online && !stocksIsFetching() && !s_snapshot.newsFetching &&
+        (s_lastLemonSparkAttemptMs == 0 ||
+         nowMs - s_lastLemonSparkAttemptMs >= UPDATE_SPARKLINE_MS)) {
+        fetchLemonHistoryNow();
+        refreshSnapshot();
+        if (s_model.scene == V2_HOME) {
+            v2UiUpdateDollarCard(s_snapshot, s_model);
+        } else {
+            v2UiUpdateData(s_snapshot, s_model);
+        }
+    }
+    if (online && s_otaCheckPending && !stocksIsFetching()) {
+        checkV2OtaNow(false);
+        nowMs = millis();
     }
     if (online && s_snapshot.otaChecked && !s_snapshot.otaChecking &&
+        !s_snapshot.otaAvailable &&
+        nowMs - s_lastOtaProbeMs >= V2_OTA_PROBE_MS &&
+        !stocksIsFetching()) {
+        s_lastOtaProbeMs = nowMs;
+        if (otaLatestTagChanged(OTA_GITHUB_REPO, APP_VERSION)) {
+            checkV2OtaNow(false);
+            nowMs = millis();
+        }
+    }
+    if (online && s_snapshot.otaChecked && !s_snapshot.otaChecking &&
+        !s_snapshot.otaAvailable &&
         nowMs - s_lastOtaCheckMs >= V2_OTA_CHECK_MS && !stocksIsFetching()) {
         checkV2OtaNow(false);
     }
@@ -571,16 +814,29 @@ void v2RuntimeLoop() {
     if (online && nowMs - s_lastBtcAttemptMs >= retryMs) {
         fetchBtcNow();
         refreshSnapshot();
-        v2UiUpdatePair(s_snapshot, s_model);
+        if (s_model.scene == V2_HOME) {
+            v2UiUpdatePriceOnly(s_snapshot, s_model);
+        } else {
+            v2UiUpdateData(s_snapshot, s_model);
+        }
     }
 
     if (online && nowMs - s_lastLemonAttemptMs >= UPDATE_LEMON_MS) {
         fetchLemonNow();
         refreshSnapshot();
-        if (s_model.scene == V2_HOME && s_model.selectedPair == 3) {
-            v2UiUpdateData(s_snapshot, s_model);
+        if (s_model.scene == V2_HOME) {
+            if (s_model.selectedPair == 3) {
+                v2UiUpdatePriceOnly(s_snapshot, s_model);
+            }
+            int bidInt = s_snapshot.lemon.valid ? (int)s_snapshot.lemon.bid : 0;
+            int askInt = s_snapshot.lemon.valid ? (int)s_snapshot.lemon.ask : 0;
+            if (bidInt != s_lastBidInt || askInt != s_lastAskInt) {
+                s_lastBidInt = bidInt;
+                s_lastAskInt = askInt;
+                v2UiUpdateDollarCard(s_snapshot, s_model);
+            }
         } else {
-            v2UiUpdateHomeCards(s_snapshot, s_model);
+            v2UiUpdateData(s_snapshot, s_model);
         }
     }
 
@@ -590,14 +846,27 @@ void v2RuntimeLoop() {
         nowMs - s_lastPairAuxAttemptMs >= auxRefreshMs) {
         fetchPairAuxNow();
         refreshSnapshot();
-        v2UiUpdatePair(s_snapshot, s_model);
+        v2UiUpdateBtcCard(s_snapshot, s_model);
     }
 
     uint32_t wsPriceMs = wsBinanceLastPriceMs();
     if (pairUsesBinance(pair) && wsPriceMs != 0 && wsPriceMs != s_lastRenderedWsPriceMs) {
         s_lastRenderedWsPriceMs = wsPriceMs;
-        refreshSnapshot();
-        v2UiUpdatePair(s_snapshot, s_model);
+        const uint32_t sparkSyncBefore = s_lastSparkSyncMs;
+        refreshSnapshot(true);
+        const int64_t displayKey = pairDisplayKey(s_snapshot);
+        const int64_t sparkKey = pairSparkKey(s_snapshot);
+        const bool displayChanged = displayKey != s_lastPairDisplayKey;
+        const bool sparkChanged =
+            s_lastSparkSyncMs != sparkSyncBefore &&
+            sparkKey != s_lastPairSparkKey;
+        if ((displayChanged || sparkChanged) &&
+            nowMs - s_lastBtcCardDrawMs >= V2_BTC_CARD_REFRESH_MS) {
+            s_lastPairDisplayKey = displayKey;
+            s_lastPairSparkKey = sparkKey;
+            s_lastBtcCardDrawMs = nowMs;
+            v2UiUpdateBtcCard(s_snapshot, s_model);
+        }
     }
 
     uint8_t rotation = nvsGetV2RotationSeconds();
@@ -606,12 +875,19 @@ void v2RuntimeLoop() {
         s_lastRotationMs = nowMs;
         stocksAdvanceFocused();
         refreshSnapshot();
-        v2UiUpdateHomeCards(s_snapshot, s_model);
+        s_lastFocusedStock = 255;
+        v2UiUpdateStockHero(s_snapshot, s_model);
+        requestNewsFetch();
     }
 
     if (v2ApplyTimeout(s_model, nowMs)) s_dirty = true;
     if (s_model.wifiResetArmed && nowMs >= s_model.wifiResetUntilMs) {
         s_model.wifiResetArmed = false;
+        s_dirty = true;
+    }
+    if (s_model.deviceRestartArmed &&
+        nowMs >= s_model.deviceRestartUntilMs) {
+        s_model.deviceRestartArmed = false;
         s_dirty = true;
     }
     if (s_otaArmedUntilMs != 0 && nowMs >= s_otaArmedUntilMs) {
@@ -628,5 +904,6 @@ void v2RuntimeLoop() {
         v2UiUpdateClock(s_snapshot.time, s_model.scene);
     }
     if (s_dirty) drawNow();
+    else v2UiFlushDeferred();
     esp_task_wdt_reset();
 }
