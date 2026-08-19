@@ -71,8 +71,8 @@ The device auto-updates from GitHub Releases (`frxnnk/lemon-display`).
 3. Compute MD5: `certutil -hashfile firmware.bin MD5`
 4. Create GitHub release:
    - Tag must be newer than `APP_VERSION` in `src/config.h` (semver with prerelease)
-   - Upload asset as `firmware-v2.bin` (V2) or `firmware.bin` (V1)
-   - Release body must contain: `firmware-v2.bin MD5: <32-char-lowercase-hash>`
+   - Upload asset as `firmware-v2.bin` (V2), `firmware-usdt.bin` (USDT) or `firmware.bin` (V1)
+   - Release body must contain the channel MD5, e.g. `firmware-usdt.bin MD5: <32-char-lowercase-hash>`
 5. Devices auto-detect within the probe interval and flash themselves
 
 ### Remote trigger via HTTP
@@ -93,6 +93,7 @@ Semver with prerelease: `5.1.1-beta.49 < 5.1.1-beta.50 < 5.1.1`. Stable (no suff
 - `src/ota_manager.cpp` — GitHub Releases check + download + flash
 - `src/config_server.cpp` — REST API (includes `/api/ota` endpoint)
 - `tools/lemon_flasher.py` — GUI flasher tool
+- `skills/lemon-box-flasher/` — Codex USB flash skill
 - `tools/flash_v2_real_canary.ps1` — Canary flash script
 - `platformio.ini` — Build configuration
 - `docs/HARDWARE.md` — Pin mapping and hardware details
