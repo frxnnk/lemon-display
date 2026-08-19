@@ -40,8 +40,14 @@ void clearCredentials(char* ssid, size_t ssidLen, char* pass, size_t passLen) {
 }
 
 void updateDeviceInfo() {
-    const char* clock = timeReady() ? getTimeStr(true) : "--:--:--";
-    strncpy(s_device.time, clock, sizeof(s_device.time) - 1);
+    const bool clockReady = timeReady();
+    const char* clock = clockReady ? getTimeStr(true) : "--:--:--";
+    if (clockReady) {
+        strncpy(s_device.time, clock, sizeof(s_device.time) - 1);
+        s_device.time[5] = '\0';
+    } else {
+        strncpy(s_device.time, clock, sizeof(s_device.time) - 1);
+    }
     s_device.time[sizeof(s_device.time) - 1] = '\0';
     const char* ssid = wifiConnected() ? wifiSSID() : "SIN CONEXION";
     strncpy(s_device.ssid, ssid, sizeof(s_device.ssid) - 1);
