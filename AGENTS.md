@@ -93,6 +93,7 @@ Semver with prerelease: `5.1.1-beta.49 < 5.1.1-beta.50 < 5.1.1`. Stable (no suff
 - `src/ota_manager.cpp` — GitHub Releases check + download + flash
 - `src/config_server.cpp` — REST API (includes `/api/ota` endpoint)
 - `tools/lemon_flasher.py` — GUI flasher tool
+- `skills/lemon-box-flasher/` — Codex USB flash skill
 - `tools/flash_v2_real_canary.ps1` — Canary flash script
 - `platformio.ini` — Build configuration
 - `docs/HARDWARE.md` — Pin mapping and hardware details
