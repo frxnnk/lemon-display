@@ -1,0 +1,14 @@
+{
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/landing/",
+      "permanent": false
+    },
+    {
+      "source": "/studio",
+      "destination": "/landing/studio/?mode=concept",
+      "permanent": false
+    }
+  ]
+}
