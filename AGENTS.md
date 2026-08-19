@@ -71,8 +71,8 @@ The device auto-updates from GitHub Releases (`frxnnk/lemon-display`).
 3. Compute MD5: `certutil -hashfile firmware.bin MD5`
 4. Create GitHub release:
    - Tag must be newer than `APP_VERSION` in `src/config.h` (semver with prerelease)
-   - Upload asset as `firmware-v2.bin` (V2) or `firmware.bin` (V1)
-   - Release body must contain: `firmware-v2.bin MD5: <32-char-lowercase-hash>`
+   - Upload asset as `firmware-v2.bin` (V2), `firmware-usdt.bin` (USDT) or `firmware.bin` (V1)
+   - Release body must contain the channel MD5, e.g. `firmware-usdt.bin MD5: <32-char-lowercase-hash>`
 5. Devices auto-detect within the probe interval and flash themselves
 
 ### Remote trigger via HTTP
