@@ -6,9 +6,43 @@
       "permanent": false
     },
     {
+      "source": "/landing",
+      "destination": "/landing/",
+      "permanent": false
+    },
+    {
       "source": "/studio",
       "destination": "/landing/studio/?mode=concept",
       "permanent": false
+    },
+    {
+      "source": "/studio/",
+      "destination": "/landing/studio/?mode=concept",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/assets/:path*",
+      "destination": "/landing/assets/:path*"
+    },
+    {
+      "source": "/modelo3d/:path*",
+      "destination": "/landing/modelo3d/:path*"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/landing/modelo3d/:path*",
+      "headers": [
+        { "key": "Content-Type", "value": "model/stl" }
+      ]
+    },
+    {
+      "source": "/modelo3d/:path*",
+      "headers": [
+        { "key": "Content-Type", "value": "model/stl" }
+      ]
     }
   ]
 }
