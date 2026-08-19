@@ -26,6 +26,7 @@
 #include "app_control.h"
 #include "ui_v2_demo.h"
 #include "ui_usdt_mock.h"
+#include "usdt_lemon_runtime.h"
 #include "v2_runtime.h"
 #include <esp_task_wdt.h>
 #include <cmath>
@@ -2024,6 +2025,21 @@ void setup() {
     return;
 #endif
 
+#if LEMON_USDT_MODE
+    Serial.begin(115200);
+    Serial.println("\n=== Lemon USDT Control Room ===");
+    nvsInit();
+    Colors::setTheme(Colors::THEME_DARK);
+    displaySetup();
+    displaySetupVSync();
+    displaySetBrightness(nvsGetBrightness());
+    touchSetup();
+    usdtLemonSetup();
+    esp_task_wdt_init(45, true);
+    esp_task_wdt_add(NULL);
+    return;
+#endif
+
 #if LEMON_V2_REAL_MODE
     Serial.begin(115200);
     Serial.println("\n=== Lemon Box V2 real canary ===");
@@ -2124,6 +2140,12 @@ void loop() {
     TouchEvent mockTouch = touchLoop();
     usdtMockHandleTouch(mockTouch);
     delay(4);
+    return;
+#endif
+
+#if LEMON_USDT_MODE
+    esp_task_wdt_reset();
+    usdtLemonLoop();
     return;
 #endif
 

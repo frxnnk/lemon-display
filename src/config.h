@@ -12,9 +12,15 @@
 #define LEMON_USDT_MOCK_MODE 0
 #endif
 
+#ifndef LEMON_USDT_MODE
+#define LEMON_USDT_MODE 0
+#endif
+
 // ── App version ──
-#if LEMON_USDT_MOCK_MODE
-#define APP_VERSION "5.1.1-usdt-mock.1"
+#if LEMON_USDT_MODE
+#define APP_VERSION "5.1.1-usdt.1"
+#elif LEMON_USDT_MOCK_MODE
+#define APP_VERSION "5.1.1-usdt-mock.2"
 #else
 #define APP_VERSION "5.1.1-beta.74"
 #endif
@@ -41,6 +47,10 @@
 #define COINGECKO_MARKETS_EP "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum,solana,tether,usd-coin&order=market_cap_desc&per_page=5&page=1&sparkline=false&price_change_percentage=1h,24h,7d"
 #define COINGECKO_SIMPLE_EP  "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true"
 #define CRIPTOYA_LEMON_EP    "https://criptoya.com/api/lemoncash/usdc/ars"
+#define CRIPTOYA_LEMON_USDT_EP "https://criptoya.com/api/lemoncash/usdt/ars"
+#define LEMON_YIELD_EP "https://api.lemoncash.com.ar/api/v1/interest-funds-percentages"
+#define COINGECKO_USDT_PEG_EP "https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=usd,ars,brl,mxn&include_24hr_change=true&include_last_updated_at=true"
+#define COINGECKO_USDT_MARKETS_EP "https://api.coingecko.com/api/v3/coins/markets?vs_currency=ars&ids=tether&price_change_percentage=1h,24h,7d"
 
 // ── CoinGecko USDC/ARS chart (for dollar sparkline) ──
 #define COINGECKO_TETHER_CHART_EP "https://api.coingecko.com/api/v3/coins/usd-coin/market_chart?vs_currency=ars&days="
@@ -143,6 +153,7 @@ static const int DOLLAR_PERIOD_COUNT = sizeof(DOLLAR_PERIODS) / sizeof(DOLLAR_PE
 // ── OTA GitHub repo ──
 #define OTA_GITHUB_REPO "frxnnk/lemon-display"
 #define OTA_V2_ASSET "firmware-v2.bin"
+#define OTA_USDT_ASSET "firmware-usdt.bin"
 
 // ── BTC Pair definitions (5 trading pairs) ──
 enum PairSource : uint8_t {

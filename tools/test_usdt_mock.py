@@ -25,7 +25,7 @@ class UsdtMockContractTests(unittest.TestCase):
 
     def test_mock_contains_the_validation_screens_and_no_live_fetch(self):
         source = (ROOT / "src/ui_usdt_mock.cpp").read_text(encoding="utf-8")
-        for label in ("USDT CONTROL ROOM", "PEG", "NETWORKS", "MARKETS", "LEMON", "INTEL", "ALERT"):
+        for label in ("USDT CONTROL ROOM", "PEG", "NETWORKS", "MARKETS", "REGIONS", "BNB CHAIN", "POLYGON"):
             self.assertIn(label, source)
         self.assertIn("TOUCH_SWIPE_LEFT", source)
         self.assertIn("TOUCH_SWIPE_RIGHT", source)

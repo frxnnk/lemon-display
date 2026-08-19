@@ -5,9 +5,9 @@
 
 enum UsdtScene : uint8_t {
     USDT_OVERVIEW = 0,
-    USDT_PEG,
     USDT_NETWORKS,
-    USDT_LEMON,
+    USDT_MARKETS,
+    USDT_REGIONS,
     USDT_SYSTEM,
     USDT_SCENE_COUNT,
 };
@@ -35,13 +35,22 @@ struct UsdtRuntimeModel {
     uint32_t sceneEnteredMs = 0;
     uint32_t lastInteractionMs = 0;
     bool refreshRequested = false;
+    bool otaCheckRequested = false;
     bool wifiResetArmed = false;
     uint32_t wifiResetUntilMs = 0;
 };
 
+constexpr int16_t USDT_NAV_Y = 416;
+constexpr int16_t USDT_NAV_H = 64;
+constexpr int16_t USDT_SYSTEM_ACTION_X = 24;
+constexpr int16_t USDT_SYSTEM_ACTION_Y = 338;
+constexpr int16_t USDT_SYSTEM_ACTION_W = 432;
+constexpr int16_t USDT_SYSTEM_ACTION_H = 50;
 constexpr uint32_t USDT_FRESH_MS = 60UL * 1000UL;
 constexpr uint32_t USDT_CACHED_MS = 10UL * 60UL * 1000UL;
 constexpr uint32_t USDT_STALE_MS = 60UL * 60UL * 1000UL;
+constexpr uint32_t USDT_SCENE_TIMEOUT_MS = 90UL * 1000UL;
+constexpr uint32_t USDT_VARIATION_ROTATE_MS = 4000UL;
 
 constexpr UsdtFreshness usdtFreshness(bool valid, uint32_t lastUpdateMs,
                                       uint32_t nowMs, bool online,
@@ -58,7 +67,7 @@ constexpr UsdtFreshness usdtFreshness(bool valid, uint32_t lastUpdateMs,
 }
 
 constexpr int8_t usdtBottomTabAt(int16_t x, int16_t y) {
-    return y < 416 || y >= 480 || x < 0 || x >= 480 ? -1
+    return y < USDT_NAV_Y || y >= 480 || x < 0 || x >= 480 ? -1
          : x < 96 ? 0
          : x < 192 ? 1
          : x < 288 ? 2
@@ -68,43 +77,71 @@ constexpr int8_t usdtBottomTabAt(int16_t x, int16_t y) {
 
 constexpr UsdtScene usdtSceneForTab(int8_t tab) {
     return tab == 0 ? USDT_OVERVIEW
-         : tab == 1 ? USDT_PEG
-         : tab == 2 ? USDT_NETWORKS
-         : tab == 3 ? USDT_LEMON
+         : tab == 1 ? USDT_NETWORKS
+         : tab == 2 ? USDT_MARKETS
+         : tab == 3 ? USDT_REGIONS
          : tab == 4 ? USDT_SYSTEM
          : USDT_OVERVIEW;
 }
 
-inline bool usdtHandleGesture(UsdtRuntimeModel& model, TouchGesture gesture,
-                              int16_t x, int16_t y, uint32_t nowMs) {
-    if (gesture == TOUCH_NONE) return false;
+constexpr bool usdtSystemActionHit(int16_t x, int16_t y) {
+    return x >= USDT_SYSTEM_ACTION_X &&
+           x < USDT_SYSTEM_ACTION_X + USDT_SYSTEM_ACTION_W &&
+           y >= USDT_SYSTEM_ACTION_Y &&
+           y < USDT_SYSTEM_ACTION_Y + USDT_SYSTEM_ACTION_H;
+}
+
+constexpr uint8_t usdtVariationIndex(uint32_t nowMs) {
+    return static_cast<uint8_t>((nowMs / USDT_VARIATION_ROTATE_MS) % 3UL);
+}
+
+inline bool usdtHandleGesture(UsdtRuntimeModel& model, const TouchEvent& event,
+                              uint32_t nowMs) {
+    if (event.gesture == TOUCH_NONE) return false;
     UsdtScene before = model.scene;
-    if (gesture == TOUCH_TAP) {
-        const int8_t tab = usdtBottomTabAt(x, y);
+    if (event.gesture == TOUCH_TAP) {
+        const int8_t tab = usdtBottomTabAt(event.x, event.y);
         if (tab >= 0) model.scene = usdtSceneForTab(tab);
-        if (y >= 72 && y < 132 && x >= 360 && x < 464) {
-            model.refreshRequested = true;
+        if (event.y < 96) model.refreshRequested = true;
+        if (model.scene == USDT_SYSTEM && event.y >= 250 && event.y < 330) {
+            model.otaCheckRequested = true;
         }
-    } else if (gesture == TOUCH_SWIPE_LEFT) {
+    } else if (event.gesture == TOUCH_SWIPE_LEFT) {
         model.scene = static_cast<UsdtScene>(
             (static_cast<uint8_t>(model.scene) + 1) % USDT_SCENE_COUNT);
-    } else if (gesture == TOUCH_SWIPE_RIGHT) {
+    } else if (event.gesture == TOUCH_SWIPE_RIGHT) {
         model.scene = static_cast<UsdtScene>(
             (static_cast<uint8_t>(model.scene) + USDT_SCENE_COUNT - 1) %
             USDT_SCENE_COUNT);
     }
     model.lastInteractionMs = nowMs;
     if (before != model.scene) model.sceneEnteredMs = nowMs;
-    return before != model.scene;
+    return before != model.scene || model.refreshRequested ||
+           model.otaCheckRequested;
+}
+
+inline bool usdtApplyTimeout(UsdtRuntimeModel& model, uint32_t nowMs) {
+    if (model.scene == USDT_OVERVIEW ||
+        nowMs - model.lastInteractionMs < USDT_SCENE_TIMEOUT_MS) {
+        return false;
+    }
+    model.scene = USDT_OVERVIEW;
+    model.sceneEnteredMs = nowMs;
+    model.lastInteractionMs = nowMs;
+    return true;
 }
 
 #define USDT_MODEL_CONTRACT_ASSERTS 1
 static_assert(usdtBottomTabAt(48, 448) == 0, "Overview tab hitbox");
-static_assert(usdtBottomTabAt(144, 448) == 1, "Peg tab hitbox");
-static_assert(usdtBottomTabAt(240, 448) == 2, "Networks tab hitbox");
-static_assert(usdtBottomTabAt(336, 448) == 3, "Lemon tab hitbox");
+static_assert(usdtBottomTabAt(144, 448) == 1, "Networks tab hitbox");
+static_assert(usdtBottomTabAt(240, 448) == 2, "Markets tab hitbox");
+static_assert(usdtBottomTabAt(336, 448) == 3, "Regions tab hitbox");
 static_assert(usdtBottomTabAt(432, 448) == 4, "System tab hitbox");
 static_assert(usdtBottomTabAt(240, 400) == -1, "Content is not navigation");
+static_assert(usdtSceneForTab(1) == USDT_NETWORKS, "Second tab is networks");
+static_assert(usdtVariationIndex(0) == 0, "First variation window is 1h");
+static_assert(usdtVariationIndex(4000) == 1, "Second variation window is 24h");
+static_assert(usdtVariationIndex(8000) == 2, "Third variation window is 7d");
 static_assert(usdtFreshness(false, 0, 1, true, true, USDT_FETCH_OK) ==
               USDT_LOADING, "In-flight first load");
 static_assert(usdtFreshness(true, 100, 110, true, false, USDT_FETCH_OK) ==

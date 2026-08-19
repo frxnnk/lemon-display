@@ -20,8 +20,6 @@ enum MockScene : uint8_t {
     NETWORKS,
     MARKETS,
     REGIONS,
-    INTEL,
-    ALERT,
     SCENE_COUNT,
 };
 
@@ -72,8 +70,8 @@ void card(int x, int y, int w, int h, const char* label, const char* value,
 }
 
 void tabs() {
-    static const char* labels[] = { "OVERVIEW", "NETWORKS", "MARKETS", "REGIONS", "INTEL", "ALERT" };
-    const int width = SCREEN_W / 6;
+    static const char* labels[] = { "OVERVIEW", "NETWORKS", "MARKETS", "REGIONS" };
+    const int width = SCREEN_W / 4;
     sprite.fillRect(0, 430, SCREEN_W, 50, BLACK);
     sprite.fillRect(scene * width, 430, width, 3, GREEN);
     for (uint8_t i = 0; i < SCENE_COUNT; ++i) {
@@ -85,19 +83,19 @@ void tabs() {
 void drawOverview() {
     header("SYSTEM HEALTHY  •  LIVE MOCK");
     text("SYSTEM HEALTHY", 28, 160, &SatoshiBold40, GREEN);
-    card(28, 224, 204, 78, "PEG", "0.9998", "USD");
-    card(248, 224, 204, 78, "SUPPLY", "186.4B");
-    card(28, 316, 204, 78, "24H VOL", "92.7B");
-    card(248, 316, 204, 78, "LEMON", "1 USDT", "= 1.342 ARS");
+    card(28, 224, 204, 78, "PRECIO", "$1.342", "ARS");
+    card(248, 224, 204, 78, "VARIACION", "+0.18%", "24H");
+    card(28, 316, 204, 78, "RENDIMIENTO", "2.24%", "LEMON YIELD");
+    card(248, 316, 204, 78, "PEG", "0.9998", "USD");
 }
 
 void drawNetworks() {
     header("NETWORKS  •  SETTLEMENT RAILS");
     text("NETWORKS", 28, 160, &SatoshiBold40, GREEN);
-    card(28, 224, 204, 78, "TRON", "ACTIVE", "LOW FEES");
-    card(248, 224, 204, 78, "ETHEREUM", "ACTIVE", "DEEP LIQUIDITY");
-    card(28, 316, 204, 78, "SOLANA", "READY", "FAST");
-    card(248, 316, 204, 78, "RESERVES", "VERIFIED", "MOCK DATA");
+    card(28, 224, 204, 78, "BNB CHAIN", "BEP20", "MAS USADA");
+    card(248, 224, 204, 78, "POLYGON", "MATIC", "MAS USADA");
+    card(28, 316, 204, 78, "TRON", "TRC20", "MAS USADA");
+    card(248, 316, 204, 78, "ETHEREUM", "ERC20", "+7 REDES");
 }
 
 void drawMarkets() {
@@ -118,31 +116,12 @@ void drawRegions() {
     card(248, 316, 204, 78, "LATAM FLOW", "+4.2%", "24H MOCK");
 }
 
-void drawIntel() {
-    header("INTEL  •  DECISION CONTEXT");
-    text("INTEL", 28, 160, &SatoshiBold40, GREEN);
-    card(28, 224, 204, 78, "LIQUIDITY", "DEEP", "CONFIDENCE 92%");
-    card(248, 224, 204, 78, "PEG RISK", "LOW", "0.4 / 10");
-    card(28, 316, 204, 78, "FLOW", "INBOUND", "TRENDING");
-    card(248, 316, 204, 78, "SOURCE", "MOCK", "VALIDATION BUILD");
-}
-
-void drawAlert() {
-    header("ALERT  •  OPERATIONS");
-    text("ALERT", 28, 160, &SatoshiBold40, GREEN);
-    card(28, 224, 424, 78, "STATUS", "ALL SYSTEMS CLEAR", "NO LIVE ACTION");
-    card(28, 316, 204, 78, "LAST SYNC", "09:41", "MOCK");
-    card(248, 316, 204, 78, "OTA", "READY", "GITHUB RELEASE");
-}
-
 void render() {
     switch (scene) {
         case OVERVIEW: drawOverview(); break;
         case NETWORKS: drawNetworks(); break;
         case MARKETS: drawMarkets(); break;
         case REGIONS: drawRegions(); break;
-        case INTEL: drawIntel(); break;
-        case ALERT: drawAlert(); break;
         default: scene = OVERVIEW; drawOverview(); break;
     }
     tabs();
