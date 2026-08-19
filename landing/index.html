@@ -86,7 +86,7 @@
         }
 
         /* Section anchor offset (nav is fixed) */
-        #hero-scroll, #product, #concepts,
+        #hero-scroll, #idea, #usdt-ota, #product, #concepts,
         #about, #features, #specs {
             scroll-margin-top: 80px;
         }
@@ -1460,6 +1460,389 @@
             line-height: 1.5;
         }
 
+        .idea-section {
+            width: min(100%, 1440px);
+            margin: 0 auto;
+            padding: clamp(6rem, 10vw, 10rem) clamp(1.25rem, 3vw, 3.5rem);
+            color: var(--starlight);
+            background: var(--black);
+        }
+
+        .idea-inner { max-width: 1280px; margin: 0 auto; }
+
+        .idea-heading {
+            display: grid;
+            grid-template-columns: minmax(0, 1.15fr) minmax(16rem, .85fr);
+            gap: clamp(2rem, 8vw, 9rem);
+            align-items: end;
+        }
+
+        .idea-title {
+            max-width: 12ch;
+            margin-top: 1.15rem;
+            color: var(--starlight);
+            font-family: 'PP Neue Machina', sans-serif;
+            font-size: clamp(2.7rem, 5.8vw, 6rem);
+            line-height: .92;
+            letter-spacing: -.05em;
+            text-wrap: balance;
+        }
+
+        .idea-lede {
+            max-width: 28rem;
+            color: var(--moon);
+            font-size: clamp(1rem, 1.25vw, 1.18rem);
+            line-height: 1.55;
+            text-wrap: pretty;
+        }
+
+        .idea-flow {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            margin-top: clamp(4rem, 8vw, 8rem);
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .idea-card {
+            min-height: 17rem;
+            padding: 1.5rem clamp(1rem, 2.4vw, 2.25rem) 2rem;
+            border-right: 1px solid var(--border);
+        }
+
+        .idea-card:first-child { padding-left: 0; }
+        .idea-card:last-child { border-right: 0; }
+
+        .idea-index {
+            display: block;
+            color: var(--greent);
+            font-size: .72rem;
+            font-weight: 700;
+            letter-spacing: .1em;
+        }
+
+        .idea-card h3 {
+            margin: 3.5rem 0 1rem;
+            color: var(--starlight);
+            font-family: 'PP Neue Machina', sans-serif;
+            font-size: clamp(1.4rem, 2.4vw, 2.35rem);
+            line-height: .98;
+            letter-spacing: -.035em;
+        }
+
+        .idea-card p {
+            max-width: 20rem;
+            color: var(--moon);
+            line-height: 1.55;
+        }
+
+        .idea-principle {
+            display: grid;
+            grid-template-columns: minmax(10rem, .65fr) minmax(0, 1.35fr);
+            gap: 2rem;
+            align-items: baseline;
+            margin-top: clamp(3rem, 6vw, 6rem);
+            padding-top: 1.25rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .idea-principle-label {
+            color: var(--greent);
+            font-size: .72rem;
+            font-weight: 700;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+        }
+
+        .idea-principle strong {
+            display: block;
+            color: var(--lime);
+            font-family: 'PP Neue Machina', sans-serif;
+            font-size: clamp(1.55rem, 3vw, 3rem);
+            line-height: 1;
+            letter-spacing: -.04em;
+        }
+
+        .idea-principle p {
+            max-width: 38rem;
+            margin-top: .8rem;
+            color: var(--moon);
+            line-height: 1.55;
+        }
+
+        .usdt-section {
+            width: min(100%, 1440px);
+            margin: 0 auto;
+            padding: clamp(5rem, 9vw, 9rem) clamp(1.25rem, 3vw, 3.5rem);
+            color: var(--starlight);
+            background: var(--leaf);
+        }
+
+        .usdt-inner { max-width: 1280px; margin: 0 auto; }
+
+        .usdt-section .case-label { color: var(--lime); }
+
+        .usdt-heading {
+            display: grid;
+            grid-template-columns: minmax(0, 1.05fr) minmax(16rem, .95fr);
+            gap: clamp(2rem, 8vw, 9rem);
+            align-items: end;
+            margin-top: 1.15rem;
+        }
+
+        .usdt-title {
+            max-width: 11ch;
+            color: var(--starlight);
+            font-family: 'PP Neue Machina', sans-serif;
+            font-size: clamp(2.7rem, 5.5vw, 5.8rem);
+            line-height: .92;
+            letter-spacing: -.05em;
+            text-wrap: balance;
+        }
+
+        .usdt-lede {
+            max-width: 29rem;
+            color: rgba(231, 231, 233, .78);
+            font-size: clamp(1rem, 1.25vw, 1.16rem);
+            line-height: 1.55;
+            text-wrap: pretty;
+        }
+
+        .usdt-layout {
+            display: grid;
+            grid-template-columns: minmax(15rem, .7fr) minmax(0, 1.3fr);
+            gap: clamp(2rem, 7vw, 7rem);
+            align-items: center;
+            margin-top: clamp(4rem, 8vw, 8rem);
+        }
+
+        .usdt-screen {
+            position: relative;
+            display: flex;
+            min-height: 22rem;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 1.5rem;
+            overflow: hidden;
+            border: 1px solid rgba(207, 255, 46, .35);
+            border-radius: 1.5rem;
+            background: #071e12;
+            box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, .22);
+        }
+
+        .usdt-screen::before {
+            content: '';
+            position: absolute;
+            width: 16rem;
+            height: 16rem;
+            top: -8rem;
+            right: -5rem;
+            border-radius: 50%;
+            background: rgba(0, 223, 26, .13);
+            filter: blur(1rem);
+        }
+
+        .usdt-screen > * { position: relative; z-index: 1; }
+
+        .usdt-screen-kicker,
+        .usdt-screen-meta,
+        .usdt-screen-pairs {
+            font-size: .68rem;
+            font-weight: 700;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+        }
+
+        .usdt-screen-kicker { color: var(--lime); }
+
+        .usdt-screen-pair {
+            margin-top: 2.5rem;
+            color: var(--starlight);
+            font-family: 'PP Neue Machina', sans-serif;
+            font-size: 1.2rem;
+            letter-spacing: -.03em;
+        }
+
+        .usdt-screen-price {
+            margin-top: .45rem;
+            color: var(--starlight);
+            font-family: 'PP Neue Machina', sans-serif;
+            font-size: clamp(2.1rem, 4.5vw, 4.2rem);
+            line-height: .95;
+            letter-spacing: -.06em;
+        }
+
+        .usdt-screen-meta { color: var(--greent); }
+
+        .usdt-screen-chart {
+            width: 100%;
+            height: 4.5rem;
+            margin-top: 1.3rem;
+        }
+
+        .usdt-screen-pairs {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(231, 231, 233, .15);
+            color: rgba(231, 231, 233, .68);
+        }
+
+        .usdt-screen-pairs strong { display: block; margin-top: .3rem; color: var(--starlight); font-size: .9rem; letter-spacing: 0; }
+
+        .control-room-preview {
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(207, 255, 46, .35);
+            border-radius: 1.5rem;
+            background: #071e12;
+            box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, .22);
+        }
+
+        .control-room-preview img {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        .control-room-preview figcaption {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: .9rem 1rem 1rem;
+            color: rgba(231, 231, 233, .72);
+            font-size: .68rem;
+            font-weight: 700;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+        }
+
+        .control-room-preview figcaption strong { color: var(--lime); }
+
+        .control-room-gallery {
+            display: grid;
+            grid-template-columns: repeat(12, minmax(0, 1fr));
+            gap: clamp(1rem, 2vw, 2rem);
+            margin-top: clamp(4rem, 8vw, 8rem);
+        }
+
+        .control-room-figure {
+            min-width: 0;
+            margin: 0;
+            overflow: hidden;
+            border: 1px solid rgba(231, 231, 233, .16);
+            border-radius: 1rem;
+            background: rgba(0, 0, 0, .18);
+        }
+
+        .control-room-figure:nth-child(1),
+        .control-room-figure:nth-child(4) { grid-column: span 7; }
+
+        .control-room-figure:nth-child(2),
+        .control-room-figure:nth-child(5) { grid-column: span 5; margin-top: 10%; }
+
+        .control-room-figure:nth-child(3) { grid-column: 3 / span 10; margin-top: 1rem; }
+
+        .control-room-figure img {
+            display: block;
+            width: 100%;
+            height: auto;
+            transition: transform .7s cubic-bezier(.2,.8,.2,1);
+        }
+
+        .control-room-figure:hover img { transform: scale(1.015); }
+
+        .control-room-figure figcaption {
+            display: grid;
+            grid-template-columns: 2.5rem 1fr;
+            gap: .75rem;
+            padding: 1rem;
+            border-top: 1px solid rgba(231, 231, 233, .12);
+        }
+
+        .control-room-figure figcaption span { color: var(--lime); font-size: .7rem; font-weight: 700; }
+        .control-room-figure figcaption strong { color: var(--starlight); font-size: 1rem; }
+        .control-room-figure figcaption p { margin-top: .3rem; color: rgba(231, 231, 233, .62); font-size: .82rem; line-height: 1.45; }
+
+        .usdt-details {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 2.5rem 3rem;
+        }
+
+        .usdt-detail {
+            padding-top: 1rem;
+            border-top: 1px solid rgba(231, 231, 233, .22);
+        }
+
+        .usdt-detail span {
+            color: var(--lime);
+            font-size: .72rem;
+            font-weight: 700;
+            letter-spacing: .1em;
+        }
+
+        .usdt-detail h3 {
+            margin: 1.5rem 0 .7rem;
+            color: var(--starlight);
+            font-family: 'PP Neue Machina', sans-serif;
+            font-size: clamp(1.25rem, 2vw, 1.85rem);
+            line-height: 1;
+            letter-spacing: -.035em;
+        }
+
+        .usdt-detail p {
+            color: rgba(231, 231, 233, .72);
+            line-height: 1.55;
+        }
+
+        .ota-strip {
+            display: grid;
+            grid-template-columns: minmax(10rem, .7fr) minmax(0, 1.3fr);
+            gap: 2rem;
+            align-items: baseline;
+            margin-top: clamp(4rem, 8vw, 8rem);
+            padding-top: 1.25rem;
+            border-top: 1px solid rgba(231, 231, 233, .22);
+        }
+
+        .ota-label {
+            color: var(--lime);
+            font-size: .72rem;
+            font-weight: 700;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+        }
+
+        .ota-strip strong {
+            display: block;
+            color: var(--starlight);
+            font-family: 'PP Neue Machina', sans-serif;
+            font-size: clamp(1.5rem, 3vw, 3rem);
+            line-height: 1;
+            letter-spacing: -.04em;
+        }
+
+        .ota-strip p {
+            max-width: 38rem;
+            margin-top: .8rem;
+            color: rgba(231, 231, 233, .72);
+            line-height: 1.55;
+        }
+
+        .ota-badge {
+            display: inline-block;
+            margin-top: 1.25rem;
+            padding: .45rem .65rem;
+            border: 1px solid rgba(207, 255, 46, .35);
+            border-radius: .45rem;
+            color: var(--lime);
+            font-size: .65rem;
+            font-weight: 700;
+            letter-spacing: .1em;
+        }
+
         .concept-grid {
             display: grid;
             grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -1625,14 +2008,30 @@
             .hero-copy { width: min(75vw, 36rem); }
             .hero-3d { width: 82vw !important; margin-left: 18vw; }
             .case-heading,
-            .proof-grid { grid-template-columns: 1fr; }
+            .proof-grid,
+            .idea-heading,
+            .usdt-heading { grid-template-columns: 1fr; }
             .proof-points { margin-top: 1rem; }
             .concept-figure:nth-child(1),
             .concept-figure:nth-child(2),
             .concept-figure:nth-child(3) { grid-column: 1 / -1; margin-top: 0; }
-            .state-board { grid-template-columns: 1fr; }
+            .state-board,
+            .idea-flow { grid-template-columns: 1fr; }
+            .usdt-layout { grid-template-columns: 1fr; }
+            .control-room-figure:nth-child(1),
+            .control-room-figure:nth-child(2),
+            .control-room-figure:nth-child(3),
+            .control-room-figure:nth-child(4),
+            .control-room-figure:nth-child(5) {
+                grid-column: 1 / -1;
+                margin-top: 0;
+            }
             .state-column { min-height: 0; border-right: 0; border-bottom: 1px solid var(--border); }
             .state-column:last-child { border-bottom: 0; }
+            .idea-card { min-height: 0; border-right: 0; border-bottom: 1px solid var(--border); }
+            .idea-card:last-child { border-bottom: 0; }
+            .idea-card:first-child { padding-left: clamp(1rem, 2.4vw, 2.25rem); }
+            .usdt-details { gap: 2rem; }
             .roadmap-phase { grid-template-columns: 5rem 1fr; }
             .roadmap-phase p { grid-column: 2; }
         }
@@ -1657,11 +2056,16 @@
             .manifesto-title { font-size: clamp(3rem, 15vw, 5rem); }
             .case-section { padding: 4rem 1.25rem 4.5rem; }
             .manifesto { padding: 4rem 1.25rem 4.5rem; }
+            .idea-section { padding: 4rem 1.25rem 4.5rem; }
+            .usdt-section { padding: 4rem 1.25rem 4.5rem; }
             .concept-grid { grid-template-columns: minmax(0, 1fr); gap: 3rem 0; }
             .concept-figure { min-width: 0; }
             .concept-caption { grid-template-columns: 2rem minmax(0, 1fr); }
             .roadmap-phase { grid-template-columns: 1fr; gap: .65rem; }
             .roadmap-phase p { grid-column: 1; }
+            .idea-principle { grid-template-columns: 1fr; gap: .8rem; }
+            .ota-strip { grid-template-columns: 1fr; gap: .8rem; }
+            .usdt-details { grid-template-columns: 1fr; }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -2179,7 +2583,7 @@
         <img src="./assets/v2/lemon-horizontal-black.svg" alt="Lemon" width="120">
     </a>
     <ul class="nav-links">
-        <li class="nav-product"><a href="#product">Producto</a></li>
+        <li class="nav-product"><a href="#idea">La idea</a></li>
         <li class="nav-preview"><a href="./studio/?mode=concept">Ver demo ↗</a></li>
     </ul>
 </nav>
@@ -2207,9 +2611,119 @@
     </div>
 </section>
 
+<section class="idea-section" id="idea" aria-labelledby="idea-title">
+    <div class="idea-inner">
+        <div class="idea-heading">
+            <div>
+                <div class="case-label reveal">02 · La idea</div>
+                <h2 class="idea-title reveal reveal-delay-1" id="idea-title">Una pantalla que mira el mercado por vos.</h2>
+            </div>
+            <p class="idea-lede reveal reveal-delay-2">Esta versión toma la Lemon Box que ya existe y la convierte en un objeto financiero vivo: muestra una señal clara, le da foco a lo importante y deja el contexto a un toque.</p>
+        </div>
+
+        <div class="idea-flow" aria-label="Capas de la experiencia">
+            <article class="idea-card reveal">
+                <span class="idea-index">01 / AMBIENTE</span>
+                <h3>De reojo</h3>
+                <p>Hora, Bitcoin y una señal secundaria. Información comprensible en dos segundos, sin pedirte atención.</p>
+            </article>
+            <article class="idea-card reveal reveal-delay-1">
+                <span class="idea-index">02 / MOMENTOS</span>
+                <h3>Cuando importa</h3>
+                <p>Aperturas, cierres, movimientos y noticias ocupan el foco sólo cuando hay algo que contar.</p>
+            </article>
+            <article class="idea-card reveal reveal-delay-2">
+                <span class="idea-index">03 / EXPLORACIÓN</span>
+                <h3>Al tocarla</h3>
+                <p>La caja suma contexto y puede llevarte de vuelta a Lemon. Informa; no opera ni reemplaza la app.</p>
+            </article>
+        </div>
+
+        <div class="idea-principle reveal">
+            <span class="idea-principle-label">Principio de diseño</span>
+            <div>
+                <strong>90% presente · 10% táctil</strong>
+                <p>No es Bloomberg en miniatura. Es Lemon haciendo presencia en tu escritorio.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="usdt-section" id="usdt-ota" aria-labelledby="usdt-title">
+    <div class="usdt-inner">
+        <div class="case-label reveal">03 · USDT CONTROL ROOM</div>
+        <div class="usdt-heading">
+            <h2 class="usdt-title reveal reveal-delay-1" id="usdt-title">Una sala de control para el dólar digital.</h2>
+            <p class="usdt-lede reveal reveal-delay-2">El firmware nuevo no se queda en mostrar un precio: convierte la Lemon Box en una vista operativa de USDT, con salud del sistema, peg, liquidez, redes, regiones, señales y alertas.</p>
+        </div>
+
+        <div class="usdt-layout">
+            <figure class="control-room-preview reveal" aria-label="Pantalla Overview del USDT Control Room">
+                <img src="./assets/v2/tether-control-room/01-overview-v1.png" alt="Overview del USDT Control Room con peg, supply, volumen, cotización Lemon y estado live" loading="lazy" width="1280" height="1280">
+                <figcaption><span>01 / OVERVIEW</span><strong>System healthy</strong></figcaption>
+            </figure>
+
+            <div class="usdt-details">
+                <article class="usdt-detail reveal reveal-delay-1">
+                    <span>01 / SALUD</span>
+                    <h3>Ver si todo está bien.</h3>
+                    <p>El overview concentra peg, supply, volumen 24h, cotización en Lemon y estado live en una sola lectura.</p>
+                </article>
+                <article class="usdt-detail reveal reveal-delay-2">
+                    <span>02 / MERCADOS</span>
+                    <h3>El peg con contexto.</h3>
+                    <p>Rango de 24h, volumen y desviación máxima permiten entender la estabilidad de USDT, no sólo mirar el último número.</p>
+                </article>
+                <article class="usdt-detail reveal reveal-delay-1">
+                    <span>03 / REDES</span>
+                    <h3>Seguir dónde vive.</h3>
+                    <p>TRON, Ethereum, TON y Solana aparecen con su estado y evolución, más una lectura rápida de alertas activas.</p>
+                </article>
+                <article class="usdt-detail reveal reveal-delay-2">
+                    <span>04 / SEÑALES</span>
+                    <h3>Del dato a la alerta.</h3>
+                    <p>Regiones, intel y alertas hacen visible cuándo aparece una desviación, una integración o una señal verificada.</p>
+                </article>
+            </div>
+        </div>
+
+        <div class="control-room-gallery" aria-label="Pantallas del nuevo firmware USDT">
+            <figure class="control-room-figure reveal">
+                <img src="./assets/v2/tether-control-room/02-networks-v1.png" alt="Pantalla Networks del USDT Control Room con TRON, Ethereum, TON y Solana" loading="lazy" width="1280" height="1280">
+                <figcaption><span>02</span><div><strong>Networks</strong><p>Estado de las redes y alertas activas.</p></div></figcaption>
+            </figure>
+            <figure class="control-room-figure reveal reveal-delay-1">
+                <img src="./assets/v2/tether-control-room/03-markets-v1.png" alt="Pantalla Markets del USDT Control Room con peg, rango, volumen y desviación" loading="lazy" width="1280" height="1280">
+                <figcaption><span>03</span><div><strong>Markets</strong><p>Estabilidad del peg y lectura de mercado.</p></div></figcaption>
+            </figure>
+            <figure class="control-room-figure reveal">
+                <img src="./assets/v2/tether-control-room/04-regions-v1.png" alt="Pantalla Regions del USDT Control Room con pulso global y referencia de Argentina" loading="lazy" width="1280" height="1280">
+                <figcaption><span>04</span><div><strong>Regions</strong><p>El pulso global con foco en Argentina.</p></div></figcaption>
+            </figure>
+            <figure class="control-room-figure reveal reveal-delay-1">
+                <img src="./assets/v2/tether-control-room/05-intel-v1.png" alt="Pantalla Intel del USDT Control Room con señales verificadas" loading="lazy" width="1280" height="1280">
+                <figcaption><span>05</span><div><strong>Intel</strong><p>Señales claras, verificadas y fechadas.</p></div></figcaption>
+            </figure>
+            <figure class="control-room-figure reveal">
+                <img src="./assets/v2/tether-control-room/06-alert-v1.png" alt="Pantalla Alert del USDT Control Room mostrando una desviación del peg" loading="lazy" width="1280" height="1280">
+                <figcaption><span>06</span><div><strong>Alert</strong><p>Una desviación se convierte en algo accionable.</p></div></figcaption>
+            </figure>
+        </div>
+
+        <div class="ota-strip reveal">
+            <span class="ota-label">Firmware nuevo</span>
+            <div>
+                <strong>El control room llega como firmware.</strong>
+                <p>La branch incluye los binarios compilados de esta experiencia y su runtime de pantalla: carga de datos, estados live/cached/stale/offline, navegación táctil, refresco manual y actualización de datos cada minuto.</p>
+                <span class="ota-badge">LIVE · CACHE · TOUCH · 60S REFRESH</span>
+            </div>
+        </div>
+    </div>
+</section>
+
 <section class="manifesto" id="product" aria-labelledby="manifesto-title">
     <div class="manifesto-inner">
-        <div class="case-label">02 · El producto</div>
+        <div class="case-label">04 · El producto</div>
         <h2 class="manifesto-title" id="manifesto-title">Siempre presente. Relevante cuando importa.</h2>
         <div class="manifesto-copy">
             <p>Bitcoin queda a la vista. Los movimientos importantes ganan el foco y vuelven a la calma.</p>
@@ -2218,7 +2732,7 @@
 </section>
 
 <section class="case-section" id="concepts">
-    <div class="case-label reveal">03 · Así se vive</div>
+    <div class="case-label reveal">05 · Así se vive</div>
     <div class="case-heading">
         <h2 class="case-title reveal reveal-delay-1">Tres momentos. Una Lemon Box.</h2>
     </div>
