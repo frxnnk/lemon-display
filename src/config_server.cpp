@@ -248,12 +248,23 @@ static void sendDeviceJson(AsyncWebServerRequest* req) {
 
 static void sendHealthJson(AsyncWebServerRequest* req) {
     JsonDocument doc;
+    DisplayDiagnostics displayStats = displayGetDiagnostics();
     doc["ok"] = true;
     doc["status"] = "online";
     doc["version"] = APP_VERSION;
     doc["freeHeap"] = ESP.getFreeHeap();
     doc["uptimeMs"] = millis();
     doc["wifiRssi"] = WiFi.RSSI();
+    JsonObject display = doc["display"].to<JsonObject>();
+    display["vsyncCount"] = displayStats.vsyncCount;
+    display["waitCalls"] = displayStats.waitCalls;
+    display["waitTimeouts"] = displayStats.waitTimeouts;
+    display["pushCount"] = displayStats.pushCount;
+    display["pushedBytes"] = displayStats.pushedBytes;
+    display["lastPushUs"] = displayStats.lastPushUs;
+    display["maxPushUs"] = displayStats.maxPushUs;
+    display["lastPushBytes"] = displayStats.lastPushBytes;
+    display["maxPushBytes"] = displayStats.maxPushBytes;
     sendJson(req, doc);
 }
 
