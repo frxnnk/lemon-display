@@ -165,56 +165,69 @@ bool parseYield(const char* json, UsdtYieldData& out) {
 
 void usdtDataSetup() {}
 
-bool usdtDataFetch(UsdtDataSnapshot& io) {
+bool usdtDataFetchPrice(UsdtDataSnapshot& io) {
     if (WiFi.status() != WL_CONNECTED) return false;
-    io.fetching = true;
-    bool changed = false;
-
     ApiResult result = API_NETWORK_ERROR;
-    const char* json = apiHttpGet(CRIPTOYA_LEMON_USDT_EP, false, result, 9000, 2048);
+    const char* json = apiHttpGet(
+        CRIPTOYA_LEMON_USDT_EP, false, result, 5000, 2048, 1);
     UsdtPriceData lemon = {};
     if (result == API_OK && json && json[0] && parseLemonPrice(json, lemon)) {
         io.lemon = lemon;
         io.lemonStatus = USDT_FETCH_OK;
-        changed = true;
+        return true;
     } else {
         io.lemonStatus = result == API_OK ? USDT_FETCH_PARSE_ERROR : mapApi(result);
     }
+    return false;
+}
 
-    result = API_NETWORK_ERROR;
-    json = apiHttpGet(COINBASE_USDT_RATES_EP, false, result, 9000, 24576);
+bool usdtDataFetchRates(UsdtDataSnapshot& io) {
+    if (WiFi.status() != WL_CONNECTED) return false;
+    ApiResult result = API_NETWORK_ERROR;
+    const char* json = apiHttpGet(
+        COINBASE_USDT_RATES_EP, false, result, 5000, 24576, 1);
     if (result == API_OK && json && json[0] && parseCoinbaseRates(json, io.peg)) {
         io.pegStatus = USDT_FETCH_OK;
-        changed = true;
+        return true;
     } else {
         io.pegStatus = result == API_OK ? USDT_FETCH_PARSE_ERROR : mapApi(result);
     }
+    return false;
+}
 
+bool usdtDataFetchVariations(UsdtDataSnapshot& io) {
+    if (WiFi.status() != WL_CONNECTED) return false;
     const uint32_t nowMs = millis();
+    const uint32_t interval = io.peg.variationsValid ? USDT_VARIATIONS_REFRESH_MS
+                                                     : USDT_VARIATIONS_RETRY_MS;
     const bool chartDue = io.peg.variationsLastAttemptMs == 0 ||
-        nowMs - io.peg.variationsLastAttemptMs >= USDT_VARIATIONS_REFRESH_MS;
-    if (chartDue) {
-        io.peg.variationsLastAttemptMs = nowMs;
-        ApiResult chartResult = API_NETWORK_ERROR;
-        json = apiHttpGet(COINGECKO_USDT_CHART_EP, true, chartResult, 12000, 24576);
-        if (chartResult == API_OK && json && json[0] && parseMarketChart(json, io.peg)) {
-            changed = true;
-        }
-    }
+        nowMs - io.peg.variationsLastAttemptMs >= interval;
+    if (!chartDue) return false;
 
-    result = API_NETWORK_ERROR;
-    json = apiHttpGet(LEMON_YIELD_EP, false, result, 9000, 4096);
+    io.peg.variationsLastAttemptMs = nowMs;
+    ApiResult result = API_NETWORK_ERROR;
+    const char* json = apiHttpGet(
+        COINGECKO_USDT_CHART_EP, true, result, 5000, 24576, 1);
+    if (result == API_OK && json && json[0] && parseMarketChart(json, io.peg)) {
+        return true;
+    }
+    return false;
+}
+
+bool usdtDataFetchYield(UsdtDataSnapshot& io) {
+    if (WiFi.status() != WL_CONNECTED) return false;
+    ApiResult result = API_NETWORK_ERROR;
+    const char* json = apiHttpGet(
+        LEMON_YIELD_EP, false, result, 5000, 4096, 1);
     UsdtYieldData yield = {};
     if (result == API_OK && json && json[0] && parseYield(json, yield)) {
         io.yield = yield;
         io.yieldStatus = USDT_FETCH_OK;
-        changed = true;
+        return true;
     } else {
         io.yieldStatus = result == API_OK ? USDT_FETCH_PARSE_ERROR : mapApi(result);
     }
-
-    io.fetching = false;
-    return changed;
+    return false;
 }
 
 void usdtDataUpdateFreshness(UsdtDataSnapshot& io, uint32_t nowMs, bool online) {

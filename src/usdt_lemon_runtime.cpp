@@ -18,9 +18,18 @@
 
 namespace {
 constexpr uint32_t REFRESH_INTERVAL_MS = 60UL * 1000UL;
-constexpr uint32_t CLOCK_REDRAW_MS = 1000UL;
+constexpr uint32_t CLOCK_REDRAW_MS = 30UL * 1000UL;
 constexpr uint32_t OTA_PROBE_MS = 60UL * 1000UL;
 constexpr uint32_t OTA_CHECK_MS = 5UL * 60UL * 1000UL;
+constexpr uint32_t FETCH_STEP_DELAY_MS = 50UL;
+
+enum UsdtFetchStage : uint8_t {
+    USDT_FETCH_IDLE = 0,
+    USDT_FETCH_PRICE,
+    USDT_FETCH_RATES,
+    USDT_FETCH_YIELD,
+    USDT_FETCH_VARIATIONS,
+};
 
 UsdtRuntimeModel s_model;
 UsdtDataSnapshot s_data;
@@ -33,6 +42,9 @@ uint32_t s_lastDrawMs = 0;
 uint32_t s_lastOtaCheckMs = 0;
 uint32_t s_lastOtaProbeMs = 0;
 uint8_t s_lastVariation = 255;
+UsdtFetchStage s_fetchStage = USDT_FETCH_IDLE;
+uint32_t s_nextFetchStepMs = 0;
+bool s_bootOtaPending = false;
 
 void clearCredentials(char* ssid, size_t ssidLen, char* pass, size_t passLen) {
     if (ssid && ssidLen) memset(ssid, 0, ssidLen);
@@ -74,10 +86,10 @@ void refreshNow() {
         redraw();
         return;
     }
+    if (s_fetchStage != USDT_FETCH_IDLE) return;
     s_data.fetching = true;
-    redraw();
-    usdtDataFetch(s_data);
-    s_lastFetchMs = millis();
+    s_fetchStage = USDT_FETCH_PRICE;
+    s_nextFetchStepMs = millis();
     redraw();
 }
 
@@ -89,6 +101,38 @@ void installUsdtOtaNow() {
     s_data.ota.available = false;
     s_networkReady = false;
     apiSetup();
+    redraw();
+}
+
+void serviceDataFetch() {
+    if (s_fetchStage == USDT_FETCH_IDLE || !wifiConnected() ||
+        static_cast<int32_t>(millis() - s_nextFetchStepMs) < 0) {
+        return;
+    }
+
+    switch (s_fetchStage) {
+        case USDT_FETCH_PRICE:
+            usdtDataFetchPrice(s_data);
+            s_fetchStage = USDT_FETCH_RATES;
+            break;
+        case USDT_FETCH_RATES:
+            usdtDataFetchRates(s_data);
+            s_fetchStage = USDT_FETCH_YIELD;
+            break;
+        case USDT_FETCH_YIELD:
+            usdtDataFetchYield(s_data);
+            s_fetchStage = USDT_FETCH_VARIATIONS;
+            break;
+        case USDT_FETCH_VARIATIONS:
+            usdtDataFetchVariations(s_data);
+            s_fetchStage = USDT_FETCH_IDLE;
+            s_data.fetching = false;
+            s_lastFetchMs = millis();
+            break;
+        case USDT_FETCH_IDLE:
+            return;
+    }
+    s_nextFetchStepMs = millis() + FETCH_STEP_DELAY_MS;
     redraw();
 }
 
@@ -120,11 +164,9 @@ void checkUsdtOtaNow(bool bootCheck) {
 void startNetwork() {
     if (s_networkReady || !wifiConnected()) return;
     s_networkReady = true;
-    usdtUiDrawLoading("SINCRONIZANDO", 42);
     timeSetup();
     apiSetup();
-    checkUsdtOtaNow(true);
-    usdtUiDrawLoading("LEYENDO MERCADO", 72);
+    s_bootOtaPending = true;
     refreshNow();
 }
 
@@ -190,6 +232,9 @@ void usdtLemonLoop() {
     if (online && !s_networkReady) startNetwork();
     if (!online && s_networkReady) {
         s_networkReady = false;
+        s_fetchStage = USDT_FETCH_IDLE;
+        s_data.fetching = false;
+        s_bootOtaPending = false;
         apiStop();
         redraw();
     }
@@ -210,6 +255,12 @@ void usdtLemonLoop() {
         } else if (changed) {
             redraw();
         }
+    }
+
+    serviceDataFetch();
+    if (online && s_bootOtaPending && s_fetchStage == USDT_FETCH_IDLE) {
+        s_bootOtaPending = false;
+        checkUsdtOtaNow(false);
     }
 
     const uint32_t nowMs = millis();

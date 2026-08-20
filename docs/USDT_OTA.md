@@ -26,7 +26,13 @@ Intel y Alert no existen en este firmware.
 | Rendimiento USDt | Lemon API `LEMON_YIELD` | 60 s | conserva el ultimo APR valido |
 
 El header prioriza la salud del precio Lemon. Un fallo de PEG o del chart no muestra
-`ERROR` arriba mientras el precio principal siga disponible.
+`ERROR` arriba mientras el precio principal siga disponible. La carga es progresiva:
+primero aparece USDt/ARS, despues se completan PEG, rendimiento y variaciones, y el
+chequeo OTA ocurre con el dashboard ya visible.
+
+Si `COINGECKO_API_KEY` esta vacia o conserva `YOUR_COINGECKO_DEMO_KEY`, el cliente
+no la envia. CoinGecko permite entonces la consulta publica; enviar el placeholder
+provoca `401` y deja las variaciones sin datos.
 
 ## Build
 
@@ -36,7 +42,7 @@ python -m platformio run -e matouch_esp32s3_40_usdt
 
 Binario: `.pio/build/matouch_esp32s3_40_usdt/firmware.bin`
 Asset OTA: `firmware-usdt.bin`
-Version: `5.1.1-usdt.5` (`APP_VERSION` cuando `LEMON_USDT_MODE=1`)
+Version: `5.1.1-usdt.6` (`APP_VERSION` cuando `LEMON_USDT_MODE=1`)
 
 ## Flash USB inicial (DIO keep)
 
@@ -74,7 +80,7 @@ Los artefactos de recovery salen de `.pio/build/matouch_esp32s3_40_usdt/` y `boo
 Despues del primer USB, la cajita:
 
 1. Consulta `https://api.github.com/repos/frxnnk/lemon-display/releases/latest`
-2. Compara el tag contra `APP_VERSION` (`5.1.1-usdt.5`)
+2. Compara el tag contra `APP_VERSION` (`5.1.1-usdt.6`)
 3. Busca exactamente el asset `firmware-usdt.bin`
 4. Exige MD5 en el body: `firmware-usdt.bin MD5: <32 hex lowercase>`
 5. Descarga, flashea y reinicia sola
