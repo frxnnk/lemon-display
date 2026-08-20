@@ -58,6 +58,9 @@ struct UsdtDataSnapshot {
 };
 
 void usdtDataSetup();
-bool usdtDataFetch(UsdtDataSnapshot& io);
+bool usdtDataFetchPrice(UsdtDataSnapshot& io);
+bool usdtDataFetchRates(UsdtDataSnapshot& io);
+bool usdtDataFetchYield(UsdtDataSnapshot& io);
+bool usdtDataFetchVariations(UsdtDataSnapshot& io);
 void usdtDataUpdateFreshness(UsdtDataSnapshot& io, uint32_t nowMs, bool online);
 const char* usdtFreshnessLabel(UsdtFreshness freshness);

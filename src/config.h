@@ -18,7 +18,7 @@
 
 // ── App version ──
 #if LEMON_USDT_MODE
-#define APP_VERSION "5.1.1-usdt.5"
+#define APP_VERSION "5.1.1-usdt.6"
 #elif LEMON_USDT_MOCK_MODE
 #define APP_VERSION "5.1.1-usdt-mock.2"
 #else

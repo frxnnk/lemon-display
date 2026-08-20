@@ -124,6 +124,11 @@ static WiFiClientSecure secureClient;
 static unsigned long lastCoinGeckoCall = 0;
 static const unsigned long COINGECKO_MIN_INTERVAL = 6000;  // 6s between CoinGecko calls
 
+static bool coinGeckoKeyConfigured() {
+    return COINGECKO_API_KEY[0] != '\0' &&
+           strcmp(COINGECKO_API_KEY, "YOUR_COINGECKO_DEMO_KEY") != 0;
+}
+
 void apiSetup() {
     secureClient.setCACert(ROOT_CAS);
     secureClient.setHandshakeTimeout(5);   // 5s max for TLS handshake
@@ -170,7 +175,7 @@ public:
 // Exposed as apiHttpGet() via api_client.h so sibling clients (stocks, poly)
 // can reuse the hardened TLS / chunked / WDT logic.
 const char* apiHttpGet(const char* url, bool addCoinGeckoKey, ApiResult& result,
-                       int timeoutMs, uint32_t maxBodyBytes) {
+                       int timeoutMs, uint32_t maxBodyBytes, int maxAttempts) {
     // Allocate PSRAM buffer once (persists for device lifetime)
     if (!_rspBuf) {
         _rspBuf = (char*)ps_malloc(RSP_BUF_SIZE);
@@ -183,6 +188,9 @@ const char* apiHttpGet(const char* url, bool addCoinGeckoKey, ApiResult& result,
         }
     }
     _rspBuf[0] = '\0';
+
+    const bool appendCoinGeckoKey =
+        addCoinGeckoKey && coinGeckoKeyConfigured();
 
     // Rate limit CoinGecko calls to avoid 429s — wait if too soon
     if (addCoinGeckoKey && lastCoinGeckoCall > 0) {
@@ -200,7 +208,8 @@ const char* apiHttpGet(const char* url, bool addCoinGeckoKey, ApiResult& result,
     }
     if (addCoinGeckoKey) lastCoinGeckoCall = millis();
 
-    for (int attempt = 0; attempt < 2; attempt++) {
+    if (maxAttempts < 1) maxAttempts = 1;
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
         esp_task_wdt_reset();
         if (attempt > 0) {
             Serial.printf("[API] Retry %d for %s\n", attempt, url);
@@ -208,7 +217,7 @@ const char* apiHttpGet(const char* url, bool addCoinGeckoKey, ApiResult& result,
         }
 
         static HTTPClient http;   // static: ~700 bytes off the 8KB stack
-        http.setConnectTimeout(5000);
+        http.setConnectTimeout(timeoutMs < 5000 ? timeoutMs : 5000);
         http.setTimeout(timeoutMs);
         // Prefix reads use HTTP/1.0 so the body arrives as a close-delimited
         // stream instead of chunk framing. This lets callers stop cleanly
@@ -216,7 +225,7 @@ const char* apiHttpGet(const char* url, bool addCoinGeckoKey, ApiResult& result,
         http.useHTTP10(maxBodyBytes > 0);
 
         static char fullUrl[512]; // static: 512 bytes off the stack
-        if (addCoinGeckoKey) {
+        if (appendCoinGeckoKey) {
             const char* sep = (strchr(url, '?') != nullptr) ? "&" : "?";
             snprintf(fullUrl, sizeof(fullUrl), "%s%sx_cg_demo_api_key=%s", url, sep, COINGECKO_API_KEY);
         } else {
