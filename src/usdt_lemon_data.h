@@ -27,12 +27,17 @@ struct UsdtPegData {
     uint8_t pegSampleCount = 0;
     float arsChart[USDT_ARS_CHART_POINT_COUNT] = {};
     uint8_t arsChartCount = 0;
+    float usdChart[USDT_ARS_CHART_POINT_COUNT] = {};
+    uint8_t usdChartCount = 0;
     uint32_t lastUpdateMs = 0;
     uint32_t variationsLastUpdateMs = 0;
     uint32_t variationsLastAttemptMs = 0;
+    uint32_t usdChartLastUpdateMs = 0;
+    uint32_t usdChartLastAttemptMs = 0;
     uint32_t regionsLastUpdateMs = 0;
     bool valid = false;
     bool variationsValid = false;
+    bool usdChartValid = false;
     bool regionsValid = false;
 };
 
@@ -80,6 +85,7 @@ struct UsdtDataSnapshot {
     UsdtFetchStatus pegStatus = USDT_FETCH_NETWORK_ERROR;
     UsdtFetchStatus yieldStatus = USDT_FETCH_NETWORK_ERROR;
     UsdtFetchStatus variationsStatus = USDT_FETCH_NETWORK_ERROR;
+    UsdtFetchStatus usdChartStatus = USDT_FETCH_NETWORK_ERROR;
     UsdtFetchStatus networksStatus = USDT_FETCH_NETWORK_ERROR;
     UsdtFreshness lemonFreshness = USDT_LOADING;
     UsdtFreshness pegFreshness = USDT_LOADING;
@@ -95,6 +101,7 @@ bool usdtDataFetchPrice(UsdtDataSnapshot& io);
 bool usdtDataFetchRates(UsdtDataSnapshot& io);
 bool usdtDataFetchYield(UsdtDataSnapshot& io);
 bool usdtDataFetchVariations(UsdtDataSnapshot& io);
+bool usdtDataFetchUsdChart(UsdtDataSnapshot& io);
 bool usdtDataFetchNetworks(UsdtDataSnapshot& io);
 void usdtDataUpdateFreshness(UsdtDataSnapshot& io, uint32_t nowMs, bool online);
 const char* usdtFreshnessLabel(UsdtFreshness freshness);

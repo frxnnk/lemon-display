@@ -97,6 +97,23 @@ bool parseCoinbaseRates(const char* json, UsdtPegData& out) {
     return true;
 }
 
+bool readChartSamples(JsonArray prices, float low, float high,
+                      float* samples, uint8_t& count) {
+    if (prices.size() < 2) return false;
+    const size_t sampleCount = min(
+        static_cast<size_t>(USDT_ARS_CHART_POINT_COUNT), prices.size());
+    for (size_t sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
+        const size_t sourceIndex = sampleIndex * (prices.size() - 1) /
+                                   (sampleCount - 1);
+        JsonArray point = prices[sourceIndex];
+        const float samplePrice = point[1].as<float>();
+        if (!finiteRange(samplePrice, low, high)) return false;
+        samples[sampleIndex] = samplePrice;
+    }
+    count = static_cast<uint8_t>(sampleCount);
+    return true;
+}
+
 bool parseMarketChart(const char* json, UsdtPegData& out) {
     JsonDocument doc;
     JsonDocument filter;
@@ -110,18 +127,10 @@ bool parseMarketChart(const char* json, UsdtPegData& out) {
     const float latestPrice = latest[1].as<float>();
     if (latestMs == 0 || !finiteRange(latestPrice, 100.0f, 100000.0f)) return false;
 
-    const size_t sampleCount = min(
-        static_cast<size_t>(USDT_ARS_CHART_POINT_COUNT), prices.size());
     float chartSamples[USDT_ARS_CHART_POINT_COUNT] = {};
-    for (size_t sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
-        const size_t sourceIndex = sampleCount == 1
-            ? 0
-            : sampleIndex * (prices.size() - 1) / (sampleCount - 1);
-        JsonArray point = prices[sourceIndex];
-        const float samplePrice = point[1].as<float>();
-        if (!finiteRange(samplePrice, 100.0f, 100000.0f)) return false;
-        chartSamples[sampleIndex] = samplePrice;
-    }
+    uint8_t sampleCount = 0;
+    if (!readChartSamples(prices, 100.0f, 100000.0f,
+                          chartSamples, sampleCount)) return false;
 
     auto closestPrice = [&](uint64_t targetMs) {
         float bestPrice = 0.0f;
@@ -163,6 +172,26 @@ bool parseMarketChart(const char* json, UsdtPegData& out) {
     out.arsChartCount = sampleCount;
     out.variationsValid = true;
     out.variationsLastUpdateMs = millis();
+    return true;
+}
+
+bool parseUsdMarketChart(const char* json, UsdtPegData& out) {
+    JsonDocument doc;
+    JsonDocument filter;
+    filter["prices"] = true;
+    if (deserializeJson(doc, json, DeserializationOption::Filter(filter))) return false;
+    JsonArray prices = doc["prices"];
+    float chartSamples[USDT_ARS_CHART_POINT_COUNT] = {};
+    uint8_t sampleCount = 0;
+    if (!readChartSamples(prices, 0.80f, 1.20f,
+                          chartSamples, sampleCount)) return false;
+
+    for (uint8_t i = 0; i < sampleCount; ++i) {
+        out.usdChart[i] = chartSamples[i];
+    }
+    out.usdChartCount = sampleCount;
+    out.usdChartValid = true;
+    out.usdChartLastUpdateMs = millis();
     return true;
 }
 
@@ -283,6 +312,27 @@ bool usdtDataFetchVariations(UsdtDataSnapshot& io) {
         return true;
     }
     io.variationsStatus = result == API_OK ? USDT_FETCH_PARSE_ERROR : mapApi(result);
+    return false;
+}
+
+bool usdtDataFetchUsdChart(UsdtDataSnapshot& io) {
+    if (WiFi.status() != WL_CONNECTED) return false;
+    const uint32_t nowMs = millis();
+    const uint32_t interval = io.peg.usdChartValid ? USDT_VARIATIONS_REFRESH_MS
+                                                   : USDT_VARIATIONS_RETRY_MS;
+    const bool chartDue = io.peg.usdChartLastAttemptMs == 0 ||
+        nowMs - io.peg.usdChartLastAttemptMs >= interval;
+    if (!chartDue) return false;
+
+    io.peg.usdChartLastAttemptMs = nowMs;
+    ApiResult result = API_NETWORK_ERROR;
+    const char* json = apiHttpGet(
+        COINGECKO_USDT_USD_CHART_EP, true, result, 5000, 24576, 1);
+    if (result == API_OK && json && json[0] && parseUsdMarketChart(json, io.peg)) {
+        io.usdChartStatus = USDT_FETCH_OK;
+        return true;
+    }
+    io.usdChartStatus = result == API_OK ? USDT_FETCH_PARSE_ERROR : mapApi(result);
     return false;
 }
 

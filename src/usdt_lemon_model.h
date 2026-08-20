@@ -35,8 +35,14 @@ enum UsdtLanguage : uint8_t {
     USDT_LANGUAGE_EN,
 };
 
+enum UsdtMarketPair : uint8_t {
+    USDT_MARKET_ARS = 0,
+    USDT_MARKET_USD,
+};
+
 struct UsdtRuntimeModel {
     UsdtScene scene = USDT_OVERVIEW;
+    UsdtMarketPair marketPair = USDT_MARKET_ARS;
     uint32_t sceneEnteredMs = 0;
     uint32_t lastInteractionMs = 0;
     bool refreshRequested = false;
@@ -48,6 +54,11 @@ struct UsdtRuntimeModel {
 
 constexpr int16_t USDT_NAV_Y = 416;
 constexpr int16_t USDT_NAV_H = 64;
+constexpr int16_t USDT_MARKET_CARD_Y = 128;
+constexpr int16_t USDT_MARKET_CARD_H = 120;
+constexpr int16_t USDT_MARKET_CARD_W = 204;
+constexpr int16_t USDT_MARKET_ARS_X = 24;
+constexpr int16_t USDT_MARKET_USD_X = 252;
 constexpr int16_t USDT_SYSTEM_CONTROL_X = 24;
 constexpr int16_t USDT_SYSTEM_CONTROL_W = 432;
 constexpr int16_t USDT_SYSTEM_CONTROL_H = 48;
@@ -133,6 +144,27 @@ constexpr bool usdtSystemWifiHit(int16_t x, int16_t y) {
     return usdtSystemControlHit(x, y, USDT_SYSTEM_WIFI_Y);
 }
 
+constexpr int8_t usdtMarketPairAt(int16_t x, int16_t y) {
+    return y < USDT_MARKET_CARD_Y ||
+           y >= USDT_MARKET_CARD_Y + USDT_MARKET_CARD_H ? -1
+         : x >= USDT_MARKET_ARS_X &&
+           x < USDT_MARKET_ARS_X + USDT_MARKET_CARD_W ? USDT_MARKET_ARS
+         : x >= USDT_MARKET_USD_X &&
+           x < USDT_MARKET_USD_X + USDT_MARKET_CARD_W ? USDT_MARKET_USD
+         : -1;
+}
+
+inline bool usdtHandleMarketPairTap(UsdtRuntimeModel& model,
+                                    const TouchEvent& event,
+                                    uint32_t nowMs) {
+    if (model.scene != USDT_MARKETS || event.gesture != TOUCH_TAP) return false;
+    const int8_t pair = usdtMarketPairAt(event.x, event.y);
+    if (pair < 0) return false;
+    model.marketPair = static_cast<UsdtMarketPair>(pair);
+    model.lastInteractionMs = nowMs;
+    return true;
+}
+
 constexpr uint8_t usdtVariationIndex(uint32_t nowMs) {
     return static_cast<uint8_t>((nowMs / USDT_VARIATION_ROTATE_MS) % 3UL);
 }
@@ -177,6 +209,14 @@ static_assert(usdtBottomTabAt(336, 448) == 3, "Regions tab hitbox");
 static_assert(usdtBottomTabAt(432, 448) == 4, "System tab hitbox");
 static_assert(usdtBottomTabAt(240, 400) == -1, "Content is not navigation");
 static_assert(usdtSceneForTab(1) == USDT_NETWORKS, "Second tab is networks");
+static_assert(usdtMarketPairAt(48, 160) == USDT_MARKET_ARS,
+              "Left market card selects ARS");
+static_assert(usdtMarketPairAt(300, 160) == USDT_MARKET_USD,
+              "Right market card selects USD");
+static_assert(usdtMarketPairAt(240, 160) == -1,
+              "Gap between market cards is not interactive");
+static_assert(usdtMarketPairAt(48, 248) == -1,
+              "Market cards exclude their lower edge");
 static_assert(usdtSystemSoundHit(240, USDT_SYSTEM_SOUND_Y + 24),
               "Sound row hitbox");
 static_assert(usdtSystemLanguageHit(240, USDT_SYSTEM_LANGUAGE_Y + 24),

@@ -42,6 +42,8 @@ void fetchData(UsdtDataSnapshot data) {
     publishData(data, false);
     usdtDataFetchVariations(data);
     publishData(data, false);
+    usdtDataFetchUsdChart(data);
+    publishData(data, false);
     usdtDataFetchNetworks(data);
     data.fetching = false;
     publishData(data, true);

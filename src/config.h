@@ -51,6 +51,7 @@
 #define LEMON_YIELD_EP "https://api.lemoncash.com.ar/api/v1/interest-funds-percentages"
 #define COINBASE_USDT_RATES_EP "https://api.coinbase.com/v2/exchange-rates?currency=USDT"
 #define COINGECKO_USDT_CHART_EP "https://api.coingecko.com/api/v3/coins/tether/market_chart?vs_currency=ars&days=7&interval=hourly"
+#define COINGECKO_USDT_USD_CHART_EP "https://api.coingecko.com/api/v3/coins/tether/market_chart?vs_currency=usd&days=7&interval=hourly"
 #define LEMON_USDT_NETWORKS_EP "https://lemon-box.vercel.app/api/usdt-networks"
 
 // ── CoinGecko USDC/ARS chart (for dollar sparkline) ──

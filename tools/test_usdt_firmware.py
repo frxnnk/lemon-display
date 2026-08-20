@@ -93,6 +93,46 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         self.assertIn("out.arsChart[sampleIndex]", data)
         self.assertIn("out.arsChartCount = sampleCount", data)
 
+    def test_market_pair_cards_define_selectable_touch_targets(self):
+        model = (ROOT / "src/usdt_lemon_model.h").read_text(encoding="utf-8")
+        self.assertIn("enum UsdtMarketPair", model)
+        self.assertIn("USDT_MARKET_ARS", model)
+        self.assertIn("USDT_MARKET_USD", model)
+        self.assertIn("UsdtMarketPair marketPair = USDT_MARKET_ARS", model)
+        self.assertIn("constexpr int8_t usdtMarketPairAt", model)
+        self.assertIn("inline bool usdtHandleMarketPairTap", model)
+        self.assertIn("model.scene != USDT_MARKETS", model)
+        self.assertIn("event.gesture != TOUCH_TAP", model)
+
+    def test_market_pair_usd_history_is_independent_from_ars_variations(self):
+        config = (ROOT / "src/config.h").read_text(encoding="utf-8")
+        header = (ROOT / "src/usdt_lemon_data.h").read_text(encoding="utf-8")
+        data = (ROOT / "src/usdt_lemon_data.cpp").read_text(encoding="utf-8")
+        worker = (ROOT / "src/usdt_lemon_worker.cpp").read_text(encoding="utf-8")
+        self.assertIn("COINGECKO_USDT_USD_CHART_EP", config)
+        self.assertIn("vs_currency=usd", config)
+        self.assertIn("float usdChart[USDT_ARS_CHART_POINT_COUNT]", header)
+        self.assertIn("uint8_t usdChartCount", header)
+        self.assertIn("uint32_t usdChartLastUpdateMs", header)
+        self.assertIn("uint32_t usdChartLastAttemptMs", header)
+        self.assertIn("bool usdChartValid", header)
+        self.assertIn("bool usdtDataFetchUsdChart", header)
+        self.assertIn("parseUsdMarketChart", data)
+        self.assertIn("usdtDataFetchUsdChart(data)", worker)
+
+    def test_market_pair_cards_show_icons_selection_and_selected_chart(self):
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        markets = ui[ui.index("void drawMarkets") : ui.index("void drawRegions")]
+        self.assertIn("void drawUnitedStatesFlag", ui)
+        self.assertIn("void drawMarketPairCard", ui)
+        self.assertIn("drawTetherLogo", ui[ui.index("void drawMarketPairCard") :])
+        self.assertIn("drawArgentinaFlag", markets)
+        self.assertIn("drawUnitedStatesFlag", markets)
+        self.assertIn("model.marketPair == USDT_MARKET_ARS", markets)
+        self.assertIn("model.marketPair == USDT_MARKET_USD", markets)
+        self.assertIn("drawMarketChart", markets)
+        self.assertIn('tr(model.language, "ACTIVO", "ACTIVE")', markets)
+
     def test_placeholder_coingecko_key_is_never_sent(self):
         api = (ROOT / "src/api_client.cpp").read_text(encoding="utf-8")
         self.assertIn("coinGeckoKeyConfigured", api)
