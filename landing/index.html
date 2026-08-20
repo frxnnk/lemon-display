@@ -5,11 +5,11 @@
     <base href="/landing/">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#121212">
-    <meta name="description" content="Lemon Market Desk convierte las Lemon Boxes existentes en una presencia viva de mercado, producto y contexto sobre el escritorio.">
-    <meta property="og:title" content="Lemon Market Desk · Lemon en tu escritorio">
-    <meta property="og:description" content="El hardware ya existe. La próxima versión convierte presencia física en utilidad diaria para Lemon.">
+    <meta name="description" content="La Cajita Lemon: del primer firmware con Bitcoin y dólar al firmware de stocks. USDT queda como colaboración.">
+    <meta property="og:title" content="Lemon Box - de la primera Cajita al firmware de stocks">
+    <meta property="og:description" content="El desarrollo de la Cajita, firmware a firmware. Stocks es el producto. USDT es una colaboración.">
     <meta property="og:image" content="./assets/v2/ambient-home-product.png">
-    <title>Lemon Market Desk · Lemon en tu escritorio</title>
+    <title>Lemon Box - de la primera Cajita al firmware de stocks</title>
     <link rel="icon" type="image/svg+xml" href="./assets/lemon-iso.svg">
     <link rel="apple-touch-icon" href="./assets/lemon-iso.svg">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
@@ -87,7 +87,7 @@
         }
 
         /* Section anchor offset (nav is fixed) */
-        #hero-scroll, #idea, #usdt-ota, #product, #concepts,
+        #hero-scroll, #firmware, #product, #concepts, #colaboraciones,
         #about, #features, #specs {
             scroll-margin-top: 80px;
         }
@@ -1571,6 +1571,25 @@
             line-height: 1.55;
         }
 
+
+        .firmware-timeline { list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(1.25rem, 3vw, 2.5rem); margin-top: clamp(3.5rem, 7vw, 6.5rem); }
+        .firmware-step { padding-top: 1rem; border-top: 1px solid var(--border); }
+        .firmware-step span { color: var(--greent); font-size: .72rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+        .firmware-step h3 { margin: 1.2rem 0 .7rem; color: var(--starlight); font-family: 'PP Neue Machina', sans-serif; font-size: clamp(1.2rem, 2vw, 1.7rem); line-height: 1; letter-spacing: -.035em; }
+        .firmware-step p { color: var(--moon); line-height: 1.55; }
+        .collab-section { width: min(100%, 1440px); margin: 0 auto; padding: clamp(5rem, 9vw, 9rem) clamp(1.25rem, 3vw, 3.5rem); color: var(--starlight); background: var(--leaf); }
+        .collab-inner { max-width: 1280px; margin: 0 auto; }
+        .collab-section .case-label { color: var(--lime); }
+        .collab-heading { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(16rem, .95fr); gap: clamp(2rem, 8vw, 9rem); align-items: end; margin-top: 1.15rem; }
+        .collab-title { max-width: 12ch; color: var(--starlight); font-family: 'PP Neue Machina', sans-serif; font-size: clamp(2.4rem, 5vw, 4.8rem); line-height: .92; letter-spacing: -.05em; }
+        .collab-lede { max-width: 29rem; color: rgba(231, 231, 233, .78); font-size: clamp(1rem, 1.25vw, 1.16rem); line-height: 1.55; }
+        .collab-points { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(1.5rem, 4vw, 3rem); margin-top: clamp(3.5rem, 7vw, 6rem); }
+        .collab-points article { padding-top: 1rem; border-top: 1px solid rgba(231, 231, 233, .22); }
+        .collab-points span { color: var(--lime); font-size: .72rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+        .collab-points h3 { margin: 1.2rem 0 .7rem; font-family: 'PP Neue Machina', sans-serif; font-size: clamp(1.2rem, 2vw, 1.7rem); letter-spacing: -.035em; }
+        .collab-points p { color: rgba(231, 231, 233, .72); line-height: 1.55; }
+        @media (max-width: 900px) { .firmware-timeline, .collab-points, .collab-heading { grid-template-columns: 1fr; } }
+
         .usdt-section {
             width: min(100%, 1440px);
             margin: 0 auto;
@@ -2584,20 +2603,18 @@
         <img src="./assets/v2/lemon-horizontal-black.svg" alt="Lemon" width="120">
     </a>
     <ul class="nav-links">
-        <li class="nav-product"><a href="#idea">La idea</a></li>
-        <li class="nav-preview"><a href="./studio/?mode=concept">Ver demo ↗</a></li>
+        <li class="nav-product"><a href="#firmware">Firmware</a></li>
+        <li class="nav-preview"><a href="#colaboraciones">Colaboraciones</a></li>
+        <li class="nav-preview"><a href="./studio/?mode=concept">Ver demo</a></li>
     </ul>
 </nav>
 
-<main id="main">
-
-<!-- HERO — scroll-driven assembly -->
 <section class="hero-scroll" id="hero-scroll">
     <div class="hero-sticky">
         <canvas id="matrix-rain" class="matrix-rain" aria-hidden="true"></canvas>
         <div class="hero-copy">
-            <h1>El mercado de Lemon, en tu escritorio.</h1>
-            <p>Bitcoin, dólar y mercado en tiempo real. Siempre a la vista.</p>
+            <h1>La Cajita, firmware a firmware.</h1>
+            <p>Del primer firm con Bitcoin y dólar al firmware de stocks. USDT queda como colaboración, no como el producto.</p>
             <div class="hero-actions" aria-label="Acción principal">
                 <a class="hero-action primary" href="./studio/?mode=concept">Ver demo ↗</a>
             </div>
@@ -2611,187 +2628,130 @@
         <div id="assembly-progress" role="progressbar" aria-label="Progreso de ensamblaje" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
     </div>
 </section>
-
-<section class="idea-section" id="idea" aria-labelledby="idea-title">
+<section class="idea-section" id="firmware" aria-labelledby="firmware-title">
     <div class="idea-inner">
         <div class="idea-heading">
             <div>
-                <div class="case-label reveal">02 · La idea</div>
-                <h2 class="idea-title reveal reveal-delay-1" id="idea-title">Una pantalla que mira el mercado por vos.</h2>
+                <div class="case-label reveal">02 · El desarrollo</div>
+                <h2 class="idea-title reveal reveal-delay-1" id="firmware-title">De la primera cajita al firmware de stocks.</h2>
             </div>
-            <p class="idea-lede reveal reveal-delay-2">Esta versión toma la Lemon Box que ya existe y la convierte en un objeto financiero vivo: muestra una señal clara, le da foco a lo importante y deja el contexto a un toque.</p>
+            <p class="idea-lede reveal reveal-delay-2">La Lemon Box no nació como una sala de control. Nació como un objeto de escritorio: Bitcoin a la vista, dólar Lemon abajo, siempre encendida. El resto del producto se fue ganando firmware a firmware.</p>
         </div>
-
-        <div class="idea-flow" aria-label="Capas de la experiencia">
-            <article class="idea-card reveal">
-                <span class="idea-index">01 / AMBIENTE</span>
-                <h3>De reojo</h3>
-                <p>Hora, Bitcoin y una señal secundaria. Información comprensible en dos segundos, sin pedirte atención.</p>
-            </article>
-            <article class="idea-card reveal reveal-delay-1">
-                <span class="idea-index">02 / MOMENTOS</span>
-                <h3>Cuando importa</h3>
-                <p>Aperturas, cierres, movimientos y noticias ocupan el foco sólo cuando hay algo que contar.</p>
-            </article>
-            <article class="idea-card reveal reveal-delay-2">
-                <span class="idea-index">03 / EXPLORACIÓN</span>
-                <h3>Al tocarla</h3>
-                <p>La caja suma contexto y puede llevarte de vuelta a Lemon. Informa; no opera ni reemplaza la app.</p>
-            </article>
-        </div>
-
-        <div class="idea-principle reveal">
-            <span class="idea-principle-label">Principio de diseño</span>
-            <div>
-                <strong>90% presente · 10% táctil</strong>
-                <p>No es Bloomberg en miniatura. Es Lemon haciendo presencia en tu escritorio.</p>
-            </div>
-        </div>
+        <ol class="firmware-timeline" aria-label="Línea de firmware de la Cajita">
+            <li class="firmware-step reveal">
+                <span>01 / V1</span>
+                <h3>El primer firm</h3>
+                <p>Dashboard clásico en 480x480: hora, Bitcoin con sparkline y el dólar Lemon (USDT/ARS) en la zona baja. La cajita mira el mercado por vos, sin app abierta.</p>
+            </li>
+            <li class="firmware-step reveal reveal-delay-1">
+                <span>02 / V5.0</span>
+                <h3>Carousel y mercado</h3>
+                <p>El firmware deja de ser una sola vista. Aparece el carousel, el servidor de config y la primera capa de mercado más allá de BTC y dólar.</p>
+            </li>
+            <li class="firmware-step reveal reveal-delay-2">
+                <span>03 / V5.1</span>
+                <h3>Stocks en Z2</h3>
+                <p>Yahoo Finance, watchlist en NVS y el modo stocks en la zona baja. Dólar, mercados y acciones se eligen en el mismo slot. Ahí llega el firmware de stocks.</p>
+            </li>
+            <li class="firmware-step reveal">
+                <span>04 / V2</span>
+                <h3>Market Desk</h3>
+                <p>La caja existente se vuelve presencia viva: home ambiental, Market Tape y contexto. Informa y puede devolver a Lemon. No opera.</p>
+            </li>
+        </ol>
     </div>
 </section>
-
-<section class="usdt-section" id="usdt-ota" aria-labelledby="usdt-title">
-    <div class="usdt-inner">
-        <div class="case-label reveal">03 · USDT CONTROL ROOM</div>
-        <div class="usdt-heading">
-            <h2 class="usdt-title reveal reveal-delay-1" id="usdt-title">Una sala de control para el dólar digital.</h2>
-            <p class="usdt-lede reveal reveal-delay-2">El firmware nuevo no se queda en mostrar un precio: convierte la Lemon Box en una vista operativa de USDT, con salud del sistema, peg, liquidez, redes, regiones, señales y alertas.</p>
-        </div>
-
-        <div class="usdt-layout">
-            <figure class="control-room-preview reveal" aria-label="Pantalla Overview del USDT Control Room">
-                <img src="./assets/v2/tether-control-room/01-overview-v1.png" alt="Overview del USDT Control Room con peg, supply, volumen, cotización Lemon y estado live" loading="lazy" width="1280" height="1280">
-                <figcaption><span>01 / OVERVIEW</span><strong>System healthy</strong></figcaption>
-            </figure>
-
-            <div class="usdt-details">
-                <article class="usdt-detail reveal reveal-delay-1">
-                    <span>01 / SALUD</span>
-                    <h3>Ver si todo está bien.</h3>
-                    <p>El overview concentra peg, supply, volumen 24h, cotización en Lemon y estado live en una sola lectura.</p>
-                </article>
-                <article class="usdt-detail reveal reveal-delay-2">
-                    <span>02 / MERCADOS</span>
-                    <h3>El peg con contexto.</h3>
-                    <p>Rango de 24h, volumen y desviación máxima permiten entender la estabilidad de USDT, no sólo mirar el último número.</p>
-                </article>
-                <article class="usdt-detail reveal reveal-delay-1">
-                    <span>03 / REDES</span>
-                    <h3>Seguir dónde vive.</h3>
-                    <p>TRON, Ethereum, TON y Solana aparecen con su estado y evolución, más una lectura rápida de alertas activas.</p>
-                </article>
-                <article class="usdt-detail reveal reveal-delay-2">
-                    <span>04 / SEÑALES</span>
-                    <h3>Del dato a la alerta.</h3>
-                    <p>Regiones, intel y alertas hacen visible cuándo aparece una desviación, una integración o una señal verificada.</p>
-                </article>
-            </div>
-        </div>
-
-        <div class="control-room-gallery" aria-label="Pantallas del nuevo firmware USDT">
-            <figure class="control-room-figure reveal">
-                <img src="./assets/v2/tether-control-room/02-networks-v1.png" alt="Pantalla Networks del USDT Control Room con TRON, Ethereum, TON y Solana" loading="lazy" width="1280" height="1280">
-                <figcaption><span>02</span><div><strong>Networks</strong><p>Estado de las redes y alertas activas.</p></div></figcaption>
-            </figure>
-            <figure class="control-room-figure reveal reveal-delay-1">
-                <img src="./assets/v2/tether-control-room/03-markets-v1.png" alt="Pantalla Markets del USDT Control Room con peg, rango, volumen y desviación" loading="lazy" width="1280" height="1280">
-                <figcaption><span>03</span><div><strong>Markets</strong><p>Estabilidad del peg y lectura de mercado.</p></div></figcaption>
-            </figure>
-            <figure class="control-room-figure reveal">
-                <img src="./assets/v2/tether-control-room/04-regions-v1.png" alt="Pantalla Regions del USDT Control Room con pulso global y referencia de Argentina" loading="lazy" width="1280" height="1280">
-                <figcaption><span>04</span><div><strong>Regions</strong><p>El pulso global con foco en Argentina.</p></div></figcaption>
-            </figure>
-            <figure class="control-room-figure reveal reveal-delay-1">
-                <img src="./assets/v2/tether-control-room/05-intel-v1.png" alt="Pantalla Intel del USDT Control Room con señales verificadas" loading="lazy" width="1280" height="1280">
-                <figcaption><span>05</span><div><strong>Intel</strong><p>Señales claras, verificadas y fechadas.</p></div></figcaption>
-            </figure>
-            <figure class="control-room-figure reveal">
-                <img src="./assets/v2/tether-control-room/06-alert-v1.png" alt="Pantalla Alert del USDT Control Room mostrando una desviación del peg" loading="lazy" width="1280" height="1280">
-                <figcaption><span>06</span><div><strong>Alert</strong><p>Una desviación se convierte en algo accionable.</p></div></figcaption>
-            </figure>
-        </div>
-
-        <div class="ota-strip reveal">
-            <span class="ota-label">Firmware nuevo</span>
-            <div>
-                <strong>El control room llega como firmware.</strong>
-                <p>La branch incluye los binarios compilados de esta experiencia y su runtime de pantalla: carga de datos, estados live/cached/stale/offline, navegación táctil, refresco manual y actualización de datos cada minuto.</p>
-                <span class="ota-badge">LIVE · CACHE · TOUCH · 60S REFRESH</span>
-            </div>
-        </div>
-    </div>
-</section>
-
 <section class="manifesto" id="product" aria-labelledby="manifesto-title">
     <div class="manifesto-inner">
-        <div class="case-label">04 · El producto</div>
+        <div class="case-label">03 · El producto</div>
         <h2 class="manifesto-title" id="manifesto-title">Siempre presente. Relevante cuando importa.</h2>
         <div class="manifesto-copy">
             <p>Bitcoin queda a la vista. Los movimientos importantes ganan el foco y vuelven a la calma.</p>
         </div>
     </div>
 </section>
-
 <section class="case-section" id="concepts">
-    <div class="case-label reveal">05 · Así se vive</div>
+    <div class="case-label reveal">04 · Así se vive</div>
     <div class="case-heading">
         <h2 class="case-title reveal reveal-delay-1">Tres momentos. Una Lemon Box.</h2>
     </div>
-
     <div class="concept-grid">
         <figure class="concept-figure reveal">
             <div class="concept-media">
                 <picture>
                     <source srcset="./assets/v2/ambient-home-product.webp" type="image/webp">
-                    <img src="./assets/v2/ambient-home-product.png" alt="Dirección visual de la Lemon Box física mostrando un home ambiental de Bitcoin" loading="lazy" width="1536" height="1024">
+                    <img src="./assets/v2/ambient-home-product.png" alt="Dirección visual de la Lemon Box fisica mostrando un home ambiental de Bitcoin" loading="lazy" width="1536" height="1024">
                 </picture>
             </div>
             <figcaption class="concept-caption">
                 <span class="figure-index">01</span>
                 <div>
                     <h3 class="figure-title">Home ambiental</h3>
-                    <p>Bitcoin y hora.</p>
+                    <p>Bitcoin y hora. El primer firm, todavía a la vista.</p>
                     <span class="concept-disclaimer">Dirección visual · datos ilustrativos</span>
                 </div>
             </figcaption>
         </figure>
-
         <figure class="concept-figure reveal reveal-delay-1">
             <div class="concept-media">
                 <picture>
                     <source srcset="./assets/v2/market-tape-product.webp" type="image/webp">
-                    <img src="./assets/v2/market-tape-product.png" alt="Dirección visual de Market Tape en la Lemon Box física con índices, acciones y un Pack" loading="lazy" width="1536" height="1024">
+                    <img src="./assets/v2/market-tape-product.png" alt="Dirección visual de Market Tape en la Lemon Box fisica con indices, acciones y un Pack" loading="lazy" width="1536" height="1024">
                 </picture>
             </div>
             <figcaption class="concept-caption">
                 <span class="figure-index">02</span>
                 <div>
                     <h3 class="figure-title">Market Tape</h3>
-                    <p>Apertura, cierre y movimiento.</p>
+                    <p>Apertura, cierre y el firmware de stocks.</p>
                     <span class="concept-disclaimer">Dirección visual · no es mercado en vivo</span>
                 </div>
             </figcaption>
         </figure>
-
         <figure class="concept-figure reveal">
             <div class="concept-media">
                 <picture>
                     <source srcset="./assets/v2/news-takeover-product.webp" type="image/webp">
-                    <img src="./assets/v2/news-takeover-product.png" alt="Dirección visual de una noticia contextual en la Lemon Box física con continuidad en Lemon" loading="lazy" width="1536" height="1024">
+                    <img src="./assets/v2/news-takeover-product.png" alt="Dirección visual de una noticia contextual en la Lemon Box fisica con continuidad en Lemon" loading="lazy" width="1536" height="1024">
                 </picture>
             </div>
             <figcaption class="concept-caption">
                 <span class="figure-index">03</span>
                 <div>
                     <h3 class="figure-title">Contexto</h3>
-                    <p>Qué pasó y por qué importa.</p>
+                    <p>Qué pasó y por qué importa, sin reemplazar la app.</p>
                     <span class="concept-disclaimer">Dirección visual · contenido de ejemplo</span>
                 </div>
             </figcaption>
         </figure>
     </div>
 </section>
-
+<section class="collab-section" id="colaboraciones" aria-labelledby="collab-title">
+    <div class="collab-inner">
+        <div class="case-label reveal">05 · Colaboraciones</div>
+        <div class="collab-heading">
+            <h2 class="collab-title reveal reveal-delay-1" id="collab-title">USDT Control Room</h2>
+            <p class="collab-lede reveal reveal-delay-2">Una línea aparte, con canal OTA propio. No es el firmware principal de la Cajita: es una colaboración para seguir el dólar digital desde el escritorio.</p>
+        </div>
+        <div class="collab-points">
+            <article>
+                <span>Canal</span>
+                <h3>firmware-usdt.bin</h3>
+                <p>Aislado de V1 y V2. Las cajas de stocks no toman este asset.</p>
+            </article>
+            <article>
+                <span>Qué muestra</span>
+                <h3>Precio, peg y yield</h3>
+                <p>USDT/ARS en Lemon, variación CoinGecko y Lemon Yield live. Informa; no opera.</p>
+            </article>
+            <article>
+                <span>Estado</span>
+                <h3>Firmware colaborativo</h3>
+                <p>Disponible para flashear y actualizar por OTA. No reemplaza el relato de la Cajita.</p>
+            </article>
+        </div>
+    </div>
+</section>
 <section class="section" id="about" hidden aria-hidden="true">
     <div class="about-layout">
         <div class="about-copy">
@@ -2942,10 +2902,10 @@
 <footer>
     <div class="footer-center">
         <img src="./assets/v2/lemon-horizontal-black.svg" alt="Lemon" class="footer-logo">
-        <p class="footer-tagline">Market Desk · evolución de Lemon Box.</p>
+        <p class="footer-tagline">De la primera Cajita al firmware de stocks.</p>
     </div>
     <div class="footer-bottom">
-        <p>Documento de evolución interna · 22.07.2026 · Exclusivamente Lemon</p>
+        <p>Documento de evolucion interna - firmware V1 a stocks - Exclusivamente Lemon</p>
     </div>
 </footer>
 
