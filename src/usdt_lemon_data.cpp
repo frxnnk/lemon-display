@@ -161,6 +161,78 @@ bool parseYield(const char* json, UsdtYieldData& out) {
     }
     return false;
 }
+
+bool firstPeggedAsset(const char* json, const char*& object, size_t& length) {
+    const char* assets = json ? strstr(json, "\"peggedAssets\":[") : nullptr;
+    const char* start = assets ? strchr(assets, '{') : nullptr;
+    if (!start) return false;
+
+    bool inString = false;
+    bool escaped = false;
+    int depth = 0;
+    for (const char* cursor = start; *cursor; ++cursor) {
+        const char c = *cursor;
+        if (inString) {
+            if (escaped) escaped = false;
+            else if (c == '\\') escaped = true;
+            else if (c == '"') inString = false;
+            continue;
+        }
+        if (c == '"') {
+            inString = true;
+        } else if (c == '{') {
+            ++depth;
+        } else if (c == '}' && --depth == 0) {
+            object = start;
+            length = static_cast<size_t>(cursor - start + 1);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool parseNetworkSupply(const char* json, UsdtNetworkData& out) {
+    const char* object = nullptr;
+    size_t objectLength = 0;
+    if (!firstPeggedAsset(json, object, objectLength)) return false;
+
+    static const char* chainKeys[USDT_NETWORK_COUNT] = {
+        "BSC", "Polygon", "Tron", "Ethereum"
+    };
+    JsonDocument filter;
+    filter["symbol"] = true;
+    for (const char* chain : chainKeys) {
+        filter["chainCirculating"][chain]["current"]["peggedUSD"] = true;
+        filter["chainCirculating"][chain]["circulatingPrevDay"]["peggedUSD"] = true;
+    }
+
+    JsonDocument doc;
+    if (deserializeJson(doc, object, objectLength,
+                        DeserializationOption::Filter(filter))) {
+        return false;
+    }
+    if (!equalsIgnoreCase(doc["symbol"] | "", "USDT")) return false;
+
+    UsdtNetworkData next = {};
+    for (uint8_t i = 0; i < USDT_NETWORK_COUNT; ++i) {
+        JsonObject chain = doc["chainCirculating"][chainKeys[i]];
+        const float current = chain["current"]["peggedUSD"] | 0.0f;
+        const float previous = chain["circulatingPrevDay"]["peggedUSD"] | 0.0f;
+        if (!finiteRange(current, 1.0f, 1.0e12f) ||
+            !finiteRange(previous, 1.0f, 1.0e12f)) {
+            return false;
+        }
+        next.metrics[i].supplyUsd = current;
+        next.metrics[i].change24h = (current / previous - 1.0f) * 100.0f;
+        next.metrics[i].valid = std::isfinite(next.metrics[i].change24h);
+        if (!next.metrics[i].valid) return false;
+    }
+    next.valid = true;
+    next.lastUpdateMs = millis();
+    next.lastAttemptMs = next.lastUpdateMs;
+    out = next;
+    return true;
+}
 }  // namespace
 
 void usdtDataSetup() {}
@@ -209,8 +281,10 @@ bool usdtDataFetchVariations(UsdtDataSnapshot& io) {
     const char* json = apiHttpGet(
         COINGECKO_USDT_CHART_EP, true, result, 5000, 24576, 1);
     if (result == API_OK && json && json[0] && parseMarketChart(json, io.peg)) {
+        io.variationsStatus = USDT_FETCH_OK;
         return true;
     }
+    io.variationsStatus = result == API_OK ? USDT_FETCH_PARSE_ERROR : mapApi(result);
     return false;
 }
 
@@ -230,6 +304,30 @@ bool usdtDataFetchYield(UsdtDataSnapshot& io) {
     return false;
 }
 
+bool usdtDataFetchNetworks(UsdtDataSnapshot& io) {
+    if (WiFi.status() != WL_CONNECTED) return false;
+    const uint32_t nowMs = millis();
+    const uint32_t interval = io.networks.valid ? USDT_NETWORKS_REFRESH_MS
+                                                : USDT_NETWORKS_RETRY_MS;
+    const bool due = io.networks.lastAttemptMs == 0 ||
+        nowMs - io.networks.lastAttemptMs >= interval;
+    if (!due) return false;
+
+    io.networks.lastAttemptMs = nowMs;
+    ApiResult result = API_NETWORK_ERROR;
+    const char* json = apiHttpGet(
+        DEFILLAMA_USDT_EP, false, result, 5000, 49152, 1);
+    UsdtNetworkData networks = {};
+    if (result == API_OK && json && json[0] &&
+        parseNetworkSupply(json, networks)) {
+        io.networks = networks;
+        io.networksStatus = USDT_FETCH_OK;
+        return true;
+    }
+    io.networksStatus = result == API_OK ? USDT_FETCH_PARSE_ERROR : mapApi(result);
+    return false;
+}
+
 void usdtDataUpdateFreshness(UsdtDataSnapshot& io, uint32_t nowMs, bool online) {
     io.online = online;
     io.lemonFreshness = usdtFreshness(io.lemon.valid, io.lemon.lastUpdateMs, nowMs,
@@ -238,6 +336,9 @@ void usdtDataUpdateFreshness(UsdtDataSnapshot& io, uint32_t nowMs, bool online) 
                                     online, io.fetching, io.pegStatus);
     io.yieldFreshness = usdtFreshness(io.yield.valid, io.yield.lastUpdateMs, nowMs,
                                       online, io.fetching, io.yieldStatus);
+    io.networksFreshness = usdtFreshness(
+        io.networks.valid, io.networks.lastUpdateMs, nowMs,
+        online, io.fetching, io.networksStatus);
 }
 
 const char* usdtFreshnessLabel(UsdtFreshness freshness) {
@@ -248,7 +349,18 @@ const char* usdtFreshnessLabel(UsdtFreshness freshness) {
         case USDT_STALE: return "DESACTUALIZADO";
         case USDT_OFFLINE: return "SIN CONEXION";
         case USDT_RATE_LIMITED: return "LIMITE API";
-        case USDT_ERROR: return "ERROR";
+        case USDT_ERROR: return "REINTENTO";
     }
-    return "ERROR";
+    return "REINTENTO";
+}
+
+const char* usdtFetchStatusLabel(UsdtFetchStatus status) {
+    switch (status) {
+        case USDT_FETCH_OK: return "OK";
+        case USDT_FETCH_NETWORK_ERROR: return "RED";
+        case USDT_FETCH_PARSE_ERROR: return "FORMATO";
+        case USDT_FETCH_TIMEOUT: return "TIMEOUT";
+        case USDT_FETCH_RATE_LIMITED: return "LIMITE";
+    }
+    return "RED";
 }

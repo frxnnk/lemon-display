@@ -8,6 +8,7 @@
 #include "usdt_lemon_data.h"
 #include "usdt_lemon_model.h"
 #include "usdt_lemon_ui.h"
+#include "usdt_lemon_worker.h"
 #include "wifi_manager.h"
 #include "wifi_provision.h"
 #include "config.h"
@@ -21,15 +22,6 @@ constexpr uint32_t REFRESH_INTERVAL_MS = 60UL * 1000UL;
 constexpr uint32_t CLOCK_REDRAW_MS = 30UL * 1000UL;
 constexpr uint32_t OTA_PROBE_MS = 60UL * 1000UL;
 constexpr uint32_t OTA_CHECK_MS = 5UL * 60UL * 1000UL;
-constexpr uint32_t FETCH_STEP_DELAY_MS = 50UL;
-
-enum UsdtFetchStage : uint8_t {
-    USDT_FETCH_IDLE = 0,
-    USDT_FETCH_PRICE,
-    USDT_FETCH_RATES,
-    USDT_FETCH_YIELD,
-    USDT_FETCH_VARIATIONS,
-};
 
 UsdtRuntimeModel s_model;
 UsdtDataSnapshot s_data;
@@ -42,9 +34,10 @@ uint32_t s_lastDrawMs = 0;
 uint32_t s_lastOtaCheckMs = 0;
 uint32_t s_lastOtaProbeMs = 0;
 uint8_t s_lastVariation = 255;
-UsdtFetchStage s_fetchStage = USDT_FETCH_IDLE;
-uint32_t s_nextFetchStepMs = 0;
 bool s_bootOtaPending = false;
+bool s_refreshPending = false;
+bool s_otaCheckPending = false;
+bool s_initialDataComplete = false;
 
 void clearCredentials(char* ssid, size_t ssidLen, char* pass, size_t passLen) {
     if (ssid && ssidLen) memset(ssid, 0, ssidLen);
@@ -86,11 +79,19 @@ void refreshNow() {
         redraw();
         return;
     }
-    if (s_fetchStage != USDT_FETCH_IDLE) return;
-    s_data.fetching = true;
-    s_fetchStage = USDT_FETCH_PRICE;
-    s_nextFetchStepMs = millis();
-    redraw();
+    if (!timeReady()) {
+        s_refreshPending = true;
+        return;
+    }
+    if (usdtWorkerBusy()) {
+        s_refreshPending = true;
+        return;
+    }
+    if (usdtWorkerRequestData(s_data)) {
+        s_refreshPending = false;
+        s_data.fetching = true;
+        redraw();
+    }
 }
 
 void installUsdtOtaNow() {
@@ -104,44 +105,8 @@ void installUsdtOtaNow() {
     redraw();
 }
 
-void serviceDataFetch() {
-    if (s_fetchStage == USDT_FETCH_IDLE || !wifiConnected() ||
-        static_cast<int32_t>(millis() - s_nextFetchStepMs) < 0) {
-        return;
-    }
-
-    switch (s_fetchStage) {
-        case USDT_FETCH_PRICE:
-            usdtDataFetchPrice(s_data);
-            s_fetchStage = USDT_FETCH_RATES;
-            break;
-        case USDT_FETCH_RATES:
-            usdtDataFetchRates(s_data);
-            s_fetchStage = USDT_FETCH_YIELD;
-            break;
-        case USDT_FETCH_YIELD:
-            usdtDataFetchYield(s_data);
-            s_fetchStage = USDT_FETCH_VARIATIONS;
-            break;
-        case USDT_FETCH_VARIATIONS:
-            usdtDataFetchVariations(s_data);
-            s_fetchStage = USDT_FETCH_IDLE;
-            s_data.fetching = false;
-            s_lastFetchMs = millis();
-            break;
-        case USDT_FETCH_IDLE:
-            return;
-    }
-    s_nextFetchStepMs = millis() + FETCH_STEP_DELAY_MS;
-    redraw();
-}
-
-void checkUsdtOtaNow(bool bootCheck) {
-    if (!wifiConnected()) return;
-    s_data.ota.checking = true;
-    if (bootCheck) usdtUiDrawLoading("BUSCANDO ACTUALIZACIONES", 40);
-    else redraw();
-    s_otaInfo = otaCheckAsset(OTA_GITHUB_REPO, OTA_USDT_ASSET, APP_VERSION);
+void applyOtaResult(const OtaInfo& result) {
+    s_otaInfo = result;
     if (s_otaInfo.available && !s_otaInfo.md5[0]) {
         Serial.println("[USDT OTA] Ignoring update without channel-specific MD5");
         s_otaInfo.available = false;
@@ -158,7 +123,72 @@ void checkUsdtOtaNow(bool bootCheck) {
         installUsdtOtaNow();
         return;
     }
-    if (!bootCheck) redraw();
+}
+
+void serviceWorkerUpdates() {
+    UsdtWorkerUpdate update = {};
+    bool changed = false;
+    while (usdtWorkerPoll(update)) {
+        if (update.kind == USDT_WORKER_DATA_PARTIAL ||
+            update.kind == USDT_WORKER_DATA_COMPLETE) {
+            s_data = update.data;
+            if (update.kind == USDT_WORKER_DATA_COMPLETE) {
+                s_data.fetching = false;
+                s_lastFetchMs = millis();
+                s_initialDataComplete = true;
+            }
+            changed = true;
+        } else if (update.kind == USDT_WORKER_OTA_CHECK) {
+            applyOtaResult(update.ota);
+            changed = true;
+        } else if (update.tagChanged) {
+            s_otaCheckPending = true;
+        }
+    }
+    if (changed) redraw();
+}
+
+void requestOtaCheck() {
+    if (!wifiConnected() || !timeReady() || usdtWorkerBusy()) {
+        s_otaCheckPending = true;
+        return;
+    }
+    if (usdtWorkerRequestOtaCheck()) {
+        s_otaCheckPending = false;
+        s_data.ota.checking = true;
+        redraw();
+    }
+}
+
+void serviceNetworkScheduling(uint32_t nowMs) {
+    if (!wifiConnected() || !timeReady()) return;
+    if (s_refreshPending && !usdtWorkerBusy()) {
+        refreshNow();
+        return;
+    }
+    if (s_bootOtaPending && s_initialDataComplete && !usdtWorkerBusy()) {
+        s_bootOtaPending = false;
+        requestOtaCheck();
+        return;
+    }
+    if (s_otaCheckPending && !usdtWorkerBusy()) {
+        requestOtaCheck();
+        return;
+    }
+    if (!usdtWorkerBusy() && nowMs - s_lastFetchMs >= REFRESH_INTERVAL_MS) {
+        refreshNow();
+        return;
+    }
+    if (!usdtWorkerBusy() && s_data.ota.checked && !s_data.ota.available &&
+        nowMs - s_lastOtaProbeMs >= OTA_PROBE_MS) {
+        s_lastOtaProbeMs = nowMs;
+        usdtWorkerRequestOtaProbe();
+        return;
+    }
+    if (!usdtWorkerBusy() && s_data.ota.checked && !s_data.ota.available &&
+        nowMs - s_lastOtaCheckMs >= OTA_CHECK_MS) {
+        requestOtaCheck();
+    }
 }
 
 void startNetwork() {
@@ -166,8 +196,12 @@ void startNetwork() {
     s_networkReady = true;
     timeSetup();
     apiSetup();
+    usdtWorkerSetup();
+    s_data.fetching = true;
     s_bootOtaPending = true;
-    refreshNow();
+    s_refreshPending = true;
+    s_initialDataComplete = false;
+    redraw();
 }
 
 void startProvisioning() {
@@ -232,10 +266,10 @@ void usdtLemonLoop() {
     if (online && !s_networkReady) startNetwork();
     if (!online && s_networkReady) {
         s_networkReady = false;
-        s_fetchStage = USDT_FETCH_IDLE;
         s_data.fetching = false;
         s_bootOtaPending = false;
-        apiStop();
+        s_refreshPending = true;
+        s_initialDataComplete = false;
         redraw();
     }
 
@@ -251,32 +285,17 @@ void usdtLemonLoop() {
             refreshNow();
         } else if (s_model.otaCheckRequested) {
             s_model.otaCheckRequested = false;
-            checkUsdtOtaNow(false);
+            requestOtaCheck();
         } else if (changed) {
             redraw();
         }
     }
 
-    serviceDataFetch();
-    if (online && s_bootOtaPending && s_fetchStage == USDT_FETCH_IDLE) {
-        s_bootOtaPending = false;
-        checkUsdtOtaNow(false);
-    }
+    serviceWorkerUpdates();
 
     const uint32_t nowMs = millis();
     if (usdtApplyTimeout(s_model, nowMs)) redraw();
-    if (online && nowMs - s_lastFetchMs >= REFRESH_INTERVAL_MS) refreshNow();
-    if (online && s_data.ota.checked && !s_data.ota.checking &&
-        !s_data.ota.available && nowMs - s_lastOtaProbeMs >= OTA_PROBE_MS) {
-        s_lastOtaProbeMs = nowMs;
-        if (otaLatestTagChanged(OTA_GITHUB_REPO, APP_VERSION)) {
-            checkUsdtOtaNow(false);
-        }
-    }
-    if (online && s_data.ota.checked && !s_data.ota.checking &&
-        !s_data.ota.available && nowMs - s_lastOtaCheckMs >= OTA_CHECK_MS) {
-        checkUsdtOtaNow(false);
-    }
+    serviceNetworkScheduling(nowMs);
     const uint8_t variation = usdtVariationIndex(nowMs);
     if (nowMs - s_lastDrawMs >= CLOCK_REDRAW_MS || variation != s_lastVariation) {
         redraw();

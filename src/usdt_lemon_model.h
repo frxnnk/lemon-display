@@ -53,6 +53,8 @@ constexpr uint32_t USDT_SCENE_TIMEOUT_MS = 90UL * 1000UL;
 constexpr uint32_t USDT_VARIATION_ROTATE_MS = 4000UL;
 constexpr uint32_t USDT_VARIATIONS_REFRESH_MS = 30UL * 60UL * 1000UL;
 constexpr uint32_t USDT_VARIATIONS_RETRY_MS = 60UL * 1000UL;
+constexpr uint32_t USDT_NETWORKS_REFRESH_MS = 15UL * 60UL * 1000UL;
+constexpr uint32_t USDT_NETWORKS_RETRY_MS = 60UL * 1000UL;
 constexpr uint32_t USDT_AUX_MAX_AGE_MS = 2UL * 60UL * 60UL * 1000UL;
 
 constexpr UsdtFreshness usdtFreshness(bool valid, uint32_t lastUpdateMs,

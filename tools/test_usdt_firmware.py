@@ -13,11 +13,20 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         self.assertIn("#define OTA_USDT_ASSET \"firmware-usdt.bin\"", config)
         self.assertIn("LEMON_YIELD_EP", config)
         self.assertIn("CRIPTOYA_LEMON_USDT_EP", config)
+
+    def test_usdt_environment_keeps_the_hardware_memory_flags(self):
+        parser = configparser.ConfigParser(interpolation=None)
+        parser.read(ROOT / "platformio.ini", encoding="utf-8")
+        flags = parser["env:matouch_esp32s3_40_usdt"]["build_flags"]
+        self.assertIn("${env:matouch_esp32s3_40.build_flags}", flags)
+        self.assertIn("-DLEMON_USDT_MODE=1", flags)
     def test_runtime_auto_applies_ota_and_uses_lemon_yield(self):
         runtime = (ROOT / "src/usdt_lemon_runtime.cpp").read_text(encoding="utf-8")
+        worker = (ROOT / "src/usdt_lemon_worker.cpp").read_text(encoding="utf-8")
         data = (ROOT / "src/usdt_lemon_data.cpp").read_text(encoding="utf-8")
         ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
-        self.assertIn("otaCheckAsset(OTA_GITHUB_REPO, OTA_USDT_ASSET, APP_VERSION)", runtime)
+        self.assertIn("otaCheckAsset(", worker)
+        self.assertIn("OTA_GITHUB_REPO, OTA_USDT_ASSET, APP_VERSION", worker)
         self.assertIn("installUsdtOtaNow()", runtime)
         self.assertIn("LEMON_YIELD", data)
         self.assertNotIn("DOLAR DIGITAL", ui)
@@ -54,8 +63,9 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         self.assertIn('strcmp(COINGECKO_API_KEY, "YOUR_COINGECKO_DEMO_KEY")', api)
         self.assertIn("addCoinGeckoKey && coinGeckoKeyConfigured()", api)
 
-    def test_market_data_loads_progressively_before_ota(self):
+    def test_market_data_runs_outside_the_touch_loop_after_ntp_sync(self):
         runtime = (ROOT / "src/usdt_lemon_runtime.cpp").read_text(encoding="utf-8")
+        worker = (ROOT / "src/usdt_lemon_worker.cpp").read_text(encoding="utf-8")
         header = (ROOT / "src/usdt_lemon_data.h").read_text(encoding="utf-8")
         for function in (
             "usdtDataFetchPrice",
@@ -64,16 +74,17 @@ class UsdtFirmwareContractTests(unittest.TestCase):
             "usdtDataFetchVariations",
         ):
             self.assertIn(function, header)
-            self.assertIn(function, runtime)
-        start = runtime[runtime.index("void startNetwork()") : runtime.index("void startProvisioning()")]
-        self.assertIn("s_bootOtaPending = true", start)
-        self.assertNotIn("checkUsdtOtaNow", start)
-        refresh = runtime[runtime.index("void refreshNow()") : runtime.index("void installUsdtOtaNow()")]
-        self.assertIn("s_fetchStage = USDT_FETCH_PRICE", refresh)
-        self.assertNotIn("usdtDataFetchPrice", refresh)
-        self.assertIn("void serviceDataFetch()", runtime)
-        self.assertIn("switch (s_fetchStage)", runtime)
-        self.assertIn("serviceDataFetch();", runtime)
+            self.assertIn(function, worker)
+            self.assertNotIn(function + "(", runtime)
+        self.assertIn("xTaskCreatePinnedToCore", worker)
+        self.assertIn("usdtWorkerPoll", runtime)
+        self.assertIn("if (!timeReady())", runtime)
+        loop = runtime[runtime.index("void usdtLemonLoop()") :]
+        self.assertLess(loop.index("touchLoop()"), loop.index("serviceWorkerUpdates()"))
+        self.assertNotIn("otaCheckAsset(", runtime)
+        self.assertNotIn("otaLatestTagChanged(", runtime)
+        self.assertIn("otaCheckAsset(", worker)
+        self.assertIn("otaLatestTagChanged(", worker)
         self.assertNotIn('usdtUiDrawLoading("LEYENDO MERCADO"', runtime)
         self.assertIn("constexpr uint32_t CLOCK_REDRAW_MS = 30UL * 1000UL", runtime)
 
@@ -84,18 +95,31 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         self.assertGreaterEqual(data.count(", 5000,"), 4)
         self.assertGreaterEqual(data.count(", 1);"), 4)
 
-    def test_regions_and_network_copy_match_product_scope(self):
+    def test_regions_and_network_data_match_product_scope(self):
         ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        config = (ROOT / "src/config.h").read_text(encoding="utf-8")
+        data_header = (ROOT / "src/usdt_lemon_data.h").read_text(encoding="utf-8")
+        data = (ROOT / "src/usdt_lemon_data.cpp").read_text(encoding="utf-8")
         for expected in ("ARGENTINA", "BRASIL", "PERU", "COLOMBIA"):
             self.assertIn(expected, ui)
         for removed in ("MEXICO", "GLOBAL", "MXN"):
             self.assertNotIn(removed, ui)
         self.assertIn("MISMA RED", ui)
-        self.assertIn("GUIA ESTATICA", ui)
-        self.assertIn("DEPOSITAR O RETIRAR", ui)
-        self.assertIn("OTRAS 7 EN LA APP", ui)
-        self.assertIn("DISPONIBILIDAD Y FEES: VER EN APP", ui)
-        self.assertIn("AVAX C-Chain", ui)
+        self.assertNotIn("GUIA ESTATICA", ui)
+        self.assertIn("USDT EN CIRCULACION", ui)
+        self.assertIn("24H", ui)
+        self.assertIn("formatUsdSupply", ui)
+        self.assertIn("data.networks", ui)
+        self.assertIn("DEFILLAMA_USDT_EP", config)
+        self.assertIn("UsdtNetworkData", data_header)
+        self.assertIn("usdtDataFetchNetworks", data_header)
+        self.assertIn("parseNetworkSupply", data)
+
+    def test_header_uses_actionable_retry_copy_instead_of_generic_error(self):
+        data = (ROOT / "src/usdt_lemon_data.cpp").read_text(encoding="utf-8")
+        self.assertNotIn('return "ERROR"', data)
+        self.assertIn('return "REINTENTO"', data)
+        self.assertIn("usdtFetchStatusLabel", data)
 
     def test_header_status_uses_primary_price_health(self):
         ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
@@ -105,7 +129,7 @@ class UsdtFirmwareContractTests(unittest.TestCase):
 
     def test_usdt_release_version_is_bumped(self):
         config = (ROOT / "src/config.h").read_text(encoding="utf-8")
-        self.assertIn('#define APP_VERSION "5.1.1-usdt.6"', config)
+        self.assertIn('#define APP_VERSION "5.1.1-usdt.7"', config)
     def test_main_boots_live_runtime_before_v1(self):
         main = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
         self.assertIn("#if LEMON_USDT_MODE", main)
