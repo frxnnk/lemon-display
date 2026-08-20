@@ -181,6 +181,15 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         self.assertNotIn('"24H ARS"', markets)
         self.assertNotIn('"SPREAD"', markets)
 
+    def test_markets_hides_an_expired_ars_chart(self):
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        markets = ui[ui.index("void drawMarkets") : ui.index("void drawRegions")]
+        self.assertIn("const bool chartUsable = usdtAuxDataUsable", markets)
+        self.assertIn("data.peg.variationsLastUpdateMs", markets)
+        self.assertIn("drawArsChart(data.peg, chartUsable", markets)
+        chart = ui[ui.index("void drawArsChart") : ui.index("void drawMarkets")]
+        self.assertIn("if (!usable || peg.arsChartCount < 2)", chart)
+
     def test_primary_price_refreshes_independently_every_15_seconds(self):
         runtime = (ROOT / "src/usdt_lemon_runtime.cpp").read_text(encoding="utf-8")
         worker = (ROOT / "src/usdt_lemon_worker.cpp").read_text(encoding="utf-8")

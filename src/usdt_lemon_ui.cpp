@@ -417,7 +417,8 @@ void drawNetworks(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
     }
 }
 
-void drawArsChart(const UsdtPegData& peg, bool loading, UsdtLanguage language) {
+void drawArsChart(const UsdtPegData& peg, bool usable, bool loading,
+                  UsdtLanguage language) {
     constexpr int x = SAFE;
     constexpr int y = 260;
     constexpr int w = 432;
@@ -433,7 +434,7 @@ void drawArsChart(const UsdtPegData& peg, bool loading, UsdtLanguage language) {
     s_canvas.setTextColor(TETHER_GREEN, Colors::BG_CARD);
     s_canvas.drawString("USDT / ARS - 7D", x + 14, y + 10, &Satoshi9);
 
-    if (peg.arsChartCount < 2) {
+    if (!usable || peg.arsChartCount < 2) {
         if (loading) {
             drawCardLoadingPulse(x + 14, y + 48);
         } else {
@@ -502,12 +503,14 @@ void drawMarkets(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
     formatArs(ars, sizeof(ars), data.lemon.ars);
     const bool pegUsable = usdtAuxDataUsable(
         data.peg.valid, data.peg.lastUpdateMs, millis());
+    const bool chartUsable = usdtAuxDataUsable(
+        data.peg.variationsValid, data.peg.variationsLastUpdateMs, millis());
     if (pegUsable) snprintf(usd, sizeof(usd), "%.4f", data.peg.usd);
     drawCard(SAFE, 128, 204, 120, "USDT / ARS", ars, "LEMON", Colors::TEXT_PRIMARY,
              data.fetching && !data.lemon.valid);
     drawCard(252, 128, 204, 120, "USDT / USD", usd, "PEG", Colors::TEXT_PRIMARY,
              data.fetching && !pegUsable);
-    drawArsChart(data.peg, data.fetching && data.peg.arsChartCount < 2,
+    drawArsChart(data.peg, chartUsable, data.fetching && !chartUsable,
                  model.language);
 }
 
