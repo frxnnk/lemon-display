@@ -65,6 +65,20 @@ class UsdtFirmwareContractTests(unittest.TestCase):
             ui,
         )
 
+    def test_ota_releases_worker_memory_before_tls_and_restores_it_on_failure(self):
+        runtime = (ROOT / "src/usdt_lemon_runtime.cpp").read_text(encoding="utf-8")
+        worker = (ROOT / "src/usdt_lemon_worker.cpp").read_text(encoding="utf-8")
+        worker_header = (ROOT / "src/usdt_lemon_worker.h").read_text(encoding="utf-8")
+        install = runtime[runtime.index("void installUsdtOtaNow") : runtime.index("void applyOtaResult")]
+
+        self.assertIn("void usdtWorkerStop();", worker_header)
+        self.assertIn("void usdtWorkerStop()", worker)
+        self.assertIn("vTaskDelete(s_task);", worker)
+        self.assertIn("vQueueDelete(s_commands);", worker)
+        self.assertIn("vQueueDelete(s_updates);", worker)
+        self.assertLess(install.index("usdtWorkerStop();"), install.index("otaFlash("))
+        self.assertGreater(install.index("usdtWorkerSetup();"), install.index("if (installed) return;"))
+
     def test_live_data_sources_are_independent_and_cover_regions(self):
         config = (ROOT / "src/config.h").read_text(encoding="utf-8")
         data_header = (ROOT / "src/usdt_lemon_data.h").read_text(encoding="utf-8")
@@ -572,7 +586,7 @@ class UsdtFirmwareContractTests(unittest.TestCase):
 
     def test_usdt_release_version_is_bumped(self):
         config = (ROOT / "src/config.h").read_text(encoding="utf-8")
-        self.assertIn('#define APP_VERSION "5.1.1-usdt.20"', config)
+        self.assertIn('#define APP_VERSION "5.1.1-usdt.21"', config)
     def test_main_boots_live_runtime_before_v1(self):
         main = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
         self.assertIn("#if LEMON_USDT_MODE", main)

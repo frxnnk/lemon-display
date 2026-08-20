@@ -100,6 +100,22 @@ bool usdtWorkerSetup() {
         workerTask, "usdt-net", 16384, nullptr, 1, &s_task, 1) == pdPASS;
 }
 
+void usdtWorkerStop() {
+    if (s_task) {
+        vTaskDelete(s_task);
+        s_task = nullptr;
+    }
+    if (s_commands) {
+        vQueueDelete(s_commands);
+        s_commands = nullptr;
+    }
+    if (s_updates) {
+        vQueueDelete(s_updates);
+        s_updates = nullptr;
+    }
+    s_busy = false;
+}
+
 bool usdtWorkerBusy() {
     return s_busy;
 }
