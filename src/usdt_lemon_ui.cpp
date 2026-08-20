@@ -301,7 +301,7 @@ void drawOverview(const UsdtDataSnapshot& data) {
 void drawNetworks(const UsdtDataSnapshot& data) {
     drawUsdtTitle("REDES");
     s_canvas.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_BASE);
-    s_canvas.drawString("USDT EN CIRCULACION  /  CAMBIO 24H", SAFE, 116, &Satoshi9);
+    s_canvas.drawString("RED  /  CAMBIO 24H  /  USDT EN CIRCULACION", SAFE, 116, &Satoshi9);
     for (int i = 0; i < 4; ++i) {
         const int y = 142 + i * 55;
         const UsdtNetworkMetric& metric = data.networks.metrics[i];
@@ -320,15 +320,16 @@ void drawNetworks(const UsdtDataSnapshot& data) {
         s_canvas.drawString(PRIMARY_NETWORKS[i].name, SAFE + 36, y, &Satoshi12);
         s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
         s_canvas.drawString(PRIMARY_NETWORKS[i].tag, SAFE + 36, y + 22, &Satoshi9);
-        s_canvas.setTextDatum(lgfx::top_right);
-        s_canvas.setTextColor(metric.valid ? Colors::TEXT_PRIMARY : Colors::TEXT_TERTIARY,
-                              Colors::BG_BASE);
-        s_canvas.drawString(supply, SCREEN_W - SAFE, y, &SatoshiBold24);
+        s_canvas.setTextDatum(lgfx::middle_right);
         s_canvas.setTextColor(!metric.valid ? Colors::TEXT_TERTIARY
                               : metric.change24h < 0.0f ? Colors::NEGATIVE
                               : TETHER_GREEN,
                               Colors::BG_BASE);
-        s_canvas.drawString(change, SCREEN_W - SAFE, y + 28, &Satoshi9);
+        s_canvas.drawString(change, SAFE + 230, y + 25, &Satoshi12);
+        s_canvas.setTextDatum(lgfx::top_right);
+        s_canvas.setTextColor(metric.valid ? Colors::TEXT_PRIMARY : Colors::TEXT_TERTIARY,
+                              Colors::BG_BASE);
+        s_canvas.drawString(supply, SCREEN_W - SAFE, y, &SatoshiBold24);
         s_canvas.drawFastHLine(SAFE + 36, y + 49, 396, Colors::DIVIDER);
     }
     s_canvas.setTextDatum(lgfx::top_left);
