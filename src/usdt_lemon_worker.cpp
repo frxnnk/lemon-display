@@ -9,6 +9,7 @@
 namespace {
 enum UsdtWorkerJob : uint8_t {
     USDT_JOB_DATA = 0,
+    USDT_JOB_PRICE,
     USDT_JOB_OTA_CHECK,
     USDT_JOB_OTA_PROBE,
 };
@@ -46,12 +47,22 @@ void fetchData(UsdtDataSnapshot data) {
     publishData(data, true);
 }
 
+void fetchPrice(UsdtDataSnapshot data) {
+    usdtDataFetchPrice(data);
+    UsdtWorkerUpdate update = {};
+    update.kind = USDT_WORKER_PRICE_COMPLETE;
+    update.data = data;
+    xQueueSend(s_updates, &update, portMAX_DELAY);
+}
+
 void workerTask(void*) {
     UsdtWorkerCommand command = {};
     while (true) {
         if (xQueueReceive(s_commands, &command, portMAX_DELAY) != pdTRUE) continue;
         if (command.job == USDT_JOB_DATA) {
             fetchData(command.data);
+        } else if (command.job == USDT_JOB_PRICE) {
+            fetchPrice(command.data);
         } else if (command.job == USDT_JOB_OTA_CHECK) {
             UsdtWorkerUpdate update = {};
             update.kind = USDT_WORKER_OTA_CHECK;
@@ -94,6 +105,13 @@ bool usdtWorkerBusy() {
 bool usdtWorkerRequestData(const UsdtDataSnapshot& seed) {
     UsdtWorkerCommand command = {};
     command.job = USDT_JOB_DATA;
+    command.data = seed;
+    return request(command);
+}
+
+bool usdtWorkerRequestPrice(const UsdtDataSnapshot& seed) {
+    UsdtWorkerCommand command = {};
+    command.job = USDT_JOB_PRICE;
     command.data = seed;
     return request(command);
 }
