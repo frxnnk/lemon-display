@@ -1,4 +1,6 @@
 import configparser
+import json
+import subprocess
 import unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
@@ -104,16 +106,50 @@ class UsdtFirmwareContractTests(unittest.TestCase):
             self.assertIn(expected, ui)
         for removed in ("MEXICO", "GLOBAL", "MXN"):
             self.assertNotIn(removed, ui)
-        self.assertIn("MISMA RED", ui)
+        self.assertNotIn("MISMA RED", ui)
         self.assertNotIn("GUIA ESTATICA", ui)
         self.assertIn("USDT EN CIRCULACION", ui)
         self.assertIn("24H", ui)
         self.assertIn("formatUsdSupply", ui)
         self.assertIn("data.networks", ui)
-        self.assertIn("DEFILLAMA_USDT_EP", config)
+        self.assertIn("LEMON_USDT_NETWORKS_EP", config)
+        self.assertNotIn("DEFILLAMA_USDT_EP", config)
         self.assertIn("UsdtNetworkData", data_header)
         self.assertIn("usdtDataFetchNetworks", data_header)
         self.assertIn("parseNetworkSupply", data)
+
+    def test_network_proxy_returns_a_small_stable_contract(self):
+        proxy = ROOT / "api" / "usdt-networks.js"
+        self.assertTrue(proxy.exists())
+        fixture = {
+            "peggedAssets": [{
+                "symbol": "USDT",
+                "chainCirculating": {
+                    "BSC": {"current": {"peggedUSD": 110}, "circulatingPrevDay": {"peggedUSD": 100}},
+                    "Polygon": {"current": {"peggedUSD": 200}, "circulatingPrevDay": {"peggedUSD": 250}},
+                    "Tron": {"current": {"peggedUSD": 300}, "circulatingPrevDay": {"peggedUSD": 300}},
+                    "Ethereum": {"current": {"peggedUSD": 450}, "circulatingPrevDay": {"peggedUSD": 400}},
+                },
+            }],
+        }
+        script = (
+            "const p=require('./api/usdt-networks.js');"
+            "const out=p.buildNetworkPayload(JSON.parse(process.argv[1]));"
+            "process.stdout.write(JSON.stringify(out));"
+        )
+        result = subprocess.run(
+            ["node", "-e", script, json.dumps(fixture)],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual([item["id"] for item in payload["networks"]],
+                         ["bsc", "polygon", "tron", "ethereum"])
+        self.assertAlmostEqual(payload["networks"][0]["change24h"], 10.0)
+        self.assertAlmostEqual(payload["networks"][1]["change24h"], -20.0)
+        self.assertLess(len(result.stdout), 1024)
 
     def test_header_uses_actionable_retry_copy_instead_of_generic_error(self):
         data = (ROOT / "src/usdt_lemon_data.cpp").read_text(encoding="utf-8")
@@ -129,7 +165,7 @@ class UsdtFirmwareContractTests(unittest.TestCase):
 
     def test_usdt_release_version_is_bumped(self):
         config = (ROOT / "src/config.h").read_text(encoding="utf-8")
-        self.assertIn('#define APP_VERSION "5.1.1-usdt.7"', config)
+        self.assertIn('#define APP_VERSION "5.1.1-usdt.8"', config)
     def test_main_boots_live_runtime_before_v1(self):
         main = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
         self.assertIn("#if LEMON_USDT_MODE", main)

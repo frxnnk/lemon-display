@@ -162,69 +162,39 @@ bool parseYield(const char* json, UsdtYieldData& out) {
     return false;
 }
 
-bool firstPeggedAsset(const char* json, const char*& object, size_t& length) {
-    const char* assets = json ? strstr(json, "\"peggedAssets\":[") : nullptr;
-    const char* start = assets ? strchr(assets, '{') : nullptr;
-    if (!start) return false;
-
-    bool inString = false;
-    bool escaped = false;
-    int depth = 0;
-    for (const char* cursor = start; *cursor; ++cursor) {
-        const char c = *cursor;
-        if (inString) {
-            if (escaped) escaped = false;
-            else if (c == '\\') escaped = true;
-            else if (c == '"') inString = false;
-            continue;
-        }
-        if (c == '"') {
-            inString = true;
-        } else if (c == '{') {
-            ++depth;
-        } else if (c == '}' && --depth == 0) {
-            object = start;
-            length = static_cast<size_t>(cursor - start + 1);
-            return true;
-        }
-    }
-    return false;
-}
-
 bool parseNetworkSupply(const char* json, UsdtNetworkData& out) {
-    const char* object = nullptr;
-    size_t objectLength = 0;
-    if (!firstPeggedAsset(json, object, objectLength)) return false;
-
-    static const char* chainKeys[USDT_NETWORK_COUNT] = {
-        "BSC", "Polygon", "Tron", "Ethereum"
+    static const char* networkIds[USDT_NETWORK_COUNT] = {
+        "bsc", "polygon", "tron", "ethereum"
     };
     JsonDocument filter;
-    filter["symbol"] = true;
-    for (const char* chain : chainKeys) {
-        filter["chainCirculating"][chain]["current"]["peggedUSD"] = true;
-        filter["chainCirculating"][chain]["circulatingPrevDay"]["peggedUSD"] = true;
-    }
+    filter["networks"][0]["id"] = true;
+    filter["networks"][0]["supplyUsd"] = true;
+    filter["networks"][0]["change24h"] = true;
 
     JsonDocument doc;
-    if (deserializeJson(doc, object, objectLength,
-                        DeserializationOption::Filter(filter))) {
+    if (deserializeJson(doc, json, DeserializationOption::Filter(filter))) {
         return false;
     }
-    if (!equalsIgnoreCase(doc["symbol"] | "", "USDT")) return false;
+    JsonArray rows = doc["networks"];
+    if (rows.size() != USDT_NETWORK_COUNT) return false;
 
     UsdtNetworkData next = {};
-    for (uint8_t i = 0; i < USDT_NETWORK_COUNT; ++i) {
-        JsonObject chain = doc["chainCirculating"][chainKeys[i]];
-        const float current = chain["current"]["peggedUSD"] | 0.0f;
-        const float previous = chain["circulatingPrevDay"]["peggedUSD"] | 0.0f;
-        if (!finiteRange(current, 1.0f, 1.0e12f) ||
-            !finiteRange(previous, 1.0f, 1.0e12f)) {
-            return false;
+    for (JsonObject row : rows) {
+        const char* id = row["id"] | "";
+        int index = -1;
+        for (uint8_t i = 0; i < USDT_NETWORK_COUNT; ++i) {
+            if (equalsIgnoreCase(id, networkIds[i])) index = i;
         }
-        next.metrics[i].supplyUsd = current;
-        next.metrics[i].change24h = (current / previous - 1.0f) * 100.0f;
-        next.metrics[i].valid = std::isfinite(next.metrics[i].change24h);
+        if (index < 0 || next.metrics[index].valid) return false;
+        const float supply = row["supplyUsd"] | 0.0f;
+        const float change = row["change24h"] | NAN;
+        if (!finiteRange(supply, 1.0f, 1.0e12f) ||
+            !finiteRange(change, -100.0f, 100.0f)) return false;
+        next.metrics[index].supplyUsd = supply;
+        next.metrics[index].change24h = change;
+        next.metrics[index].valid = true;
+    }
+    for (uint8_t i = 0; i < USDT_NETWORK_COUNT; ++i) {
         if (!next.metrics[i].valid) return false;
     }
     next.valid = true;
@@ -316,7 +286,7 @@ bool usdtDataFetchNetworks(UsdtDataSnapshot& io) {
     io.networks.lastAttemptMs = nowMs;
     ApiResult result = API_NETWORK_ERROR;
     const char* json = apiHttpGet(
-        DEFILLAMA_USDT_EP, false, result, 5000, 49152, 1);
+        LEMON_USDT_NETWORKS_EP, false, result, 5000, 2048, 1);
     UsdtNetworkData networks = {};
     if (result == API_OK && json && json[0] &&
         parseNetworkSupply(json, networks)) {
