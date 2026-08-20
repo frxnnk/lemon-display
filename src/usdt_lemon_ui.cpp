@@ -254,6 +254,49 @@ void variationCopy(const UsdtPegData& peg, uint32_t nowMs, char* value, size_t v
           : TETHER_GREEN;
 }
 
+void drawPegSparkline(const UsdtPegData& peg, int x, int y, int w, int h) {
+    float low = 1.0f;
+    float high = 1.0f;
+    for (uint8_t i = 0; i < peg.pegSampleCount; ++i) {
+        low = std::fmin(low, peg.pegSamples[i]);
+        high = std::fmax(high, peg.pegSamples[i]);
+    }
+    if (high - low < 0.001f) {
+        const float center = (high + low) * 0.5f;
+        low = center - 0.0005f;
+        high = center + 0.0005f;
+    }
+    const auto pointY = [&](float value) {
+        const float ratio = (value - low) / (high - low);
+        return y + h - 1 - static_cast<int>(ratio * (h - 1));
+    };
+
+    const int pegY = pointY(1.0f);
+    for (int px = x; px < x + w; px += 8) {
+        s_canvas.drawFastHLine(px, pegY, 4, Colors::CARD_BORDER);
+    }
+    s_canvas.setTextDatum(lgfx::top_right);
+    s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+    s_canvas.drawString("1.0000", x + w, y - 10, &Satoshi9);
+
+    if (peg.pegSampleCount == 0) return;
+    if (peg.pegSampleCount == 1) {
+        s_canvas.fillCircle(x + w, pointY(peg.pegSamples[0]), 3, TETHER_GREEN);
+        return;
+    }
+    int previousX = x;
+    int previousY = pointY(peg.pegSamples[0]);
+    for (uint8_t i = 1; i < peg.pegSampleCount; ++i) {
+        const int currentX = x + (w * i) / (peg.pegSampleCount - 1);
+        const int currentY = pointY(peg.pegSamples[i]);
+        s_canvas.drawLine(previousX, previousY, currentX, currentY, TETHER_GREEN);
+        s_canvas.drawLine(previousX, previousY + 1, currentX, currentY + 1, TETHER_GREEN);
+        previousX = currentX;
+        previousY = currentY;
+    }
+    s_canvas.fillCircle(previousX, previousY, 3, TETHER_GREEN);
+}
+
 void drawOverview(const UsdtDataSnapshot& data) {
     drawTetherLogo64((SCREEN_W - 64) / 2, 76);
     const uint32_t nowMs = millis();
@@ -285,17 +328,26 @@ void drawOverview(const UsdtDataSnapshot& data) {
              yieldUsable ? TETHER_GREEN : Colors::TEXT_TERTIARY);
 
     char pegValue[20] = "--";
-    char pegSuffix[20] = "USD";
+    char pegSuffix[28] = "USD";
     uint16_t pegColor = Colors::TEXT_TERTIARY;
     const bool pegUsable = usdtAuxDataUsable(
         data.peg.valid, data.peg.lastUpdateMs, nowMs);
     if (pegUsable) {
         snprintf(pegValue, sizeof(pegValue), "%.4f", data.peg.usd);
         const float bps = (data.peg.usd - 1.0f) * 10000.0f;
-        snprintf(pegSuffix, sizeof(pegSuffix), "%+.1f BPS", bps);
+        snprintf(pegSuffix, sizeof(pegSuffix), "DESVIO %+.1f BPS", bps);
         pegColor = std::fabs(bps) <= 25.0f ? TETHER_GREEN : Colors::NEGATIVE;
     }
-    drawCard(SAFE, 310, 432, 82, "PEG USD", pegValue, pegSuffix, pegColor);
+    s_canvas.fillSmoothRoundRect(SAFE, 310, 432, 82, 12, Colors::BG_CARD);
+    s_canvas.drawRoundRect(SAFE, 310, 432, 82, 12, Colors::CARD_BORDER);
+    s_canvas.setTextDatum(lgfx::top_left);
+    s_canvas.setTextColor(TETHER_GREEN, Colors::BG_CARD);
+    s_canvas.drawString("PEG USD", SAFE + 14, 320, &Satoshi9);
+    s_canvas.setTextColor(pegColor, Colors::BG_CARD);
+    s_canvas.drawString(pegValue, SAFE + 14, 342, &SatoshiBold24);
+    s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+    s_canvas.drawString(pegSuffix, SAFE + 14, 374, &Satoshi9);
+    drawPegSparkline(data.peg, 250, 332, 190, 42);
 }
 
 void drawNetworks(const UsdtDataSnapshot& data) {
