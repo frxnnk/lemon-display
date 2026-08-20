@@ -380,14 +380,13 @@ void drawOverview(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
 }
 
 void drawNetworks(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
-    drawUsdtTitle(tr(model.language, "REDES", "NETWORKS"));
+    drawUsdtTitle(tr(model.language, "REDES", "CHAINS"));
+    s_canvas.setTextDatum(lgfx::top_center);
     s_canvas.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_BASE);
-    s_canvas.drawString(tr(model.language,
-                           "RED  /  CAMBIO 24H  /  USDT EN CIRCULACION",
-                           "CHAIN  /  24H CHANGE  /  USDT SUPPLY"),
-                        SAFE, 116, &Satoshi9);
+    s_canvas.drawString(tr(model.language, "CAMBIO 24H", "24H CHANGE"),
+                        SCREEN_W / 2, 116, &Satoshi9);
     for (int i = 0; i < 4; ++i) {
-        const int y = 142 + i * 55;
+        const int y = 145 + i * 65;
         const UsdtNetworkMetric& metric = data.networks.metrics[i];
         char supply[20] = "--";
         char change[20] = "--";
@@ -414,7 +413,7 @@ void drawNetworks(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
         s_canvas.setTextColor(metric.valid ? Colors::TEXT_PRIMARY : Colors::TEXT_TERTIARY,
                               Colors::BG_BASE);
         s_canvas.drawString(supply, SCREEN_W - SAFE, y, &SatoshiBold24);
-        s_canvas.drawFastHLine(SAFE + 36, y + 49, 396, Colors::DIVIDER);
+        s_canvas.drawFastHLine(SAFE + 36, y + 58, 396, Colors::DIVIDER);
     }
 }
 
@@ -435,16 +434,16 @@ void drawMarkets(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
         snprintf(spread, sizeof(spread), "%.2f%%",
                  (data.lemon.ask - data.lemon.bid) * 100.0f / data.lemon.ask);
     }
-    drawCard(SAFE, 132, 204, 86, "USDT / ARS", ars, "LEMON", Colors::TEXT_PRIMARY,
+    drawCard(SAFE, 128, 204, 120, "USDT / ARS", ars, "LEMON", Colors::TEXT_PRIMARY,
              data.fetching && !data.lemon.valid);
-    drawCard(252, 132, 204, 86, "USDT / USD", usd, "PEG", Colors::TEXT_PRIMARY,
+    drawCard(252, 128, 204, 120, "USDT / USD", usd, "PEG", Colors::TEXT_PRIMARY,
              data.fetching && !pegUsable);
-    drawCard(SAFE, 232, 204, 86, "24H ARS", change,
+    drawCard(SAFE, 260, 204, 120, "24H ARS", change,
              tr(model.language, "VARIACION", "CHANGE"),
              !variationsUsable ? Colors::TEXT_TERTIARY
              : data.peg.change24h < 0 ? Colors::NEGATIVE : TETHER_GREEN,
              data.fetching && !variationsUsable);
-    drawCard(252, 232, 204, 86, "SPREAD", spread, "BID / ASK", Colors::TEXT_PRIMARY,
+    drawCard(252, 260, 204, 120, "SPREAD", spread, "BID / ASK", Colors::TEXT_PRIMARY,
              data.fetching && !data.lemon.valid);
 }
 
@@ -464,19 +463,19 @@ void drawRegions(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
         snprintf(pen, sizeof(pen), "%.2f", data.peg.pen);
         snprintf(cop, sizeof(cop), "%.0f", data.peg.cop);
     }
-    drawCard(SAFE, 132, 204, 86, "ARGENTINA", ars, "ARS", Colors::TEXT_PRIMARY,
+    drawCard(SAFE, 128, 204, 120, "ARGENTINA", ars, "ARS", Colors::TEXT_PRIMARY,
              data.fetching && !arsUsable);
-    drawCard(252, 132, 204, 86, tr(model.language, "BRASIL", "BRAZIL"),
+    drawCard(252, 128, 204, 120, tr(model.language, "BRASIL", "BRAZIL"),
              brl, "BRL", Colors::TEXT_PRIMARY,
              data.fetching && !regionsUsable);
-    drawCard(SAFE, 232, 204, 86, "PERU", pen, "PEN", Colors::TEXT_PRIMARY,
+    drawCard(SAFE, 260, 204, 120, "PERU", pen, "PEN", Colors::TEXT_PRIMARY,
              data.fetching && !regionsUsable);
-    drawCard(252, 232, 204, 86, "COLOMBIA", cop, "COP", Colors::TEXT_PRIMARY,
+    drawCard(252, 260, 204, 120, "COLOMBIA", cop, "COP", Colors::TEXT_PRIMARY,
              data.fetching && !regionsUsable);
-    drawArgentinaFlag(176, 142);
-    drawBrazilFlag(404, 142);
-    drawPeruFlag(176, 242);
-    drawColombiaFlag(404, 242);
+    drawArgentinaFlag(176, 140);
+    drawBrazilFlag(404, 140);
+    drawPeruFlag(176, 272);
+    drawColombiaFlag(404, 272);
 }
 
 void drawSystemControl(int y, const char* label, const char* value,
