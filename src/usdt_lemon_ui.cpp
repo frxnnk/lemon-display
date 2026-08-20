@@ -223,15 +223,29 @@ void formatUsdSupply(char* out, size_t outSize, float value) {
     }
 }
 
+void drawCardLoadingPulse(int x, int y) {
+    const uint8_t phase = (millis() / 400UL) % 3;
+    for (uint8_t i = 0; i < 3; ++i) {
+        const int height = i == phase ? 14 : 7;
+        const uint16_t color = i == phase ? TETHER_GREEN : Colors::CARD_BORDER;
+        s_canvas.fillSmoothRoundRect(x + i * 12, y + 14 - height,
+                                     7, height, 3, color);
+    }
+}
+
 void drawCard(int x, int y, int w, int h, const char* label, const char* value,
-              const char* suffix, uint16_t valueColor) {
+              const char* suffix, uint16_t valueColor, bool loading = false) {
     s_canvas.fillSmoothRoundRect(x, y, w, h, 12, Colors::BG_CARD);
     s_canvas.drawRoundRect(x, y, w, h, 12, Colors::CARD_BORDER);
     s_canvas.setTextDatum(lgfx::top_left);
     s_canvas.setTextColor(TETHER_GREEN, Colors::BG_CARD);
     s_canvas.drawString(label, x + 14, y + 10, &Satoshi9);
-    s_canvas.setTextColor(valueColor, Colors::BG_CARD);
-    s_canvas.drawString(value, x + 14, y + 32, &SatoshiBold24);
+    if (loading) {
+        drawCardLoadingPulse(x + 14, y + 36);
+    } else {
+        s_canvas.setTextColor(valueColor, Colors::BG_CARD);
+        s_canvas.drawString(value, x + 14, y + 32, &SatoshiBold24);
+    }
     if (suffix) {
         s_canvas.setTextDatum(lgfx::bottom_right);
         s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
@@ -318,14 +332,18 @@ void drawOverview(const UsdtDataSnapshot& data) {
     uint16_t variationColor = Colors::TEXT_TERTIARY;
     variationCopy(data.peg, nowMs, variation, sizeof(variation),
                   variationSuffix, sizeof(variationSuffix), variationColor);
-    drawCard(SAFE, 216, 204, 82, "VARIACION", variation, variationSuffix, variationColor);
+    const bool variationUsable = usdtAuxDataUsable(
+        data.peg.variationsValid, data.peg.variationsLastUpdateMs, nowMs);
+    drawCard(SAFE, 216, 204, 82, "VARIACION", variation, variationSuffix,
+             variationColor, data.fetching && !variationUsable);
 
     char yieldValue[20] = "--";
     const bool yieldUsable = usdtAuxDataUsable(
         data.yield.valid, data.yield.lastUpdateMs, nowMs);
     if (yieldUsable) snprintf(yieldValue, sizeof(yieldValue), "%.2f%%", data.yield.aprPercent);
     drawCard(252, 216, 204, 82, "RENDIMIENTO", yieldValue, "LEMON YIELD",
-             yieldUsable ? TETHER_GREEN : Colors::TEXT_TERTIARY);
+             yieldUsable ? TETHER_GREEN : Colors::TEXT_TERTIARY,
+             data.fetching && !yieldUsable);
 
     char pegValue[20] = "--";
     char pegSuffix[28] = "USD";
@@ -343,11 +361,16 @@ void drawOverview(const UsdtDataSnapshot& data) {
     s_canvas.setTextDatum(lgfx::top_left);
     s_canvas.setTextColor(TETHER_GREEN, Colors::BG_CARD);
     s_canvas.drawString("PEG USD", SAFE + 14, 320, &Satoshi9);
-    s_canvas.setTextColor(pegColor, Colors::BG_CARD);
-    s_canvas.drawString(pegValue, SAFE + 14, 342, &SatoshiBold24);
+    const bool pegLoading = data.fetching && !pegUsable;
+    if (pegLoading) {
+        drawCardLoadingPulse(SAFE + 14, 350);
+    } else {
+        s_canvas.setTextColor(pegColor, Colors::BG_CARD);
+        s_canvas.drawString(pegValue, SAFE + 14, 342, &SatoshiBold24);
+    }
     s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
     s_canvas.drawString(pegSuffix, SAFE + 14, 374, &Satoshi9);
-    drawPegSparkline(data.peg, 250, 332, 190, 42);
+    if (!pegLoading) drawPegSparkline(data.peg, 250, 332, 190, 42);
 }
 
 void drawNetworks(const UsdtDataSnapshot& data) {
@@ -411,12 +434,16 @@ void drawMarkets(const UsdtDataSnapshot& data) {
         snprintf(spread, sizeof(spread), "%.2f%%",
                  (data.lemon.ask - data.lemon.bid) * 100.0f / data.lemon.ask);
     }
-    drawCard(SAFE, 132, 204, 86, "USDT / ARS", ars, "LEMON", Colors::TEXT_PRIMARY);
-    drawCard(252, 132, 204, 86, "USDT / USD", usd, "PEG", Colors::TEXT_PRIMARY);
+    drawCard(SAFE, 132, 204, 86, "USDT / ARS", ars, "LEMON", Colors::TEXT_PRIMARY,
+             data.fetching && !data.lemon.valid);
+    drawCard(252, 132, 204, 86, "USDT / USD", usd, "PEG", Colors::TEXT_PRIMARY,
+             data.fetching && !pegUsable);
     drawCard(SAFE, 232, 204, 86, "24H ARS", change, "VARIACION",
              !variationsUsable ? Colors::TEXT_TERTIARY
-             : data.peg.change24h < 0 ? Colors::NEGATIVE : TETHER_GREEN);
-    drawCard(252, 232, 204, 86, "SPREAD", spread, "BID / ASK", Colors::TEXT_PRIMARY);
+             : data.peg.change24h < 0 ? Colors::NEGATIVE : TETHER_GREEN,
+             data.fetching && !variationsUsable);
+    drawCard(252, 232, 204, 86, "SPREAD", spread, "BID / ASK", Colors::TEXT_PRIMARY,
+             data.fetching && !data.lemon.valid);
     s_canvas.setTextDatum(lgfx::top_left);
     s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
     s_canvas.drawString("DATOS DE MERCADO USDt", SAFE, 368, &Satoshi9);
@@ -431,15 +458,21 @@ void drawRegions(const UsdtDataSnapshot& data) {
     formatArs(ars, sizeof(ars), data.lemon.valid ? data.lemon.ars : data.peg.ars);
     const bool regionsUsable = usdtAuxDataUsable(
         data.peg.regionsValid, data.peg.regionsLastUpdateMs, millis());
+    const bool arsUsable = data.lemon.valid ||
+        (data.peg.variationsValid && data.peg.ars > 0.0f);
     if (regionsUsable) {
         snprintf(brl, sizeof(brl), "%.2f", data.peg.brl);
         snprintf(pen, sizeof(pen), "%.2f", data.peg.pen);
         snprintf(cop, sizeof(cop), "%.0f", data.peg.cop);
     }
-    drawCard(SAFE, 132, 204, 86, "ARGENTINA", ars, "ARS", Colors::TEXT_PRIMARY);
-    drawCard(252, 132, 204, 86, "BRASIL", brl, "BRL", Colors::TEXT_PRIMARY);
-    drawCard(SAFE, 232, 204, 86, "PERU", pen, "PEN", Colors::TEXT_PRIMARY);
-    drawCard(252, 232, 204, 86, "COLOMBIA", cop, "COP", Colors::TEXT_PRIMARY);
+    drawCard(SAFE, 132, 204, 86, "ARGENTINA", ars, "ARS", Colors::TEXT_PRIMARY,
+             data.fetching && !arsUsable);
+    drawCard(252, 132, 204, 86, "BRASIL", brl, "BRL", Colors::TEXT_PRIMARY,
+             data.fetching && !regionsUsable);
+    drawCard(SAFE, 232, 204, 86, "PERU", pen, "PEN", Colors::TEXT_PRIMARY,
+             data.fetching && !regionsUsable);
+    drawCard(252, 232, 204, 86, "COLOMBIA", cop, "COP", Colors::TEXT_PRIMARY,
+             data.fetching && !regionsUsable);
     drawArgentinaFlag(176, 142);
     drawBrazilFlag(404, 142);
     drawPeruFlag(176, 242);

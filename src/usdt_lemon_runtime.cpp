@@ -21,6 +21,7 @@ namespace {
 constexpr uint32_t FULL_REFRESH_INTERVAL_MS = 60UL * 1000UL;
 constexpr uint32_t PRICE_REFRESH_INTERVAL_MS = 15UL * 1000UL;
 constexpr uint32_t CLOCK_REDRAW_MS = 30UL * 1000UL;
+constexpr uint32_t LOADING_ANIMATION_MS = 400;
 constexpr uint32_t OTA_PROBE_MS = 60UL * 1000UL;
 constexpr uint32_t OTA_CHECK_MS = 5UL * 60UL * 1000UL;
 constexpr uint32_t OTA_FAILURE_RETRY_MS = 30UL * 60UL * 1000UL;
@@ -322,7 +323,8 @@ void usdtLemonLoop() {
     if (usdtApplyTimeout(s_model, nowMs)) redraw();
     serviceNetworkScheduling(nowMs);
     const uint8_t variation = usdtVariationIndex(nowMs);
-    if (nowMs - s_lastDrawMs >= CLOCK_REDRAW_MS || variation != s_lastVariation) {
+    if ((s_data.fetching && nowMs - s_lastDrawMs >= LOADING_ANIMATION_MS) ||
+        nowMs - s_lastDrawMs >= CLOCK_REDRAW_MS || variation != s_lastVariation) {
         redraw();
     }
     delay(4);
