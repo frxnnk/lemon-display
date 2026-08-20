@@ -45,7 +45,7 @@ python -m platformio run -e matouch_esp32s3_40_usdt
 
 Binario: `.pio/build/matouch_esp32s3_40_usdt/firmware.bin`
 Asset OTA: `firmware-usdt.bin`
-Version: `5.1.1-usdt.13` (`APP_VERSION` cuando `LEMON_USDT_MODE=1`)
+Version: `5.1.1-usdt.14` (`APP_VERSION` cuando `LEMON_USDT_MODE=1`)
 
 La pantalla Redes consume `https://lemon-box.vercel.app/api/usdt-networks`.
 Ese proxy toma la oferta por cadena de DefiLlama, calcula el cambio de 24 horas y
@@ -100,10 +100,15 @@ Los artefactos de recovery salen de `.pio/build/matouch_esp32s3_40_usdt/` y `boo
 Despues del primer USB, la cajita:
 
 1. Consulta `https://api.github.com/repos/frxnnk/lemon-display/releases/latest`
-2. Compara el tag contra `APP_VERSION` (`5.1.1-usdt.13`)
+2. Compara el tag contra `APP_VERSION` (`5.1.1-usdt.14`)
 3. Busca exactamente el asset `firmware-usdt.bin`
 4. Exige MD5 en el body: `firmware-usdt.bin MD5: <32 hex lowercase>`
 5. Descarga, flashea y reinicia sola
+
+El metadata check usa `browser_download_url` para evitar una segunda conexión
+TLS redundante a `api.github.com`. Si una descarga falla sin reiniciar, el
+firmware mantiene la UI operativa y espera 30 minutos antes del siguiente
+intento automático.
 
 Publicar un update:
 
