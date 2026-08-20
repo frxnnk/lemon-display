@@ -17,6 +17,10 @@ function buildNetworkPayload(upstream) {
     (asset) => String(asset?.symbol).toUpperCase() === "USDT",
   );
   if (!tether) throw new Error("USDT asset missing from upstream");
+  const totalSupplyUsd = Number(tether?.circulating?.peggedUSD);
+  if (!finitePositive(totalSupplyUsd)) {
+    throw new Error("Invalid USDT circulating supply from upstream");
+  }
 
   const networks = NETWORKS.map(([id, chain]) => {
     const row = tether.chainCirculating?.[chain];
@@ -35,6 +39,7 @@ function buildNetworkPayload(upstream) {
   return {
     source: "defillama",
     asOf: new Date().toISOString(),
+    totalSupplyUsd,
     networks,
   };
 }

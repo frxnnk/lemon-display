@@ -63,6 +63,7 @@ struct UsdtNetworkMetric {
 
 struct UsdtNetworkData {
     UsdtNetworkMetric metrics[USDT_NETWORK_COUNT] = {};
+    float totalSupplyUsd = 0.0f;
     uint32_t lastUpdateMs = 0;
     uint32_t lastAttemptMs = 0;
     bool valid = false;
