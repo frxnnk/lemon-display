@@ -591,7 +591,7 @@ class UsdtFirmwareContractTests(unittest.TestCase):
 
     def test_usdt_release_version_is_bumped(self):
         config = (ROOT / "src/config.h").read_text(encoding="utf-8")
-        self.assertIn('#define APP_VERSION "5.1.1-usdt.21"', config)
+        self.assertIn('#define APP_VERSION "5.1.1-usdt.22"', config)
     def test_main_boots_live_runtime_before_v1(self):
         main = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
         self.assertIn("#if LEMON_USDT_MODE", main)
