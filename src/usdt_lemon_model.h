@@ -186,7 +186,12 @@ inline bool usdtHandleGesture(UsdtRuntimeModel& model, const TouchEvent& event,
             USDT_SCENE_COUNT);
     }
     model.lastInteractionMs = nowMs;
-    if (before != model.scene) model.sceneEnteredMs = nowMs;
+    if (before != model.scene) {
+        model.sceneEnteredMs = nowMs;
+        if (model.scene == USDT_MARKETS) {
+            model.marketPair = USDT_MARKET_ARS;
+        }
+    }
     return before != model.scene || model.refreshRequested;
 }
 

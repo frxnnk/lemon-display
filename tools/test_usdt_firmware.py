@@ -80,7 +80,7 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         self.assertGreaterEqual(data.count("DeserializationOption::Filter"), 2)
         self.assertIn("USDT_VARIATIONS_REFRESH_MS", data)
         self.assertIn("USDT_VARIATIONS_RETRY_MS", data)
-        self.assertIn("io.peg.variationsValid ? USDT_VARIATIONS_REFRESH_MS", data)
+        self.assertIn("io.variationsStatus == USDT_FETCH_OK", data)
         self.assertIn("out.regionsValid = false", data)
 
     def test_market_chart_keeps_a_bounded_downsampled_ars_series(self):
@@ -153,6 +153,30 @@ class UsdtFirmwareContractTests(unittest.TestCase):
             loop.index("handleMarketControl(event)"),
             loop.index("usdtHandleGesture(s_model"),
         )
+
+    def test_entering_markets_resets_the_default_pair_to_ars(self):
+        model = (ROOT / "src/usdt_lemon_model.h").read_text(encoding="utf-8")
+        gestures = model[
+            model.index("inline bool usdtHandleGesture") :
+            model.index("inline bool usdtApplyTimeout")
+        ]
+        self.assertIn("if (model.scene == USDT_MARKETS)", gestures)
+        self.assertIn("model.marketPair = USDT_MARKET_ARS", gestures)
+
+    def test_failed_market_chart_refreshes_retry_without_waiting_thirty_minutes(self):
+        data = (ROOT / "src/usdt_lemon_data.cpp").read_text(encoding="utf-8")
+        ars_fetch = data[
+            data.index("bool usdtDataFetchVariations") :
+            data.index("bool usdtDataFetchUsdChart")
+        ]
+        usd_fetch = data[
+            data.index("bool usdtDataFetchUsdChart") :
+            data.index("bool usdtDataFetchYield")
+        ]
+        self.assertIn("io.variationsStatus == USDT_FETCH_OK", ars_fetch)
+        self.assertNotIn("io.peg.variationsValid ?", ars_fetch)
+        self.assertIn("io.usdChartStatus == USDT_FETCH_OK", usd_fetch)
+        self.assertNotIn("io.peg.usdChartValid ?", usd_fetch)
 
     def test_placeholder_coingecko_key_is_never_sent(self):
         api = (ROOT / "src/api_client.cpp").read_text(encoding="utf-8")
