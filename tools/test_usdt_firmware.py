@@ -83,6 +83,16 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         self.assertIn("io.peg.variationsValid ? USDT_VARIATIONS_REFRESH_MS", data)
         self.assertIn("out.regionsValid = false", data)
 
+    def test_market_chart_keeps_a_bounded_downsampled_ars_series(self):
+        header = (ROOT / "src/usdt_lemon_data.h").read_text(encoding="utf-8")
+        data = (ROOT / "src/usdt_lemon_data.cpp").read_text(encoding="utf-8")
+        self.assertIn("USDT_ARS_CHART_POINT_COUNT = 48", header)
+        self.assertIn("float arsChart[USDT_ARS_CHART_POINT_COUNT]", header)
+        self.assertIn("uint8_t arsChartCount", header)
+        self.assertIn("const size_t sampleCount = min", data)
+        self.assertIn("out.arsChart[sampleIndex]", data)
+        self.assertIn("out.arsChartCount = sampleCount", data)
+
     def test_placeholder_coingecko_key_is_never_sent(self):
         api = (ROOT / "src/api_client.cpp").read_text(encoding="utf-8")
         self.assertIn("coinGeckoKeyConfigured", api)
@@ -129,6 +139,10 @@ class UsdtFirmwareContractTests(unittest.TestCase):
             "s_canvas.drawString(change, SAFE + 230, y + 25, &Satoshi12);",
             networks,
         )
+        self.assertNotIn(
+            "s_canvas.drawString(change, SCREEN_W - SAFE, y + 28, &Satoshi9);",
+            networks,
+        )
 
     def test_chains_title_and_centered_subtitle_use_the_requested_copy(self):
         ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
@@ -148,13 +162,24 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         regions = ui[ui.index("void drawRegions") : ui.index("void drawSystem")]
         self.assertIn("const int y = 145 + i * 65", networks)
         self.assertIn("drawCard(SAFE, 128, 204, 120", markets)
-        self.assertIn("drawCard(SAFE, 260, 204, 120", markets)
+        self.assertIn("drawArsChart(data.peg", markets)
         self.assertIn("drawCard(SAFE, 128, 204, 120", regions)
         self.assertIn("drawCard(SAFE, 260, 204, 120", regions)
-        self.assertNotIn(
-            "s_canvas.drawString(change, SCREEN_W - SAFE, y + 28, &Satoshi9);",
-            networks,
-        )
+
+    def test_markets_uses_a_full_width_seven_day_ars_chart(self):
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        self.assertIn("void drawArsChart", ui)
+        chart = ui[ui.index("void drawArsChart") : ui.index("void drawMarkets")]
+        self.assertIn('"USDT / ARS - 7D"', chart)
+        self.assertIn('tr(language, "ACTUAL", "CURRENT")', chart)
+        self.assertIn('"MIN %s"', chart)
+        self.assertIn('"MAX %s"', chart)
+        self.assertIn("peg.arsChartCount", chart)
+        self.assertIn("s_canvas.drawLine", chart)
+        markets = ui[ui.index("void drawMarkets") : ui.index("void drawRegions")]
+        self.assertIn("drawArsChart(data.peg", markets)
+        self.assertNotIn('"24H ARS"', markets)
+        self.assertNotIn('"SPREAD"', markets)
 
     def test_primary_price_refreshes_independently_every_15_seconds(self):
         runtime = (ROOT / "src/usdt_lemon_runtime.cpp").read_text(encoding="utf-8")
@@ -422,7 +447,7 @@ class UsdtFirmwareContractTests(unittest.TestCase):
 
     def test_usdt_release_version_is_bumped(self):
         config = (ROOT / "src/config.h").read_text(encoding="utf-8")
-        self.assertIn('#define APP_VERSION "5.1.1-usdt.17"', config)
+        self.assertIn('#define APP_VERSION "5.1.1-usdt.18"', config)
     def test_main_boots_live_runtime_before_v1(self):
         main = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
         self.assertIn("#if LEMON_USDT_MODE", main)

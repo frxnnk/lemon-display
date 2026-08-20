@@ -110,6 +110,19 @@ bool parseMarketChart(const char* json, UsdtPegData& out) {
     const float latestPrice = latest[1].as<float>();
     if (latestMs == 0 || !finiteRange(latestPrice, 100.0f, 100000.0f)) return false;
 
+    const size_t sampleCount = min(
+        static_cast<size_t>(USDT_ARS_CHART_POINT_COUNT), prices.size());
+    float chartSamples[USDT_ARS_CHART_POINT_COUNT] = {};
+    for (size_t sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
+        const size_t sourceIndex = sampleCount == 1
+            ? 0
+            : sampleIndex * (prices.size() - 1) / (sampleCount - 1);
+        JsonArray point = prices[sourceIndex];
+        const float samplePrice = point[1].as<float>();
+        if (!finiteRange(samplePrice, 100.0f, 100000.0f)) return false;
+        chartSamples[sampleIndex] = samplePrice;
+    }
+
     auto closestPrice = [&](uint64_t targetMs) {
         float bestPrice = 0.0f;
         uint64_t bestDelta = UINT64_MAX;
@@ -144,6 +157,10 @@ bool parseMarketChart(const char* json, UsdtPegData& out) {
     out.change1h = change1h;
     out.change24h = change24h;
     out.change7d = change7d;
+    for (size_t sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
+        out.arsChart[sampleIndex] = chartSamples[sampleIndex];
+    }
+    out.arsChartCount = sampleCount;
     out.variationsValid = true;
     out.variationsLastUpdateMs = millis();
     return true;

@@ -12,6 +12,7 @@ struct UsdtPriceData {
 };
 
 constexpr uint8_t USDT_PEG_SAMPLE_COUNT = 24;
+constexpr uint8_t USDT_ARS_CHART_POINT_COUNT = 48;
 
 struct UsdtPegData {
     float usd = 0.0f;
@@ -24,6 +25,8 @@ struct UsdtPegData {
     float cop = 0.0f;
     float pegSamples[USDT_PEG_SAMPLE_COUNT] = {};
     uint8_t pegSampleCount = 0;
+    float arsChart[USDT_ARS_CHART_POINT_COUNT] = {};
+    uint8_t arsChartCount = 0;
     uint32_t lastUpdateMs = 0;
     uint32_t variationsLastUpdateMs = 0;
     uint32_t variationsLastAttemptMs = 0;
