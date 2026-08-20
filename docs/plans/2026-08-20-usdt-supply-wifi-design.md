@@ -31,4 +31,3 @@ the loading animation.
 Ship both changes as `5.1.1-usdt.22`. Verify proxy fixture output, parser/UI
 contracts, initial Wi-Fi retry behavior, the full Python suite, the production
 USDT build, release hashes, the live proxy response, and the GitHub OTA asset.
-
