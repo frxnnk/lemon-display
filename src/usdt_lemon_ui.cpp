@@ -148,17 +148,11 @@ void drawOverview(const UsdtDataSnapshot& data) {
         snprintf(pegSuffix, sizeof(pegSuffix), "%+.1f BPS", bps);
         pegColor = std::fabs(bps) <= 25.0f ? TETHER_GREEN : Colors::NEGATIVE;
     }
-    drawCard(SAFE, 270, 204, 86, "PEG", pegValue, pegSuffix, pegColor);
-
-    char bid[16] = "--";
-    char ask[16] = "--";
-    formatArs(bid, sizeof(bid), data.lemon.bid);
-    formatArs(ask, sizeof(ask), data.lemon.ask);
-    drawCard(252, 270, 204, 86, "LEMON", ask, bid, Colors::TEXT_PRIMARY);
+    drawCard(SAFE, 270, 432, 86, "PEG", pegValue, pegSuffix, pegColor);
 
     s_canvas.setTextDatum(lgfx::top_left);
     s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-    s_canvas.drawString("DATOS DE MERCADO EN VIVO", SAFE, 368, &Satoshi9);
+    s_canvas.drawString("DOLAR DIGITAL LEMON", SAFE, 368, &Satoshi9);
     s_canvas.setTextDatum(lgfx::top_right);
     s_canvas.drawString("TOCA ARRIBA PARA ACTUALIZAR", SCREEN_W - SAFE, 368, &Satoshi9);
 }
@@ -181,9 +175,11 @@ void drawNetworks() {
         s_canvas.drawFastHLine(SAFE + 22, y + 30, 410, Colors::DIVIDER);
     }
     s_canvas.setTextDatum(lgfx::top_left);
-    s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-    s_canvas.drawString("+7  ARB AVAX CELO MONAD OP RSK SOL", SAFE, 328, &Satoshi9);
-    s_canvas.drawString("MAPA INFORMATIVO / LEMON", SAFE, 368, &Satoshi9);
+    s_canvas.setTextColor(TETHER_GREEN, Colors::BG_BASE);
+    s_canvas.drawString("+7 REDES", SAFE, 318, &Satoshi9);
+    s_canvas.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_BASE);
+    s_canvas.drawString("Arbitrum   AVAX C-Chain   CELO", SAFE, 338, &Satoshi9);
+    s_canvas.drawString("Monad   Optimism   Rootstock   Solana", SAFE, 358, &Satoshi9);
 }
 
 void drawMarkets(const UsdtDataSnapshot& data) {
@@ -239,19 +235,19 @@ void drawSystem(const UsdtDataSnapshot& data, const UsdtDeviceInfo& device) {
     s_canvas.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_BASE);
     s_canvas.drawString("SISTEMA", SAFE, 82, &SatoshiBold24);
     char signal[20], heap[20], uptime[20];
-    snprintf(signal, sizeof(signal), "%ld DBM", static_cast<long>(device.rssi));
+    snprintf(signal, sizeof(signal), "%ld dBm", static_cast<long>(device.rssi));
     snprintf(heap, sizeof(heap), "%lu KB", static_cast<unsigned long>(device.freeHeap / 1024));
     snprintf(uptime, sizeof(uptime), "%lu MIN", static_cast<unsigned long>(device.uptimeSeconds / 60));
     const char* ota = data.ota.checking ? "BUSCANDO"
                      : data.ota.available ? data.ota.version
                      : data.ota.checked ? "AL DIA"
                      : "PENDIENTE";
-    static const char* labels[] = {"RED", "IP", "OTA", "MEMORIA", "UPTIME"};
+    static const char* labels[] = {"VERSION", "RED", "SENAL", "OTA", "UPTIME"};
     const char* values[] = {
+        "v" APP_VERSION,
         data.online ? (device.ssid[0] ? device.ssid : "CONECTADO") : "OFFLINE",
-        device.ip[0] ? device.ip : "--",
+        data.online ? signal : "--",
         ota,
-        heap,
         uptime
     };
     for (int i = 0; i < 5; ++i) {
