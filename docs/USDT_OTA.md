@@ -45,7 +45,7 @@ python -m platformio run -e matouch_esp32s3_40_usdt
 
 Binario: `.pio/build/matouch_esp32s3_40_usdt/firmware.bin`
 Asset OTA: `firmware-usdt.bin`
-Version: `5.1.1-usdt.11` (`APP_VERSION` cuando `LEMON_USDT_MODE=1`)
+Version: `5.1.1-usdt.12` (`APP_VERSION` cuando `LEMON_USDT_MODE=1`)
 
 La pantalla Redes consume `https://lemon-box.vercel.app/api/usdt-networks`.
 Ese proxy toma la oferta por cadena de DefiLlama, calcula el cambio de 24 horas y
@@ -59,7 +59,8 @@ decimales y una bandera argentina junto al valor en ARS.
 Regiones identifica cada tarjeta con la bandera de Argentina, Brasil, Perú o
 Colombia en su esquina superior derecha.
 Redes identifica BNB Chain, Polygon, Tron y Ethereum con íconos vectoriales de
-sus respectivas cadenas.
+sus respectivas cadenas. La variación 24h se muestra a la izquierda con mayor
+jerarquía y el supply queda a la derecha.
 
 ## Flash USB inicial (DIO keep)
 
@@ -97,7 +98,7 @@ Los artefactos de recovery salen de `.pio/build/matouch_esp32s3_40_usdt/` y `boo
 Despues del primer USB, la cajita:
 
 1. Consulta `https://api.github.com/repos/frxnnk/lemon-display/releases/latest`
-2. Compara el tag contra `APP_VERSION` (`5.1.1-usdt.11`)
+2. Compara el tag contra `APP_VERSION` (`5.1.1-usdt.12`)
 3. Busca exactamente el asset `firmware-usdt.bin`
 4. Exige MD5 en el body: `firmware-usdt.bin MD5: <32 hex lowercase>`
 5. Descarga, flashea y reinicia sola
