@@ -129,6 +129,28 @@ class UsdtFirmwareContractTests(unittest.TestCase):
             "s_canvas.drawString(change, SAFE + 230, y + 25, &Satoshi12);",
             networks,
         )
+
+    def test_chains_title_and_centered_subtitle_use_the_requested_copy(self):
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        networks = ui[ui.index("void drawNetworks") : ui.index("void drawMarkets")]
+        self.assertIn('tr(model.language, "REDES", "CHAINS")', networks)
+        self.assertIn('tr(model.language, "CAMBIO 24H", "24H CHANGE")', networks)
+        self.assertIn("setTextDatum(lgfx::top_center)", networks)
+        self.assertIn("SCREEN_W / 2, 116", networks)
+        self.assertNotIn('"NETWORKS"', networks)
+        self.assertNotIn('"CHAIN  /', networks)
+        self.assertNotIn("USDT SUPPLY", networks)
+
+    def test_chains_markets_and_regions_fill_the_available_body(self):
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        networks = ui[ui.index("void drawNetworks") : ui.index("void drawMarkets")]
+        markets = ui[ui.index("void drawMarkets") : ui.index("void drawRegions")]
+        regions = ui[ui.index("void drawRegions") : ui.index("void drawSystem")]
+        self.assertIn("const int y = 145 + i * 65", networks)
+        self.assertIn("drawCard(SAFE, 128, 204, 120", markets)
+        self.assertIn("drawCard(SAFE, 260, 204, 120", markets)
+        self.assertIn("drawCard(SAFE, 128, 204, 120", regions)
+        self.assertIn("drawCard(SAFE, 260, 204, 120", regions)
         self.assertNotIn(
             "s_canvas.drawString(change, SCREEN_W - SAFE, y + 28, &Satoshi9);",
             networks,
@@ -344,7 +366,6 @@ class UsdtFirmwareContractTests(unittest.TestCase):
             self.assertNotIn(removed, ui)
         self.assertNotIn("MISMA RED", ui)
         self.assertNotIn("GUIA ESTATICA", ui)
-        self.assertIn("USDT EN CIRCULACION", ui)
         self.assertIn("24H", ui)
         self.assertIn("formatUsdSupply", ui)
         self.assertIn("data.networks", ui)
