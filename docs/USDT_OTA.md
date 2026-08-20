@@ -7,13 +7,26 @@ Canal aislado de V1 (`firmware.bin`) y V2 (`firmware-v2.bin`).
 
 Pantalla 1 / Overview:
 
-1. Precio del Dolar Digital (USDt) en ARS — CriptoYa `lemoncash/usdt/ars`
-2. Variacion 1h / 24h / 7d rotando — CoinGecko Tether
+1. Precio de Tether USDt en ARS — CriptoYa `lemoncash/usdt/ars`
+2. Variacion ARS 1h / 24h / 7d rotando — calculada desde el chart horario de CoinGecko
 3. Rendimiento Lemon Yield — `https://api.lemoncash.com.ar/api/v1/interest-funds-percentages` fila `currency=USDt` + `protocol=LEMON_YIELD` (live, no hardcode 2.5%)
-4. PEG vs USD — CoinGecko Tether USD
+4. PEG vs USD — Coinbase `exchange-rates?currency=USDT`
 
-Otras pantallas: Networks (BEP20, Polygon/MATIC, TRC20, ERC20 +7), Markets, Regions, System.
+Otras pantallas: Networks (BEP20, Polygon/MATIC, TRC20, ERC20 +7), Markets,
+Regions (Argentina, Brasil, Peru y Colombia) y System.
 Intel y Alert no existen en este firmware.
+
+## Fuentes y degradacion
+
+| Dato | Fuente | Cadencia | Comportamiento ante fallo |
+|------|--------|----------|----------------------------|
+| USDt/ARS Lemon, bid y ask | CriptoYa | 60 s | conserva el ultimo valor y marca su freshness |
+| PEG USD + BRL/PEN/COP | Coinbase | 60 s | PEG y regiones se validan por separado |
+| Variaciones 1h/24h/7d ARS | CoinGecko market chart | 30 min | backoff de 30 min; se ocultan despues de 2 h sin actualizar |
+| Rendimiento USDt | Lemon API `LEMON_YIELD` | 60 s | conserva el ultimo APR valido |
+
+El header prioriza la salud del precio Lemon. Un fallo de PEG o del chart no muestra
+`ERROR` arriba mientras el precio principal siga disponible.
 
 ## Build
 
@@ -23,7 +36,7 @@ python -m platformio run -e matouch_esp32s3_40_usdt
 
 Binario: `.pio/build/matouch_esp32s3_40_usdt/firmware.bin`
 Asset OTA: `firmware-usdt.bin`
-Version: `5.1.1-usdt.1` (`APP_VERSION` cuando `LEMON_USDT_MODE=1`)
+Version: `5.1.1-usdt.5` (`APP_VERSION` cuando `LEMON_USDT_MODE=1`)
 
 ## Flash USB inicial (DIO keep)
 
@@ -61,7 +74,7 @@ Los artefactos de recovery salen de `.pio/build/matouch_esp32s3_40_usdt/` y `boo
 Despues del primer USB, la cajita:
 
 1. Consulta `https://api.github.com/repos/frxnnk/lemon-display/releases/latest`
-2. Compara el tag contra `APP_VERSION` (`5.1.1-usdt.1`)
+2. Compara el tag contra `APP_VERSION` (`5.1.1-usdt.5`)
 3. Busca exactamente el asset `firmware-usdt.bin`
 4. Exige MD5 en el body: `firmware-usdt.bin MD5: <32 hex lowercase>`
 5. Descarga, flashea y reinicia sola

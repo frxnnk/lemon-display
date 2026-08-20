@@ -21,7 +21,7 @@ Full pin mapping: [docs/HARDWARE.md](docs/HARDWARE.md)
 | `matouch_esp32s3_40` | Production V1 dashboard (default) |
 | `matouch_esp32s3_40_v2_demo` | V2 offline demo player (deterministic 78s loop) |
 | `matouch_esp32s3_40_v2_real` | V2 real-time runtime (live data, OTA channel `firmware-v2.bin`) |
-| `matouch_esp32s3_40_usdt` | USDT Control Room live (Lemon yield + CriptoYa + CoinGecko, OTA `firmware-usdt.bin`) |
+| `matouch_esp32s3_40_usdt` | USDT Control Room live (Lemon yield + CriptoYa + Coinbase + CoinGecko, OTA `firmware-usdt.bin`) |
 | `matouch_esp32s3_40_usdt_mock` | USDT Control Room mock (offline, static validation data) |
 
 ## Quick Start
@@ -236,6 +236,8 @@ Redesigned runtime with scene-based navigation (home, data, settings). Entry poi
 | Binance REST | Historical klines (4h+ periods) | None |
 | CoinGecko | BTC changes, global stats, charts, multi-coin | API key (free) |
 | CriptoYa | Lemon Cash USDT/ARS bid/ask | None |
+| Coinbase | USDT/USD PEG and BRL/PEN/COP regional rates | None |
+| Lemon API | Live USDt Lemon Yield APR | None |
 | Yahoo Finance | Stock quotes + sparklines | None |
 | Polymarket Gamma | Prediction markets | None |
 

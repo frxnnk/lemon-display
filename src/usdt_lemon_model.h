@@ -51,6 +51,8 @@ constexpr uint32_t USDT_CACHED_MS = 10UL * 60UL * 1000UL;
 constexpr uint32_t USDT_STALE_MS = 60UL * 60UL * 1000UL;
 constexpr uint32_t USDT_SCENE_TIMEOUT_MS = 90UL * 1000UL;
 constexpr uint32_t USDT_VARIATION_ROTATE_MS = 4000UL;
+constexpr uint32_t USDT_VARIATIONS_REFRESH_MS = 30UL * 60UL * 1000UL;
+constexpr uint32_t USDT_AUX_MAX_AGE_MS = 2UL * 60UL * 60UL * 1000UL;
 
 constexpr UsdtFreshness usdtFreshness(bool valid, uint32_t lastUpdateMs,
                                       uint32_t nowMs, bool online,
@@ -64,6 +66,24 @@ constexpr UsdtFreshness usdtFreshness(bool valid, uint32_t lastUpdateMs,
          : nowMs - lastUpdateMs <= USDT_FRESH_MS ? USDT_LIVE
          : nowMs - lastUpdateMs <= USDT_CACHED_MS ? USDT_CACHED
          : USDT_STALE;
+}
+
+constexpr bool usdtFreshnessHasData(UsdtFreshness freshness) {
+    return freshness == USDT_LIVE || freshness == USDT_CACHED ||
+           freshness == USDT_STALE;
+}
+
+constexpr UsdtFreshness usdtPrimaryFreshness(UsdtFreshness lemon,
+                                             UsdtFreshness peg) {
+    return usdtFreshnessHasData(lemon) ? lemon
+         : usdtFreshnessHasData(peg) ? peg
+         : lemon;
+}
+
+constexpr bool usdtAuxDataUsable(bool valid, uint32_t lastUpdateMs,
+                                 uint32_t nowMs) {
+    return valid && lastUpdateMs != 0 &&
+           nowMs - lastUpdateMs <= USDT_AUX_MAX_AGE_MS;
 }
 
 constexpr int8_t usdtBottomTabAt(int16_t x, int16_t y) {
@@ -155,3 +175,10 @@ static_assert(usdtFreshness(true, 100, 100 + USDT_CACHED_MS + 1, true, false,
 static_assert(usdtFreshness(true, 100, 110, false, false,
                             USDT_FETCH_NETWORK_ERROR) == USDT_OFFLINE,
               "Connectivity state overrides age");
+static_assert(usdtPrimaryFreshness(USDT_LIVE, USDT_ERROR) == USDT_LIVE,
+              "Healthy Lemon price hides secondary provider errors");
+static_assert(usdtPrimaryFreshness(USDT_ERROR, USDT_LIVE) == USDT_LIVE,
+              "PEG can provide a healthy fallback status");
+static_assert(usdtAuxDataUsable(true, 100, 110), "Fresh auxiliary data is usable");
+static_assert(!usdtAuxDataUsable(true, 100, 100 + USDT_AUX_MAX_AGE_MS + 1),
+              "Expired auxiliary data is hidden");
