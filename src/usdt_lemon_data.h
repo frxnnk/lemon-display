@@ -64,6 +64,7 @@ struct UsdtOtaState {
     bool checked = false;
     bool checking = false;
     bool available = false;
+    bool failed = false;
     char version[16] = {};
 };
 

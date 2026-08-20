@@ -23,6 +23,7 @@ constexpr uint32_t PRICE_REFRESH_INTERVAL_MS = 15UL * 1000UL;
 constexpr uint32_t CLOCK_REDRAW_MS = 30UL * 1000UL;
 constexpr uint32_t OTA_PROBE_MS = 60UL * 1000UL;
 constexpr uint32_t OTA_CHECK_MS = 5UL * 60UL * 1000UL;
+constexpr uint32_t OTA_FAILURE_RETRY_MS = 30UL * 60UL * 1000UL;
 
 UsdtRuntimeModel s_model;
 UsdtDataSnapshot s_data;
@@ -35,6 +36,7 @@ uint32_t s_lastPriceFetchMs = 0;
 uint32_t s_lastDrawMs = 0;
 uint32_t s_lastOtaCheckMs = 0;
 uint32_t s_lastOtaProbeMs = 0;
+uint32_t s_lastOtaFailureMs = 0;
 uint8_t s_lastVariation = 255;
 bool s_bootOtaPending = false;
 bool s_refreshPending = false;
@@ -100,9 +102,11 @@ void installUsdtOtaNow() {
     if (!s_data.ota.available || !s_otaInfo.url[0] || !s_otaInfo.md5[0]) return;
     usdtUiDrawLoading("ACTUALIZANDO FIRMWARE", 8);
     apiStop();
-    otaFlash(s_otaInfo.url, nullptr, s_otaInfo.md5);
+    const bool installed = otaFlash(s_otaInfo.url, nullptr, s_otaInfo.md5);
+    if (installed) return;
     s_data.ota.available = false;
-    s_networkReady = false;
+    s_data.ota.failed = true;
+    s_lastOtaFailureMs = millis();
     apiSetup();
     redraw();
 }
@@ -119,6 +123,7 @@ void applyOtaResult(const OtaInfo& result) {
     s_data.ota.checked = true;
     s_data.ota.checking = false;
     s_data.ota.available = s_otaInfo.available;
+    s_data.ota.failed = false;
     strncpy(s_data.ota.version, s_otaInfo.version, sizeof(s_data.ota.version) - 1);
     s_data.ota.version[sizeof(s_data.ota.version) - 1] = '\0';
     if (s_data.ota.available) {
@@ -171,6 +176,8 @@ void requestOtaCheck() {
 
 void serviceNetworkScheduling(uint32_t nowMs) {
     if (!wifiConnected() || !timeReady()) return;
+    const bool otaFailureCoolingDown = s_lastOtaFailureMs != 0 &&
+        nowMs - s_lastOtaFailureMs < OTA_FAILURE_RETRY_MS;
     if (s_refreshPending && !usdtWorkerBusy()) {
         refreshNow();
         return;
@@ -194,13 +201,15 @@ void serviceNetworkScheduling(uint32_t nowMs) {
         usdtWorkerRequestPrice(s_data);
         return;
     }
-    if (!usdtWorkerBusy() && s_data.ota.checked && !s_data.ota.available &&
+    if (!otaFailureCoolingDown && !usdtWorkerBusy() &&
+        s_data.ota.checked && !s_data.ota.available &&
         nowMs - s_lastOtaProbeMs >= OTA_PROBE_MS) {
         s_lastOtaProbeMs = nowMs;
         usdtWorkerRequestOtaProbe();
         return;
     }
-    if (!usdtWorkerBusy() && s_data.ota.checked && !s_data.ota.available &&
+    if (!otaFailureCoolingDown && !usdtWorkerBusy() &&
+        s_data.ota.checked && !s_data.ota.available &&
         nowMs - s_lastOtaCheckMs >= OTA_CHECK_MS) {
         requestOtaCheck();
     }

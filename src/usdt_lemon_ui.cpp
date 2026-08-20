@@ -456,6 +456,7 @@ void drawSystem(const UsdtDataSnapshot& data, const UsdtDeviceInfo& device) {
     char signal[20];
     snprintf(signal, sizeof(signal), "%ld dBm", static_cast<long>(device.rssi));
     const char* ota = data.ota.checking ? "BUSCANDO"
+                     : data.ota.failed ? "PAUSA 30M"
                      : data.ota.available ? data.ota.version
                      : data.ota.checked ? "AL DIA"
                      : "PENDIENTE";

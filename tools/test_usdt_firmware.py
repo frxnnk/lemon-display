@@ -41,6 +41,29 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         self.assertNotIn("INTEL", ui)
         self.assertNotIn("ALERT", ui)
 
+    def test_ota_download_uses_browser_url_without_second_api_handshake(self):
+        ota = (ROOT / "src/ota_manager.cpp").read_text(encoding="utf-8")
+        check = ota[ota.index("OtaInfo otaCheckAsset") : ota.index("OtaInfo otaCheck(")]
+        self.assertIn('filter["assets"][0]["browser_download_url"] = true;', check)
+        self.assertIn('asset["browser_download_url"]', check)
+        self.assertNotIn('filter["assets"][0]["url"] = true;', check)
+        self.assertNotIn('asset["url"]', check)
+
+    def test_failed_ota_stays_online_and_observes_a_cooldown(self):
+        runtime = (ROOT / "src/usdt_lemon_runtime.cpp").read_text(encoding="utf-8")
+        header = (ROOT / "src/usdt_lemon_data.h").read_text(encoding="utf-8")
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        install = runtime[runtime.index("void installUsdtOtaNow") : runtime.index("void applyOtaResult")]
+        scheduling = runtime[runtime.index("void serviceNetworkScheduling") : runtime.index("void startNetwork")]
+        self.assertIn("OTA_FAILURE_RETRY_MS = 30UL * 60UL * 1000UL", runtime)
+        self.assertIn("const bool installed = otaFlash", install)
+        self.assertIn("s_lastOtaFailureMs = millis();", install)
+        self.assertIn("s_data.ota.failed = true;", install)
+        self.assertNotIn("s_networkReady = false;", install)
+        self.assertIn("otaFailureCoolingDown", scheduling)
+        self.assertIn("bool failed = false;", header)
+        self.assertIn('data.ota.failed ? "PAUSA 30M"', ui)
+
     def test_live_data_sources_are_independent_and_cover_regions(self):
         config = (ROOT / "src/config.h").read_text(encoding="utf-8")
         data_header = (ROOT / "src/usdt_lemon_data.h").read_text(encoding="utf-8")
@@ -232,7 +255,7 @@ class UsdtFirmwareContractTests(unittest.TestCase):
 
     def test_usdt_release_version_is_bumped(self):
         config = (ROOT / "src/config.h").read_text(encoding="utf-8")
-        self.assertIn('#define APP_VERSION "5.1.1-usdt.13"', config)
+        self.assertIn('#define APP_VERSION "5.1.1-usdt.14"', config)
     def test_main_boots_live_runtime_before_v1(self):
         main = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
         self.assertIn("#if LEMON_USDT_MODE", main)
