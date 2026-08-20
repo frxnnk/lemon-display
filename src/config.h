@@ -18,7 +18,7 @@
 
 // ── App version ──
 #if LEMON_USDT_MODE
-#define APP_VERSION "5.1.1-usdt.4"
+#define APP_VERSION "5.1.1-usdt.5"
 #elif LEMON_USDT_MOCK_MODE
 #define APP_VERSION "5.1.1-usdt-mock.2"
 #else
@@ -49,8 +49,8 @@
 #define CRIPTOYA_LEMON_EP    "https://criptoya.com/api/lemoncash/usdc/ars"
 #define CRIPTOYA_LEMON_USDT_EP "https://criptoya.com/api/lemoncash/usdt/ars"
 #define LEMON_YIELD_EP "https://api.lemoncash.com.ar/api/v1/interest-funds-percentages"
-#define COINGECKO_USDT_PEG_EP "https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=usd,ars,brl,mxn&include_24hr_change=true&include_last_updated_at=true"
-#define COINGECKO_USDT_MARKETS_EP "https://api.coingecko.com/api/v3/coins/markets?vs_currency=ars&ids=tether&price_change_percentage=1h,24h,7d"
+#define COINBASE_USDT_RATES_EP "https://api.coinbase.com/v2/exchange-rates?currency=USDT"
+#define COINGECKO_USDT_CHART_EP "https://api.coingecko.com/api/v3/coins/tether/market_chart?vs_currency=ars&days=7&interval=hourly"
 
 // ── CoinGecko USDC/ARS chart (for dollar sparkline) ──
 #define COINGECKO_TETHER_CHART_EP "https://api.coingecko.com/api/v3/coins/usd-coin/market_chart?vs_currency=ars&days="

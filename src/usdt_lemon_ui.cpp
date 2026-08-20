@@ -5,6 +5,7 @@
 #include "display_manager.h"
 #include "data/satoshi_fonts.h"
 #include "data/lemon_v2_logo_light_120.h"
+#include "data/usdt_logo_28.h"
 #include <Arduino.h>
 #include <cmath>
 #include <cstdio>
@@ -46,6 +47,22 @@ void drawLemonLogo(int x, int y) {
     }
 }
 
+void drawTetherLogo(int x, int y) {
+    for (int py = 0; py < 28; ++py) {
+        for (int px = 0; px < 28; ++px) {
+            const uint16_t color = pgm_read_word(&usdt_logo_28[py * 28 + px]);
+            if (color != 0x0000) s_canvas.drawPixel(x + px, y + py, color);
+        }
+    }
+}
+
+void drawUsdtTitle(const char* title) {
+    drawTetherLogo(SAFE, 80);
+    s_canvas.setTextDatum(lgfx::top_left);
+    s_canvas.setTextColor(TETHER_GREEN, Colors::BG_BASE);
+    s_canvas.drawString(title, SAFE + 40, 82, &SatoshiBold24);
+}
+
 void drawPill(const char* label, int x, int y, uint16_t color) {
     const int width = s_canvas.textWidth(label, &Satoshi9) + 20;
     s_canvas.fillSmoothRoundRect(x, y, width, 24, 12, Colors::BG_ELEVATED);
@@ -61,7 +78,7 @@ void drawHeader(const UsdtDataSnapshot& data, const UsdtDeviceInfo& device) {
     s_canvas.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_BASE);
     s_canvas.drawString(device.time, SCREEN_W / 2, 28, &Satoshi12);
     const UsdtFreshness overall =
-        data.lemonFreshness > data.pegFreshness ? data.lemonFreshness : data.pegFreshness;
+        usdtPrimaryFreshness(data.lemonFreshness, data.pegFreshness);
     const char* label = usdtFreshnessLabel(overall);
     const int width = s_canvas.textWidth(label, &Satoshi9) + 20;
     drawPill(label, SCREEN_W - SAFE - width, 22, freshnessColor(overall));
@@ -107,42 +124,47 @@ void variationCopy(const UsdtPegData& peg, uint32_t nowMs, char* value, size_t v
     const uint8_t idx = usdtVariationIndex(nowMs);
     const float amount = idx == 0 ? peg.change1h : idx == 1 ? peg.change24h : peg.change7d;
     const char* window = idx == 0 ? "1H" : idx == 1 ? "24H" : "7D";
-    if (peg.valid) formatPct(value, valueSize, amount);
+    const bool usable = usdtAuxDataUsable(
+        peg.variationsValid, peg.variationsLastUpdateMs, nowMs);
+    if (usable) formatPct(value, valueSize, amount);
     else strncpy(value, "--", valueSize);
     snprintf(suffix, suffixSize, "%s ARS", window);
-    color = !peg.valid ? Colors::TEXT_TERTIARY
+    color = !usable ? Colors::TEXT_TERTIARY
           : amount < 0.0f ? Colors::NEGATIVE
           : TETHER_GREEN;
 }
 
 void drawOverview(const UsdtDataSnapshot& data) {
-    s_canvas.setTextDatum(lgfx::top_left);
-    s_canvas.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_BASE);
-    s_canvas.drawString("DOLAR DIGITAL / USDt", SAFE, 82, &Satoshi9);
+    drawUsdtTitle("TETHER USDt");
+    const uint32_t nowMs = millis();
     char price[24] = "--";
     if (data.lemon.valid) formatArs(price, sizeof(price), data.lemon.ars);
     s_canvas.setTextColor(data.lemon.valid ? Colors::TEXT_PRIMARY : Colors::TEXT_TERTIARY,
                           Colors::BG_BASE);
-    s_canvas.drawString(price, SAFE, 102, &SatoshiBold40);
+    s_canvas.drawString(price, SAFE, 112, &SatoshiBold40);
     s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-    s_canvas.drawString("ARS", 210, 126, &Satoshi12);
+    s_canvas.drawString("ARS", 210, 136, &Satoshi12);
 
     char variation[20] = "--";
     char variationSuffix[16] = "1H ARS";
     uint16_t variationColor = Colors::TEXT_TERTIARY;
-    variationCopy(data.peg, millis(), variation, sizeof(variation),
+    variationCopy(data.peg, nowMs, variation, sizeof(variation),
                   variationSuffix, sizeof(variationSuffix), variationColor);
     drawCard(SAFE, 172, 204, 86, "VARIACION", variation, variationSuffix, variationColor);
 
     char yieldValue[20] = "--";
-    if (data.yield.valid) snprintf(yieldValue, sizeof(yieldValue), "%.2f%%", data.yield.aprPercent);
+    const bool yieldUsable = usdtAuxDataUsable(
+        data.yield.valid, data.yield.lastUpdateMs, nowMs);
+    if (yieldUsable) snprintf(yieldValue, sizeof(yieldValue), "%.2f%%", data.yield.aprPercent);
     drawCard(252, 172, 204, 86, "RENDIMIENTO", yieldValue, "LEMON YIELD",
-             data.yield.valid ? TETHER_GREEN : Colors::TEXT_TERTIARY);
+             yieldUsable ? TETHER_GREEN : Colors::TEXT_TERTIARY);
 
     char pegValue[20] = "--";
     char pegSuffix[20] = "USD";
     uint16_t pegColor = Colors::TEXT_TERTIARY;
-    if (data.peg.valid) {
+    const bool pegUsable = usdtAuxDataUsable(
+        data.peg.valid, data.peg.lastUpdateMs, nowMs);
+    if (pegUsable) {
         snprintf(pegValue, sizeof(pegValue), "%.4f", data.peg.usd);
         const float bps = (data.peg.usd - 1.0f) * 10000.0f;
         snprintf(pegSuffix, sizeof(pegSuffix), "%+.1f BPS", bps);
@@ -152,17 +174,15 @@ void drawOverview(const UsdtDataSnapshot& data) {
 
     s_canvas.setTextDatum(lgfx::top_left);
     s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-    s_canvas.drawString("DOLAR DIGITAL LEMON", SAFE, 368, &Satoshi9);
+    s_canvas.drawString("USDt EN LEMON", SAFE, 368, &Satoshi9);
     s_canvas.setTextDatum(lgfx::top_right);
     s_canvas.drawString("TOCA ARRIBA PARA ACTUALIZAR", SCREEN_W - SAFE, 368, &Satoshi9);
 }
 
 void drawNetworks() {
-    s_canvas.setTextDatum(lgfx::top_left);
-    s_canvas.setTextColor(TETHER_GREEN, Colors::BG_BASE);
-    s_canvas.drawString("REDES USDt", SAFE, 82, &SatoshiBold24);
+    drawUsdtTitle("REDES USDt");
     s_canvas.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_BASE);
-    s_canvas.drawString("DEPOSITOS Y RETIROS MAS USADOS", SAFE, 116, &Satoshi9);
+    s_canvas.drawString("PARA DEPOSITOS Y RETIROS EN LEMON", SAFE, 116, &Satoshi9);
     for (int i = 0; i < 4; ++i) {
         const int y = 146 + i * 42;
         s_canvas.fillCircle(SAFE + 6, y + 10, 4, TETHER_GREEN);
@@ -178,21 +198,25 @@ void drawNetworks() {
     s_canvas.setTextColor(TETHER_GREEN, Colors::BG_BASE);
     s_canvas.drawString("+7 REDES", SAFE, 318, &Satoshi9);
     s_canvas.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_BASE);
-    s_canvas.drawString("Arbitrum   AVAX C-Chain   CELO", SAFE, 338, &Satoshi9);
-    s_canvas.drawString("Monad   Optimism   Rootstock   Solana", SAFE, 358, &Satoshi9);
+    s_canvas.drawString("Arbitrum   AVAX C-Chain   CELO", SAFE, 336, &Satoshi9);
+    s_canvas.drawString("Monad   Optimism   Rootstock   Solana", SAFE, 354, &Satoshi9);
+    s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
+    s_canvas.drawString("VERIFICA EN LA APP / USA LA MISMA RED", SAFE, 382, &Satoshi9);
 }
 
 void drawMarkets(const UsdtDataSnapshot& data) {
-    s_canvas.setTextDatum(lgfx::top_left);
-    s_canvas.setTextColor(TETHER_GREEN, Colors::BG_BASE);
-    s_canvas.drawString("MARKETS", SAFE, 82, &SatoshiBold24);
+    drawUsdtTitle("MARKETS");
     char ars[20] = "--";
     char usd[20] = "--";
     char change[20] = "--";
     char spread[20] = "--";
     formatArs(ars, sizeof(ars), data.lemon.ars);
-    if (data.peg.valid) snprintf(usd, sizeof(usd), "%.4f", data.peg.usd);
-    if (data.peg.valid) formatPct(change, sizeof(change), data.peg.change24h);
+    const bool pegUsable = usdtAuxDataUsable(
+        data.peg.valid, data.peg.lastUpdateMs, millis());
+    if (pegUsable) snprintf(usd, sizeof(usd), "%.4f", data.peg.usd);
+    const bool variationsUsable = usdtAuxDataUsable(
+        data.peg.variationsValid, data.peg.variationsLastUpdateMs, millis());
+    if (variationsUsable) formatPct(change, sizeof(change), data.peg.change24h);
     if (data.lemon.valid && data.lemon.ask > 0.0f) {
         snprintf(spread, sizeof(spread), "%.2f%%",
                  (data.lemon.ask - data.lemon.bid) * 100.0f / data.lemon.ask);
@@ -200,31 +224,32 @@ void drawMarkets(const UsdtDataSnapshot& data) {
     drawCard(SAFE, 132, 204, 86, "USDT / ARS", ars, "LEMON", Colors::TEXT_PRIMARY);
     drawCard(252, 132, 204, 86, "USDT / USD", usd, "PEG", Colors::TEXT_PRIMARY);
     drawCard(SAFE, 232, 204, 86, "24H ARS", change, "VARIACION",
-             data.peg.valid && data.peg.change24h < 0 ? Colors::NEGATIVE : TETHER_GREEN);
+             !variationsUsable ? Colors::TEXT_TERTIARY
+             : data.peg.change24h < 0 ? Colors::NEGATIVE : TETHER_GREEN);
     drawCard(252, 232, 204, 86, "SPREAD", spread, "BID / ASK", Colors::TEXT_PRIMARY);
     s_canvas.setTextDatum(lgfx::top_left);
     s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-    s_canvas.drawString("PRECIO Y PEG EN VIVO", SAFE, 368, &Satoshi9);
+    s_canvas.drawString("DATOS DE MERCADO USDt", SAFE, 368, &Satoshi9);
 }
 
 void drawRegions(const UsdtDataSnapshot& data) {
-    s_canvas.setTextDatum(lgfx::top_left);
-    s_canvas.setTextColor(TETHER_GREEN, Colors::BG_BASE);
-    s_canvas.drawString("REGIONS", SAFE, 82, &SatoshiBold24);
+    drawUsdtTitle("REGIONS");
     char ars[20] = "--";
     char brl[20] = "--";
-    char mxn[20] = "--";
-    char usd[20] = "--";
+    char pen[20] = "--";
+    char cop[20] = "--";
     formatArs(ars, sizeof(ars), data.lemon.valid ? data.lemon.ars : data.peg.ars);
-    if (data.peg.valid) {
+    const bool regionsUsable = usdtAuxDataUsable(
+        data.peg.regionsValid, data.peg.regionsLastUpdateMs, millis());
+    if (regionsUsable) {
         snprintf(brl, sizeof(brl), "%.2f", data.peg.brl);
-        snprintf(mxn, sizeof(mxn), "%.2f", data.peg.mxn);
-        snprintf(usd, sizeof(usd), "%.4f", data.peg.usd);
+        snprintf(pen, sizeof(pen), "%.2f", data.peg.pen);
+        snprintf(cop, sizeof(cop), "%.0f", data.peg.cop);
     }
     drawCard(SAFE, 132, 204, 86, "ARGENTINA", ars, "ARS", Colors::TEXT_PRIMARY);
     drawCard(252, 132, 204, 86, "BRASIL", brl, "BRL", Colors::TEXT_PRIMARY);
-    drawCard(SAFE, 232, 204, 86, "MEXICO", mxn, "MXN", Colors::TEXT_PRIMARY);
-    drawCard(252, 232, 204, 86, "GLOBAL", usd, "USD PEG", Colors::TEXT_PRIMARY);
+    drawCard(SAFE, 232, 204, 86, "PERU", pen, "PEN", Colors::TEXT_PRIMARY);
+    drawCard(252, 232, 204, 86, "COLOMBIA", cop, "COP", Colors::TEXT_PRIMARY);
     s_canvas.setTextDatum(lgfx::top_left);
     s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
     s_canvas.drawString("COTIZACIONES REGIONALES", SAFE, 368, &Satoshi9);

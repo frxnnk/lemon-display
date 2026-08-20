@@ -18,9 +18,15 @@ struct UsdtPegData {
     float change24h = 0.0f;
     float change7d = 0.0f;
     float brl = 0.0f;
-    float mxn = 0.0f;
+    float pen = 0.0f;
+    float cop = 0.0f;
     uint32_t lastUpdateMs = 0;
+    uint32_t variationsLastUpdateMs = 0;
+    uint32_t variationsLastAttemptMs = 0;
+    uint32_t regionsLastUpdateMs = 0;
     bool valid = false;
+    bool variationsValid = false;
+    bool regionsValid = false;
 };
 
 struct UsdtYieldData {

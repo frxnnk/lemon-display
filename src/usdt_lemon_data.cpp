@@ -52,29 +52,89 @@ bool parseLemonPrice(const char* json, UsdtPriceData& out) {
     return true;
 }
 
-bool parsePeg(const char* simpleJson, const char* marketsJson, UsdtPegData& out) {
-    JsonDocument simpleDoc;
-    if (deserializeJson(simpleDoc, simpleJson)) return false;
-    JsonObject tether = simpleDoc["tether"];
-    if (tether.isNull()) return false;
-    UsdtPegData next = {};
-    next.usd = tether["usd"] | 0.0f;
-    next.ars = tether["ars"] | 0.0f;
-    next.brl = tether["brl"] | 0.0f;
-    next.mxn = tether["mxn"] | 0.0f;
-    next.change24h = tether["ars_24h_change"] | 0.0f;
-    JsonDocument marketsDoc;
-    if (marketsJson && marketsJson[0] && !deserializeJson(marketsDoc, marketsJson) && marketsDoc.size() > 0) {
-        JsonObject row = marketsDoc[0];
-        next.change1h = row["price_change_percentage_1h_in_currency"] | 0.0f;
-        next.change24h = row["price_change_percentage_24h_in_currency"] | next.change24h;
-        next.change7d = row["price_change_percentage_7d_in_currency"] | 0.0f;
+bool parseCoinbaseRates(const char* json, UsdtPegData& out) {
+    JsonDocument doc;
+    JsonDocument filter;
+    filter["data"]["rates"]["USD"] = true;
+    filter["data"]["rates"]["BRL"] = true;
+    filter["data"]["rates"]["PEN"] = true;
+    filter["data"]["rates"]["COP"] = true;
+    if (deserializeJson(doc, json, DeserializationOption::Filter(filter))) return false;
+    JsonObject rates = doc["data"]["rates"];
+    if (rates.isNull()) return false;
+
+    const float usd = rates["USD"].as<float>();
+    if (!finiteRange(usd, 0.80f, 1.20f)) return false;
+
+    out.usd = usd;
+    out.valid = true;
+    out.lastUpdateMs = millis();
+
+    const float brl = rates["BRL"].as<float>();
+    const float pen = rates["PEN"].as<float>();
+    const float cop = rates["COP"].as<float>();
+    out.regionsValid = false;
+    if (finiteRange(brl, 1.0f, 20.0f) &&
+        finiteRange(pen, 1.0f, 20.0f) &&
+        finiteRange(cop, 100.0f, 20000.0f)) {
+        out.brl = brl;
+        out.pen = pen;
+        out.cop = cop;
+        out.regionsValid = true;
+        out.regionsLastUpdateMs = out.lastUpdateMs;
     }
-    next.valid = finiteRange(next.usd, 0.80f, 1.20f) &&
-                 finiteRange(next.ars, 100.0f, 100000.0f);
-    if (!next.valid) return false;
-    next.lastUpdateMs = millis();
-    out = next;
+    return true;
+}
+
+bool parseMarketChart(const char* json, UsdtPegData& out) {
+    JsonDocument doc;
+    JsonDocument filter;
+    filter["prices"] = true;
+    if (deserializeJson(doc, json, DeserializationOption::Filter(filter))) return false;
+    JsonArray prices = doc["prices"];
+    if (prices.size() < 2) return false;
+
+    JsonArray latest = prices[prices.size() - 1];
+    const uint64_t latestMs = latest[0].as<uint64_t>();
+    const float latestPrice = latest[1].as<float>();
+    if (latestMs == 0 || !finiteRange(latestPrice, 100.0f, 100000.0f)) return false;
+
+    auto closestPrice = [&](uint64_t targetMs) {
+        float bestPrice = 0.0f;
+        uint64_t bestDelta = UINT64_MAX;
+        for (JsonArray point : prices) {
+            const uint64_t timestamp = point[0].as<uint64_t>();
+            const float price = point[1].as<float>();
+            if (timestamp == 0 || !finiteRange(price, 100.0f, 100000.0f)) continue;
+            const uint64_t delta = timestamp > targetMs ? timestamp - targetMs
+                                                        : targetMs - timestamp;
+            if (delta < bestDelta) {
+                bestDelta = delta;
+                bestPrice = price;
+            }
+        }
+        return bestPrice;
+    };
+
+    constexpr uint64_t HOUR_MS = 60ULL * 60ULL * 1000ULL;
+    const float price1h = closestPrice(latestMs - HOUR_MS);
+    const float price24h = closestPrice(latestMs - 24ULL * HOUR_MS);
+    const float price7d = closestPrice(latestMs - 7ULL * 24ULL * HOUR_MS);
+    if (price1h <= 0.0f || price24h <= 0.0f || price7d <= 0.0f) return false;
+
+    const float change1h = (latestPrice / price1h - 1.0f) * 100.0f;
+    const float change24h = (latestPrice / price24h - 1.0f) * 100.0f;
+    const float change7d = (latestPrice / price7d - 1.0f) * 100.0f;
+    if (!finiteRange(change1h, -100.0f, 100.0f) ||
+        !finiteRange(change24h, -100.0f, 100.0f) ||
+        !finiteRange(change7d, -100.0f, 100.0f)) return false;
+
+    out.ars = latestPrice;
+    out.change1h = change1h;
+    out.change24h = change24h;
+    out.change7d = change7d;
+    out.variationsValid = true;
+    out.variationsLastUpdateMs = millis();
     return true;
 }
 
@@ -122,20 +182,24 @@ bool usdtDataFetch(UsdtDataSnapshot& io) {
     }
 
     result = API_NETWORK_ERROR;
-    json = apiHttpGet(COINGECKO_USDT_PEG_EP, true, result, 9000, 4096);
-    char simpleBuf[512] = {};
-    if (json && json[0]) {
-        strncpy(simpleBuf, json, sizeof(simpleBuf) - 1);
-    }
-    ApiResult marketsResult = API_NETWORK_ERROR;
-    const char* marketsJson = apiHttpGet(COINGECKO_USDT_MARKETS_EP, true, marketsResult, 9000, 2048);
-    UsdtPegData peg = {};
-    if (result == API_OK && simpleBuf[0] && parsePeg(simpleBuf, marketsJson, peg)) {
-        io.peg = peg;
+    json = apiHttpGet(COINBASE_USDT_RATES_EP, false, result, 9000, 24576);
+    if (result == API_OK && json && json[0] && parseCoinbaseRates(json, io.peg)) {
         io.pegStatus = USDT_FETCH_OK;
         changed = true;
     } else {
         io.pegStatus = result == API_OK ? USDT_FETCH_PARSE_ERROR : mapApi(result);
+    }
+
+    const uint32_t nowMs = millis();
+    const bool chartDue = io.peg.variationsLastAttemptMs == 0 ||
+        nowMs - io.peg.variationsLastAttemptMs >= USDT_VARIATIONS_REFRESH_MS;
+    if (chartDue) {
+        io.peg.variationsLastAttemptMs = nowMs;
+        ApiResult chartResult = API_NETWORK_ERROR;
+        json = apiHttpGet(COINGECKO_USDT_CHART_EP, true, chartResult, 12000, 24576);
+        if (chartResult == API_OK && json && json[0] && parseMarketChart(json, io.peg)) {
+            changed = true;
+        }
     }
 
     result = API_NETWORK_ERROR;
