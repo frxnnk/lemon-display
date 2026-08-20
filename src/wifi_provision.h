@@ -7,7 +7,7 @@
 // where the user picks their home WiFi and enters the password.
 
 // Start provisioning: creates AP, DNS, web server
-void provisionStart();
+void provisionStart(bool english = false);
 
 // Stop provisioning: tears down AP, DNS, web server
 void provisionStop();
@@ -17,7 +17,7 @@ void provisionStop();
 bool provisionTick();
 
 // Draw the QR code screen (call once after provisionStart)
-void provisionDrawQR();
+void provisionDrawQR(bool english = false);
 
 // Check if provisioning has received WiFi credentials
 bool provisionHasCredentials();

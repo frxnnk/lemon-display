@@ -1,6 +1,7 @@
 #include "usdt_lemon_runtime.h"
 
 #include "api_client.h"
+#include "audio_manager.h"
 #include "nvs_storage.h"
 #include "ota_manager.h"
 #include "time_manager.h"
@@ -44,6 +45,10 @@ bool s_refreshPending = false;
 bool s_otaCheckPending = false;
 bool s_initialDataComplete = false;
 
+const char* usdtRuntimeCopy(const char* spanish, const char* english) {
+    return s_model.language == USDT_LANGUAGE_EN ? english : spanish;
+}
+
 void clearCredentials(char* ssid, size_t ssidLen, char* pass, size_t passLen) {
     if (ssid && ssidLen) memset(ssid, 0, ssidLen);
     if (pass && passLen) memset(pass, 0, passLen);
@@ -59,7 +64,9 @@ void updateDeviceInfo() {
         strncpy(s_device.time, clock, sizeof(s_device.time) - 1);
     }
     s_device.time[sizeof(s_device.time) - 1] = '\0';
-    const char* ssid = wifiConnected() ? wifiSSID() : "SIN CONEXION";
+    const char* ssid = wifiConnected()
+        ? wifiSSID()
+        : usdtRuntimeCopy("SIN CONEXION", "NO CONNECTION");
     strncpy(s_device.ssid, ssid, sizeof(s_device.ssid) - 1);
     s_device.ssid[sizeof(s_device.ssid) - 1] = '\0';
     String ip = wifiConnected() ? wifiIP() : String("--");
@@ -101,7 +108,7 @@ void refreshNow() {
 
 void installUsdtOtaNow() {
     if (!s_data.ota.available || !s_otaInfo.url[0] || !s_otaInfo.md5[0]) return;
-    usdtUiDrawLoading("ACTUALIZANDO FIRMWARE", 8);
+    usdtUiDrawLoading(usdtRuntimeCopy("ACTUALIZANDO FIRMWARE", "UPDATING FIRMWARE"), 8);
     apiStop();
     const bool installed = otaFlash(s_otaInfo.url, nullptr, s_otaInfo.md5);
     if (installed) return;
@@ -232,20 +239,52 @@ void startNetwork() {
 void startProvisioning() {
     s_provisioning = true;
     s_device.provisioning = true;
-    provisionStart();
-    provisionDrawQR();
+    provisionStart(s_model.language == USDT_LANGUAGE_EN);
+    provisionDrawQR(s_model.language == USDT_LANGUAGE_EN);
 }
 
-bool systemProvisioningTap(const TouchEvent& event) {
-    return s_model.scene == USDT_SYSTEM && event.gesture == TOUCH_TAP &&
-           usdtSystemActionHit(event.x, event.y);
+bool handleSystemControl(const TouchEvent& event) {
+    if (s_model.scene != USDT_SYSTEM || event.gesture != TOUCH_TAP) return false;
+    const bool soundHit = usdtSystemSoundHit(event.x, event.y);
+    const bool languageHit = usdtSystemLanguageHit(event.x, event.y);
+    const bool wifiHit = usdtSystemWifiHit(event.x, event.y);
+    if (!soundHit && !languageHit && !wifiHit) return false;
+    s_model.lastInteractionMs = millis();
+    if (soundHit) {
+        if (s_model.soundEnabled) playTap();
+        s_model.soundEnabled = !s_model.soundEnabled;
+        audioSetEnabled(s_model.soundEnabled);
+        nvsSetSoundEnabled(s_model.soundEnabled);
+        if (s_model.soundEnabled) playTap();
+        redraw();
+        return true;
+    }
+    if (languageHit) {
+        if (s_model.soundEnabled) playTap();
+        s_model.language = s_model.language == USDT_LANGUAGE_ES
+            ? USDT_LANGUAGE_EN : USDT_LANGUAGE_ES;
+        nvsSetUsdtLanguage(static_cast<uint8_t>(s_model.language));
+        usdtUiSetLanguage(s_model.language);
+        redraw();
+        return true;
+    }
+    if (wifiHit) {
+        if (s_model.soundEnabled) playTap();
+        startProvisioning();
+        return true;
+    }
+    return false;
 }
 }  // namespace
 
 void usdtLemonSetup() {
+    s_model.soundEnabled = nvsGetSoundEnabled();
+    audioSetEnabled(s_model.soundEnabled);
+    s_model.language = static_cast<UsdtLanguage>(nvsGetUsdtLanguage());
+    usdtUiSetLanguage(s_model.language);
     usdtUiSetup();
     usdtDataSetup();
-    usdtUiDrawLoading("INICIANDO USDt", 8);
+    usdtUiDrawLoading(usdtRuntimeCopy("INICIANDO USDt", "STARTING USDt"), 8);
     s_model.lastInteractionMs = millis();
 
     if (!nvsHasWifi()) {
@@ -256,7 +295,7 @@ void usdtLemonSetup() {
     char ssid[33] = {};
     char pass[65] = {};
     nvsLoadWifi(ssid, sizeof(ssid), pass, sizeof(pass));
-    usdtUiDrawLoading("CONECTANDO WI-FI", 24);
+    usdtUiDrawLoading(usdtRuntimeCopy("CONECTANDO WI-FI", "CONNECTING WI-FI"), 24);
     wifiSetup(ssid, pass);
     clearCredentials(ssid, sizeof(ssid), pass, sizeof(pass));
     if (wifiConnected()) {
@@ -274,7 +313,7 @@ void usdtLemonLoop() {
         provisionGetCredentials(ssid, sizeof(ssid), pass, sizeof(pass));
         provisionStop();
         s_provisioning = false;
-        usdtUiDrawLoading("PROBANDO WI-FI", 28);
+        usdtUiDrawLoading(usdtRuntimeCopy("PROBANDO WI-FI", "TESTING WI-FI"), 28);
         wifiSetup(ssid, pass);
         if (wifiConnected()) nvsSaveWifi(ssid, pass);
         clearCredentials(ssid, sizeof(ssid), pass, sizeof(pass));
@@ -301,17 +340,12 @@ void usdtLemonLoop() {
 
     TouchEvent event = touchLoop();
     if (event.gesture != TOUCH_NONE) {
-        if (systemProvisioningTap(event)) {
-            startProvisioning();
-            return;
-        }
+        if (handleSystemControl(event)) return;
+        if (event.gesture == TOUCH_TAP && s_model.soundEnabled) playTap();
         const bool changed = usdtHandleGesture(s_model, event, millis());
         if (s_model.refreshRequested) {
             s_model.refreshRequested = false;
             refreshNow();
-        } else if (s_model.otaCheckRequested) {
-            s_model.otaCheckRequested = false;
-            requestOtaCheck();
         } else if (changed) {
             redraw();
         }

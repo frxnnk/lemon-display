@@ -24,6 +24,7 @@ static bool              hasCredentials = false;
 static char              rxSSID[33] = "";
 static char              rxPass[65] = "";
 static bool              running    = false;
+static bool              portalEnglish = false;
 
 // ── Captive portal HTML (PROGMEM) — dark theme, official logo, responsive ──
 static const char PORTAL_HTML[] PROGMEM = R"rawliteral(
@@ -88,30 +89,33 @@ input:focus{border-color:var(--g)}
 <body>
 <div class="hd">
 <div class="lo"><canvas id="lg" width="244" height="56" style="height:32px;width:auto"></canvas></div>
-<p class="sb">Configurar WiFi</p>
+<p class="sb" id="subtitle">Configurar WiFi</p>
 </div>
 <div class="ct">
-<div id="ls" class="cd"><div class="st"><div class="sp"></div><p>Buscando redes...</p></div></div>
+<div id="ls" class="cd"><div class="st"><div class="sp"></div><p id="initial-status">Buscando redes...</p></div></div>
 <div id="fm" class="pn">
 <h3 id="sn"></h3>
-<div class="pw"><input type="password" id="pw" placeholder="Contrase&#241;a" autocomplete="off"><button type="button" class="ey" onclick="tp()">mostrar</button></div>
-<button class="bt bp" onclick="go()">Conectar</button>
-<button class="bt bg" onclick="bk()">Volver</button>
+<div class="pw"><input type="password" id="pw" placeholder="Contrase&#241;a" autocomplete="off"><button type="button" class="ey" id="eye" onclick="tp()">mostrar</button></div>
+<button class="bt bp" id="connect" onclick="go()">Conectar</button>
+<button class="bt bg" id="back" onclick="bk()">Volver</button>
 </div>
 <div id="rs" class="pn"><div class="st"><div class="sp"></div><p id="rm">Conectando...</p></div></div>
 <button class="rf" onclick="sc()" id="rb">Buscar redes</button>
 </div>
 <div class="ft">v4.0.0 &middot; lemon.me</div>
 <script>
-let sel='',rc=0;
+let sel='',rc=0,en=false;
+function t(spanish,english){return en?english:spanish}
+function localize(){document.documentElement.lang=en?'en':'es';document.getElementById('subtitle').textContent=t('Configurar WiFi','Configure Wi-Fi');document.getElementById('initial-status').textContent=t('Buscando redes...','Scanning networks...');document.getElementById('pw').placeholder=t('Contraseña','Password');document.getElementById('eye').textContent=t('mostrar','show');document.getElementById('connect').textContent=t('Conectar','Connect');document.getElementById('back').textContent=t('Volver','Back');document.getElementById('rb').textContent=t('Buscar redes','Scan networks');document.getElementById('rm').textContent=t('Conectando...','Connecting...')}
+function loadLanguage(){fetch('/language').then(r=>r.text()).then(v=>{en=v.trim()==='en';localize();sc()}).catch(()=>sc())}
 function lg(){fetch('/logo').then(r=>r.arrayBuffer()).then(b=>{let d=new Uint16Array(b),c=document.getElementById('lg').getContext('2d'),m=c.createImageData(244,56);for(let i=0;i<d.length;i++){let p=d[i];m.data[i*4]=((p>>11)&31)*255/31|0;m.data[i*4+1]=((p>>5)&63)*255/63|0;m.data[i*4+2]=(p&31)*255/31|0;m.data[i*4+3]=p?255:0}c.putImageData(m,0,0)}).catch(()=>{})}
 function sb(r){let s=r>-50?4:r>-65?3:r>-75?2:1,h='';for(let i=1;i<=4;i++)h+='<i class="'+(i<=s?'a':'')+'"></i>';return h}
-function sc(){document.getElementById('rb').textContent='Buscando...';fetch('/scan').then(r=>r.json()).then(d=>{document.getElementById('rb').textContent='Buscar redes';if(d.length===0&&rc<3){rc++;document.getElementById('ls').innerHTML='<div class="st"><div class="sp"></div><p>Buscando redes...</p></div>';setTimeout(sc,2000);return}rc=0;let h='';d.forEach(n=>{h+='<div class="nt" onclick="pk(\''+n.s.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">';h+='<div class="nm">'+n.s+'</div><div class="sg">'+sb(n.r)+'</div></div>'});document.getElementById('ls').innerHTML=h||'<div class="em">No se encontraron redes</div>'}).catch(()=>{document.getElementById('rb').textContent='Buscar redes'})}
+function sc(){document.getElementById('rb').textContent=t('Buscando...','Scanning...');fetch('/scan').then(r=>r.json()).then(d=>{document.getElementById('rb').textContent=t('Buscar redes','Scan networks');if(d.length===0&&rc<3){rc++;document.getElementById('ls').innerHTML='<div class="st"><div class="sp"></div><p>'+t('Buscando redes...','Scanning networks...')+'</p></div>';setTimeout(sc,2000);return}rc=0;let h='';d.forEach(n=>{h+='<div class="nt" onclick="pk(\''+n.s.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">';h+='<div class="nm">'+n.s+'</div><div class="sg">'+sb(n.r)+'</div></div>'});document.getElementById('ls').innerHTML=h||'<div class="em">'+t('No se encontraron redes','No networks found')+'</div>'}).catch(()=>{document.getElementById('rb').textContent=t('Buscar redes','Scan networks')})}
 function pk(s){sel=s;document.getElementById('sn').textContent=s;document.getElementById('ls').style.display='none';document.getElementById('rb').style.display='none';document.getElementById('fm').classList.add('on');setTimeout(()=>document.getElementById('pw').focus(),120)}
 function bk(){document.getElementById('fm').classList.remove('on');document.getElementById('ls').style.display='';document.getElementById('rb').style.display='';document.getElementById('pw').value=''}
-function tp(){let i=document.getElementById('pw'),b=document.querySelector('.ey');if(i.type==='password'){i.type='text';b.textContent='ocultar'}else{i.type='password';b.textContent='mostrar'}}
-function go(){let p=document.getElementById('pw').value;document.getElementById('fm').classList.remove('on');document.getElementById('rs').classList.add('on');document.getElementById('rb').style.display='none';fetch('/connect?ssid='+encodeURIComponent(sel)+'&pass='+encodeURIComponent(p)).then(()=>{document.querySelector('#rs .sp').style.display='none';let m=document.getElementById('rm');m.className='ok';m.textContent='\u00a1Credenciales guardadas!'}).catch(()=>{let m=document.getElementById('rm');m.className='er';m.textContent='Error. Intenta de nuevo.'})}
-lg();sc();
+function tp(){let i=document.getElementById('pw'),b=document.querySelector('.ey');if(i.type==='password'){i.type='text';b.textContent=t('ocultar','hide')}else{i.type='password';b.textContent=t('mostrar','show')}}
+function go(){let p=document.getElementById('pw').value;document.getElementById('fm').classList.remove('on');document.getElementById('rs').classList.add('on');document.getElementById('rb').style.display='none';fetch('/connect?ssid='+encodeURIComponent(sel)+'&pass='+encodeURIComponent(p)).then(()=>{document.querySelector('#rs .sp').style.display='none';let m=document.getElementById('rm');m.className='ok';m.textContent=t('\u00a1Credenciales guardadas!','Credentials saved!')}).catch(()=>{let m=document.getElementById('rm');m.className='er';m.textContent=t('Error. Intenta de nuevo.','Error. Try again.')})}
+lg();loadLanguage();
 </script>
 </body>
 </html>
@@ -140,7 +144,8 @@ static String scanResultsJson() {
     return json;
 }
 
-void provisionStart() {
+void provisionStart(bool english) {
+    portalEnglish = english;
     if (running) return;
 
     hasCredentials = false;
@@ -170,6 +175,10 @@ void provisionStart() {
     webServer->on("/scan", HTTP_GET, [](AsyncWebServerRequest* req) {
         String json = scanResultsJson();
         req->send(200, "application/json", json);
+    });
+
+    webServer->on("/language", HTTP_GET, [](AsyncWebServerRequest* req) {
+        req->send(200, "text/plain", portalEnglish ? "en" : "es");
     });
 
     // Serve official 244x56 imagotipo as raw RGB565 binary (decoded by Canvas in portal)
@@ -245,7 +254,7 @@ bool provisionTick() {
     return hasCredentials;
 }
 
-void provisionDrawQR() {
+void provisionDrawQR(bool english) {
     // QR content: WiFi config string
     const char* qrData = "WIFI:S:Lemon-Setup;T:WPA;P:lemon1234;;";
 
@@ -301,12 +310,15 @@ void provisionDrawQR() {
     // Title
     tft.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_BASE);
     tft.setTextDatum(lgfx::top_center);
-    tft.drawString("Configurar WiFi", SCREEN_W / 2, textY, &SatoshiMedium18);
+    tft.drawString(english ? "Configure Wi-Fi" : "Configurar WiFi",
+                   SCREEN_W / 2, textY, &SatoshiMedium18);
 
     // Subtitle
     textY += 26;
     tft.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_BASE);
-    tft.drawString("Escanea el QR o conectate a:", SCREEN_W / 2, textY, &Satoshi12);
+    tft.drawString(english ? "Scan the QR or connect to:"
+                           : "Escanea el QR o conectate a:",
+                   SCREEN_W / 2, textY, &Satoshi12);
 
     // URL in accent color
     textY += 24;
@@ -316,9 +328,11 @@ void provisionDrawQR() {
     // Credentials in caption style
     textY += 32;
     tft.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-    tft.drawString("Red: Lemon-Setup", SCREEN_W / 2, textY, &Satoshi9);
+    tft.drawString(english ? "Network: Lemon-Setup" : "Red: Lemon-Setup",
+                   SCREEN_W / 2, textY, &Satoshi9);
     textY += 14;
-    tft.drawString("Clave: lemon1234", SCREEN_W / 2, textY, &Satoshi9);
+    tft.drawString(english ? "Password: lemon1234" : "Clave: lemon1234",
+                   SCREEN_W / 2, textY, &Satoshi9);
 }
 
 bool provisionHasCredentials() {

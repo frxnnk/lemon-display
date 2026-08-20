@@ -35,8 +35,6 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         self.assertNotIn("TETHER USDt", ui)
         self.assertIn('data/usdt_logo_64.h', ui)
         self.assertIn("BNB CHAIN", ui)
-        self.assertIn("Arbitrum", ui)
-        self.assertIn("Solana", ui)
         self.assertIn("v" , ui)
         self.assertNotIn("INTEL", ui)
         self.assertNotIn("ALERT", ui)
@@ -62,7 +60,10 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         self.assertNotIn("s_networkReady = false;", install)
         self.assertIn("otaFailureCoolingDown", scheduling)
         self.assertIn("bool failed = false;", header)
-        self.assertIn('data.ota.failed ? "PAUSA 30M"', ui)
+        self.assertIn(
+            'data.ota.failed ? tr(model.language, "PAUSA 30M", "PAUSED 30M")',
+            ui,
+        )
 
     def test_live_data_sources_are_independent_and_cover_regions(self):
         config = (ROOT / "src/config.h").read_text(encoding="utf-8")
@@ -143,17 +144,136 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         self.assertIn("usdtWorkerRequestPrice", worker_header)
         self.assertIn("USDT_WORKER_PRICE_COMPLETE", worker_header)
 
-    def test_peg_card_draws_a_real_live_sparkline(self):
-        header = (ROOT / "src/usdt_lemon_data.h").read_text(encoding="utf-8")
-        data = (ROOT / "src/usdt_lemon_data.cpp").read_text(encoding="utf-8")
+    def test_home_uses_four_compact_cards_without_a_peg_chart(self):
         ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
         overview = ui[ui.index("void drawOverview") : ui.index("void drawNetworks")]
-        self.assertIn("USDT_PEG_SAMPLE_COUNT = 24", header)
-        self.assertIn("float pegSamples[USDT_PEG_SAMPLE_COUNT]", header)
-        self.assertIn("appendPegSample(out, usd);", data)
-        self.assertIn("void drawPegSparkline", ui)
-        self.assertIn("drawPegSparkline(data.peg", overview)
-        self.assertIn('snprintf(pegSuffix, sizeof(pegSuffix), "DESVIO %+.1f BPS", bps);', overview)
+        for label in ('"VARIACION"', '"RENDIMIENTO"', '"PEG USD"', '"SPREAD ARS"'):
+            self.assertIn(label, overview)
+        self.assertNotIn("drawPegSparkline", ui)
+        self.assertIn("data.lemon.ask - data.lemon.bid", overview)
+
+    def test_variation_card_prominently_marks_1h_24h_and_7d(self):
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        self.assertIn("void drawVariationPeriods", ui)
+        start = ui.index("void drawVariationPeriods")
+        periods = ui[start : ui.index("void drawCard(", start)]
+        for period in ('"1H"', '"24H"', '"7D"'):
+            self.assertIn(period, periods)
+        self.assertIn("i == active", periods)
+        overview = ui[ui.index("void drawOverview") : ui.index("void drawNetworks")]
+        self.assertIn("drawVariationPeriods", overview)
+
+    def test_screen_titles_are_centered_as_logo_and_text_groups(self):
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        title = ui[ui.index("void drawUsdtTitle") : ui.index("void drawPill")]
+        self.assertIn("textWidth", title)
+        self.assertIn("groupWidth", title)
+        self.assertIn("groupX", title)
+        self.assertIn("drawTetherLogo(groupX", title)
+
+    def test_bottom_navigation_uses_vector_icons_and_localized_labels(self):
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        for function in (
+            "drawHomeNavIcon",
+            "drawNetworksNavIcon",
+            "drawMarketsNavIcon",
+            "drawRegionsNavIcon",
+            "drawSystemNavIcon",
+        ):
+            self.assertIn(function, ui)
+        navigation = ui[ui.index("void drawNavigation") : ui.index("void drawFramebufferError")]
+        self.assertIn("drawNavigationIcon", navigation)
+        self.assertIn('tr(model.language, "INICIO", "HOME")', navigation)
+
+    def test_redundant_screen_footers_and_secondary_network_list_are_removed(self):
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        for removed in (
+            "SUPPLY ON-CHAIN",
+            "FUENTE: DEFILLAMA",
+            "DATOS DE MERCADO USDt",
+            "COTIZACIONES REGIONALES",
+            "Arbitrum / AVAX",
+        ):
+            self.assertNotIn(removed, ui)
+
+    def test_system_model_and_nvs_have_persistent_sound_language_and_wifi_controls(self):
+        model = (ROOT / "src/usdt_lemon_model.h").read_text(encoding="utf-8")
+        nvs_header = (ROOT / "src/nvs_storage.h").read_text(encoding="utf-8")
+        nvs = (ROOT / "src/nvs_storage.cpp").read_text(encoding="utf-8")
+        for field in ("soundEnabled", "language"):
+            self.assertIn(field, model)
+        for helper in (
+            "usdtSystemSoundHit",
+            "usdtSystemLanguageHit",
+            "usdtSystemWifiHit",
+        ):
+            self.assertIn(helper, model)
+        self.assertIn("nvsGetUsdtLanguage", nvs_header)
+        self.assertIn("nvsSetUsdtLanguage", nvs_header)
+        self.assertIn('prefs.getUChar("usdt_lang"', nvs)
+        self.assertIn('prefs.putUChar("usdt_lang"', nvs)
+
+    def test_system_runtime_applies_audio_language_and_wifi_controls(self):
+        runtime = (ROOT / "src/usdt_lemon_runtime.cpp").read_text(encoding="utf-8")
+        main = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
+        self.assertIn("audioSetup();", main[main.index("#if LEMON_USDT_MODE") :])
+        self.assertIn("nvsGetSoundEnabled()", runtime)
+        self.assertIn("nvsGetUsdtLanguage()", runtime)
+        self.assertIn("nvsSetSoundEnabled", runtime)
+        self.assertIn("nvsSetUsdtLanguage", runtime)
+        controls = runtime[runtime.index("bool handleSystemControl") : runtime.index("}  // namespace")]
+        self.assertIn("s_model.lastInteractionMs = millis();", controls)
+
+    def test_system_has_no_hidden_ota_touch_region(self):
+        model = (ROOT / "src/usdt_lemon_model.h").read_text(encoding="utf-8")
+        runtime = (ROOT / "src/usdt_lemon_runtime.cpp").read_text(encoding="utf-8")
+        self.assertNotIn("otaCheckRequested", model)
+        self.assertNotIn("otaCheckRequested", runtime)
+        self.assertNotIn("event.y >= 250", model)
+
+    def test_usdt_ui_contains_spanish_and_english_runtime_copy(self):
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        runtime = (ROOT / "src/usdt_lemon_runtime.cpp").read_text(encoding="utf-8")
+        self.assertIn("const char* tr(", ui)
+        for spanish, english in (
+            ("SISTEMA", "SYSTEM"),
+            ("SONIDO", "SOUND"),
+            ("IDIOMA", "LANGUAGE"),
+            ("RECONFIGURAR WI-FI", "RECONFIGURE WI-FI"),
+            ("RENDIMIENTO", "YIELD"),
+        ):
+            self.assertIn(spanish, ui)
+            self.assertIn(english, ui)
+        self.assertIn("usdtRuntimeCopy", runtime)
+        self.assertIn('tr(model.language, "DESVIO", "DEVIATION")', ui)
+        self.assertIn("void usdtUiSetLanguage", ui)
+        self.assertIn("usdtUiSetLanguage(s_model.language);", runtime)
+        self.assertIn('"ESPANOL"', ui)
+        self.assertNotIn('"ESPAÑOL"', ui)
+
+    def test_wifi_qr_screen_follows_the_usdt_language(self):
+        header = (ROOT / "src/wifi_provision.h").read_text(encoding="utf-8")
+        provision = (ROOT / "src/wifi_provision.cpp").read_text(encoding="utf-8")
+        runtime = (ROOT / "src/usdt_lemon_runtime.cpp").read_text(encoding="utf-8")
+        self.assertIn("void provisionDrawQR(bool english = false);", header)
+        self.assertIn("void provisionDrawQR(bool english)", provision)
+        self.assertIn('english ? "Configure Wi-Fi" : "Configurar WiFi"', provision)
+        self.assertIn('english ? "Scan the QR or connect to:"', provision)
+        self.assertIn("provisionDrawQR(s_model.language == USDT_LANGUAGE_EN);", runtime)
+        self.assertIn("void provisionStart(bool english = false);", header)
+        self.assertIn("provisionStart(s_model.language == USDT_LANGUAGE_EN);", runtime)
+        self.assertIn('webServer->on("/language"', provision)
+        self.assertIn("function t(spanish,english)", provision)
+        self.assertIn('id="initial-status"', provision)
+        self.assertIn("document.getElementById('initial-status').textContent", provision)
+        script = provision.split("<script>", 1)[1].split("</script>", 1)[0]
+        checked = subprocess.run(
+            ["node", "--check", "-"],
+            input=script,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(checked.returncode, 0, checked.stderr)
 
     def test_missing_card_values_pulse_only_while_data_is_loading(self):
         ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
@@ -269,7 +389,7 @@ class UsdtFirmwareContractTests(unittest.TestCase):
 
     def test_usdt_release_version_is_bumped(self):
         config = (ROOT / "src/config.h").read_text(encoding="utf-8")
-        self.assertIn('#define APP_VERSION "5.1.1-usdt.15"', config)
+        self.assertIn('#define APP_VERSION "5.1.1-usdt.16"', config)
     def test_main_boots_live_runtime_before_v1(self):
         main = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
         self.assertIn("#if LEMON_USDT_MODE", main)

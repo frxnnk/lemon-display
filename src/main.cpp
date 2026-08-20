@@ -2033,6 +2033,8 @@ void setup() {
     displaySetup();
     displaySetupVSync();
     displaySetBrightness(nvsGetBrightness());
+    audioSetup();
+    audioSetEnabled(nvsGetSoundEnabled());
     touchSetup();
     usdtLemonSetup();
     esp_task_wdt_init(45, true);
