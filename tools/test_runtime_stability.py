@@ -158,6 +158,16 @@ class RuntimeStabilityTests(unittest.TestCase):
         connecting = wifi[wifi.index("bool wifiConnecting"):wifi.index("bool wifiConnectSucceeded")]
         self.assertIn("applyPublicDns();", connecting)
 
+    def test_saved_wifi_retries_even_when_initial_boot_connection_failed(self):
+        wifi = (SRC / "wifi_manager.cpp").read_text(encoding="utf-8")
+        setup = wifi[wifi.index("void wifiSetup"):wifi.index("void wifiLoop")]
+        loop = wifi[wifi.index("void wifiLoop"):wifi.index("bool wifiConnected")]
+
+        self.assertNotIn("if (!everConnected) return", loop)
+        self.assertNotIn("WiFi.disconnect(true)", setup)
+        self.assertIn("WiFi.begin(storedSSID, storedPass);", loop)
+        self.assertIn("RECONNECT_MAX", loop)
+
     def test_stocks_deactivation_cancels_pending_burst_without_killing_inflight_fetch(self):
         header = (SRC / "ui_stocks.h").read_text(encoding="utf-8")
         stocks = (SRC / "ui_stocks.cpp").read_text(encoding="utf-8")
