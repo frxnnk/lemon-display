@@ -224,6 +224,7 @@ bool parseNetworkSupply(const char* json, UsdtNetworkData& out) {
         "bsc", "polygon", "tron", "ethereum"
     };
     JsonDocument filter;
+    filter["totalSupplyUsd"] = true;
     filter["networks"][0]["id"] = true;
     filter["networks"][0]["supplyUsd"] = true;
     filter["networks"][0]["change24h"] = true;
@@ -236,6 +237,8 @@ bool parseNetworkSupply(const char* json, UsdtNetworkData& out) {
     if (rows.size() != USDT_NETWORK_COUNT) return false;
 
     UsdtNetworkData next = {};
+    next.totalSupplyUsd = doc["totalSupplyUsd"] | 0.0f;
+    if (!finiteRange(next.totalSupplyUsd, 1.0f, 1.0e12f)) return false;
     for (JsonObject row : rows) {
         const char* id = row["id"] | "";
         int index = -1;

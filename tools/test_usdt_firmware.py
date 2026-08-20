@@ -333,10 +333,13 @@ class UsdtFirmwareContractTests(unittest.TestCase):
     def test_home_uses_four_compact_cards_without_a_peg_chart(self):
         ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
         overview = ui[ui.index("void drawOverview") : ui.index("void drawNetworks")]
-        for label in ('"VARIACION"', '"RENDIMIENTO"', '"PEG USD"', '"SPREAD ARS"'):
+        for label in ('"VARIACION"', '"RENDIMIENTO"', '"PEG USD"', '"SUPPLY USDt"'):
             self.assertIn(label, overview)
         self.assertNotIn("drawPegSparkline", ui)
-        self.assertIn("data.lemon.ask - data.lemon.bid", overview)
+        self.assertIn("data.networks.totalSupplyUsd", overview)
+        self.assertIn("formatUsdSupply", overview)
+        self.assertNotIn("SPREAD ARS", overview)
+        self.assertNotIn("data.lemon.ask - data.lemon.bid", overview)
 
     def test_variation_card_prominently_marks_1h_24h_and_7d(self):
         ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
@@ -545,6 +548,7 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         fixture = {
             "peggedAssets": [{
                 "symbol": "USDT",
+                "circulating": {"peggedUSD": 2000},
                 "chainCirculating": {
                     "BSC": {"current": {"peggedUSD": 110}, "circulatingPrevDay": {"peggedUSD": 100}},
                     "Polygon": {"current": {"peggedUSD": 200}, "circulatingPrevDay": {"peggedUSD": 250}},
@@ -566,6 +570,7 @@ class UsdtFirmwareContractTests(unittest.TestCase):
             check=True,
         )
         payload = json.loads(result.stdout)
+        self.assertEqual(payload["totalSupplyUsd"], 2000)
         self.assertEqual([item["id"] for item in payload["networks"]],
                          ["bsc", "polygon", "tron", "ethereum"])
         self.assertAlmostEqual(payload["networks"][0]["change24h"], 10.0)

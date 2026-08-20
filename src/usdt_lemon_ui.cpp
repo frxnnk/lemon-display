@@ -384,16 +384,17 @@ void drawOverview(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
     drawCard(SAFE, 310, 204, 82, "PEG USD", pegValue, nullptr,
              pegColor, pegLoading);
 
-    char spreadValue[20] = "--";
-    const bool spreadUsable = data.lemon.valid && data.lemon.ask > 0.0f;
-    if (spreadUsable) {
-        snprintf(spreadValue, sizeof(spreadValue), "%.2f%%",
-                 (data.lemon.ask - data.lemon.bid) * 100.0f / data.lemon.ask);
+    char supplyValue[20] = "--";
+    const bool supplyUsable = usdtAuxDataUsable(
+        data.networks.valid, data.networks.lastUpdateMs, nowMs);
+    if (supplyUsable) {
+        formatUsdSupply(supplyValue, sizeof(supplyValue),
+                        data.networks.totalSupplyUsd);
     }
-    drawCard(252, 310, 204, 82, "SPREAD ARS", spreadValue,
-             tr(model.language, "COMPRA / VENTA", "BID / ASK"),
-             spreadUsable ? Colors::TEXT_PRIMARY : Colors::TEXT_TERTIARY,
-             data.fetching && !spreadUsable);
+    drawCard(252, 310, 204, 82,
+             tr(model.language, "SUPPLY USDt", "USDt SUPPLY"), supplyValue,
+             "GLOBAL", supplyUsable ? TETHER_GREEN : Colors::TEXT_TERTIARY,
+             data.fetching && !supplyUsable);
 }
 
 void drawNetworks(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
