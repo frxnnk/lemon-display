@@ -243,6 +243,13 @@ void startProvisioning() {
     provisionDrawQR(s_model.language == USDT_LANGUAGE_EN);
 }
 
+bool handleMarketControl(const TouchEvent& event) {
+    if (!usdtHandleMarketPairTap(s_model, event, millis())) return false;
+    if (s_model.soundEnabled) playTap();
+    redraw();
+    return true;
+}
+
 bool handleSystemControl(const TouchEvent& event) {
     if (s_model.scene != USDT_SYSTEM || event.gesture != TOUCH_TAP) return false;
     const bool soundHit = usdtSystemSoundHit(event.x, event.y);
@@ -341,6 +348,7 @@ void usdtLemonLoop() {
     TouchEvent event = touchLoop();
     if (event.gesture != TOUCH_NONE) {
         if (handleSystemControl(event)) return;
+        if (handleMarketControl(event)) return;
         if (event.gesture == TOUCH_TAP && s_model.soundEnabled) playTap();
         const bool changed = usdtHandleGesture(s_model, event, millis());
         if (s_model.refreshRequested) {

@@ -133,6 +133,22 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         self.assertIn("drawMarketChart", markets)
         self.assertIn('tr(model.language, "ACTIVO", "ACTIVE")', markets)
 
+    def test_market_pair_taps_redraw_before_generic_navigation(self):
+        runtime = (ROOT / "src/usdt_lemon_runtime.cpp").read_text(encoding="utf-8")
+        self.assertIn("bool handleMarketControl", runtime)
+        handler = runtime[
+            runtime.index("bool handleMarketControl") :
+            runtime.index("bool handleSystemControl")
+        ]
+        self.assertIn("usdtHandleMarketPairTap", handler)
+        self.assertIn("redraw();", handler)
+        loop = runtime[runtime.index("void usdtLemonLoop()") :]
+        self.assertIn("handleMarketControl(event)", loop)
+        self.assertLess(
+            loop.index("handleMarketControl(event)"),
+            loop.index("usdtHandleGesture(s_model"),
+        )
+
     def test_placeholder_coingecko_key_is_never_sent(self):
         api = (ROOT / "src/api_client.cpp").read_text(encoding="utf-8")
         self.assertIn("coinGeckoKeyConfigured", api)
@@ -201,34 +217,38 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         markets = ui[ui.index("void drawMarkets") : ui.index("void drawRegions")]
         regions = ui[ui.index("void drawRegions") : ui.index("void drawSystem")]
         self.assertIn("const int y = 145 + i * 65", networks)
-        self.assertIn("drawCard(SAFE, 128, 204, 120", markets)
-        self.assertIn("drawArsChart(data.peg", markets)
+        self.assertIn("drawMarketPairCard(USDT_MARKET_ARS_X", markets)
+        self.assertIn("drawMarketChart(data.peg", markets)
         self.assertIn("drawCard(SAFE, 128, 204, 120", regions)
         self.assertIn("drawCard(SAFE, 260, 204, 120", regions)
 
-    def test_markets_uses_a_full_width_seven_day_ars_chart(self):
+    def test_markets_uses_a_full_width_selectable_seven_day_chart(self):
         ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
-        self.assertIn("void drawArsChart", ui)
-        chart = ui[ui.index("void drawArsChart") : ui.index("void drawMarkets")]
+        self.assertIn("void drawMarketChart", ui)
+        chart = ui[ui.index("void drawMarketChart") : ui.index("void drawMarkets")]
         self.assertIn('"USDT / ARS - 7D"', chart)
+        self.assertIn('"USDT / USD - 7D"', chart)
         self.assertIn('tr(language, "ACTUAL", "CURRENT")', chart)
         self.assertIn('"MIN %s"', chart)
         self.assertIn('"MAX %s"', chart)
-        self.assertIn("peg.arsChartCount", chart)
+        self.assertIn("const float* values", chart)
+        self.assertIn("uint8_t count", chart)
         self.assertIn("s_canvas.drawLine", chart)
         markets = ui[ui.index("void drawMarkets") : ui.index("void drawRegions")]
-        self.assertIn("drawArsChart(data.peg", markets)
+        self.assertIn("drawMarketChart(data.peg.arsChart", markets)
+        self.assertIn("drawMarketChart(data.peg.usdChart", markets)
         self.assertNotIn('"24H ARS"', markets)
         self.assertNotIn('"SPREAD"', markets)
 
-    def test_markets_hides_an_expired_ars_chart(self):
+    def test_markets_hide_expired_pair_charts_independently(self):
         ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
         markets = ui[ui.index("void drawMarkets") : ui.index("void drawRegions")]
-        self.assertIn("const bool chartUsable = usdtAuxDataUsable", markets)
+        self.assertIn("const bool arsChartUsable = usdtAuxDataUsable", markets)
         self.assertIn("data.peg.variationsLastUpdateMs", markets)
-        self.assertIn("drawArsChart(data.peg, chartUsable", markets)
-        chart = ui[ui.index("void drawArsChart") : ui.index("void drawMarkets")]
-        self.assertIn("if (!usable || peg.arsChartCount < 2)", chart)
+        self.assertIn("const bool usdChartUsable = usdtAuxDataUsable", markets)
+        self.assertIn("data.peg.usdChartLastUpdateMs", markets)
+        chart = ui[ui.index("void drawMarketChart") : ui.index("void drawMarkets")]
+        self.assertIn("if (!usable || count < 2)", chart)
 
     def test_primary_price_refreshes_independently_every_15_seconds(self):
         runtime = (ROOT / "src/usdt_lemon_runtime.cpp").read_text(encoding="utf-8")
