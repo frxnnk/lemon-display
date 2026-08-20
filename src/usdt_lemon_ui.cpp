@@ -393,7 +393,7 @@ void drawOverview(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
     }
     drawCard(252, 310, 204, 82,
              tr(model.language, "SUPPLY USDt", "USDt SUPPLY"), supplyValue,
-             "GLOBAL", supplyUsable ? TETHER_GREEN : Colors::TEXT_TERTIARY,
+             nullptr, supplyUsable ? TETHER_GREEN : Colors::TEXT_TERTIARY,
              data.fetching && !supplyUsable);
 }
 
