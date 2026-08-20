@@ -417,34 +417,98 @@ void drawNetworks(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
     }
 }
 
+void drawArsChart(const UsdtPegData& peg, bool loading, UsdtLanguage language) {
+    constexpr int x = SAFE;
+    constexpr int y = 260;
+    constexpr int w = 432;
+    constexpr int h = 120;
+    constexpr int chartX = x + 14;
+    constexpr int chartY = y + 32;
+    constexpr int chartW = w - 28;
+    constexpr int chartH = 48;
+
+    s_canvas.fillSmoothRoundRect(x, y, w, h, 12, Colors::BG_CARD);
+    s_canvas.drawRoundRect(x, y, w, h, 12, Colors::CARD_BORDER);
+    s_canvas.setTextDatum(lgfx::top_left);
+    s_canvas.setTextColor(TETHER_GREEN, Colors::BG_CARD);
+    s_canvas.drawString("USDT / ARS - 7D", x + 14, y + 10, &Satoshi9);
+
+    if (peg.arsChartCount < 2) {
+        if (loading) {
+            drawCardLoadingPulse(x + 14, y + 48);
+        } else {
+            s_canvas.setTextDatum(lgfx::middle_center);
+            s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+            s_canvas.drawString("--", x + w / 2, chartY + chartH / 2, &SatoshiBold24);
+        }
+        return;
+    }
+
+    float minPrice = peg.arsChart[0];
+    float maxPrice = peg.arsChart[0];
+    for (uint8_t i = 1; i < peg.arsChartCount; ++i) {
+        minPrice = min(minPrice, peg.arsChart[i]);
+        maxPrice = max(maxPrice, peg.arsChart[i]);
+    }
+    float range = maxPrice - minPrice;
+    if (range < 0.01f) range = 0.01f;
+
+    s_canvas.drawFastHLine(chartX, chartY + chartH / 2, chartW, Colors::DIVIDER);
+    const uint16_t chartColor =
+        peg.arsChart[peg.arsChartCount - 1] >= peg.arsChart[0]
+            ? TETHER_GREEN
+            : Colors::NEGATIVE;
+    int previousX = chartX;
+    int previousY = chartY + chartH - 1 - static_cast<int>(
+        (peg.arsChart[0] - minPrice) * (chartH - 1) / range);
+    for (uint8_t i = 1; i < peg.arsChartCount; ++i) {
+        const int pointX = chartX +
+            static_cast<int>(i) * (chartW - 1) / (peg.arsChartCount - 1);
+        const int pointY = chartY + chartH - 1 - static_cast<int>(
+            (peg.arsChart[i] - minPrice) * (chartH - 1) / range);
+        s_canvas.drawLine(previousX, previousY, pointX, pointY, chartColor);
+        previousX = pointX;
+        previousY = pointY;
+    }
+
+    char minValue[20];
+    char maxValue[20];
+    char currentValue[20];
+    char minLabel[28];
+    char maxLabel[28];
+    char currentLabel[32];
+    formatArs(minValue, sizeof(minValue), minPrice);
+    formatArs(maxValue, sizeof(maxValue), maxPrice);
+    formatArs(currentValue, sizeof(currentValue), peg.arsChart[peg.arsChartCount - 1]);
+    snprintf(minLabel, sizeof(minLabel), "MIN %s", minValue);
+    snprintf(maxLabel, sizeof(maxLabel), "MAX %s", maxValue);
+    snprintf(currentLabel, sizeof(currentLabel), "%s %s",
+             tr(language, "ACTUAL", "CURRENT"), currentValue);
+    s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+    s_canvas.setTextDatum(lgfx::bottom_left);
+    s_canvas.drawString(minLabel, x + 14, y + h - 10, &Satoshi9);
+    s_canvas.setTextDatum(lgfx::bottom_center);
+    s_canvas.setTextColor(chartColor, Colors::BG_CARD);
+    s_canvas.drawString(currentLabel, x + w / 2, y + h - 10, &Satoshi9);
+    s_canvas.setTextDatum(lgfx::bottom_right);
+    s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+    s_canvas.drawString(maxLabel, x + w - 14, y + h - 10, &Satoshi9);
+}
+
 void drawMarkets(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
     drawUsdtTitle("MARKETS");
     char ars[20] = "--";
     char usd[20] = "--";
-    char change[20] = "--";
-    char spread[20] = "--";
     formatArs(ars, sizeof(ars), data.lemon.ars);
     const bool pegUsable = usdtAuxDataUsable(
         data.peg.valid, data.peg.lastUpdateMs, millis());
     if (pegUsable) snprintf(usd, sizeof(usd), "%.4f", data.peg.usd);
-    const bool variationsUsable = usdtAuxDataUsable(
-        data.peg.variationsValid, data.peg.variationsLastUpdateMs, millis());
-    if (variationsUsable) formatPct(change, sizeof(change), data.peg.change24h);
-    if (data.lemon.valid && data.lemon.ask > 0.0f) {
-        snprintf(spread, sizeof(spread), "%.2f%%",
-                 (data.lemon.ask - data.lemon.bid) * 100.0f / data.lemon.ask);
-    }
     drawCard(SAFE, 128, 204, 120, "USDT / ARS", ars, "LEMON", Colors::TEXT_PRIMARY,
              data.fetching && !data.lemon.valid);
     drawCard(252, 128, 204, 120, "USDT / USD", usd, "PEG", Colors::TEXT_PRIMARY,
              data.fetching && !pegUsable);
-    drawCard(SAFE, 260, 204, 120, "24H ARS", change,
-             tr(model.language, "VARIACION", "CHANGE"),
-             !variationsUsable ? Colors::TEXT_TERTIARY
-             : data.peg.change24h < 0 ? Colors::NEGATIVE : TETHER_GREEN,
-             data.fetching && !variationsUsable);
-    drawCard(252, 260, 204, 120, "SPREAD", spread, "BID / ASK", Colors::TEXT_PRIMARY,
-             data.fetching && !data.lemon.valid);
+    drawArsChart(data.peg, data.fetching && data.peg.arsChartCount < 2,
+                 model.language);
 }
 
 void drawRegions(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
