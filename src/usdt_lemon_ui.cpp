@@ -233,10 +233,9 @@ void drawNetworks(const UsdtDataSnapshot& data) {
     s_canvas.drawString("SUPPLY ON-CHAIN  /  FUENTE: DEFILLAMA", SAFE, 372, &Satoshi9);
     s_canvas.setTextDatum(lgfx::top_right);
     s_canvas.setTextColor(TETHER_GREEN, Colors::BG_BASE);
-    const char* footer = (millis() / 4000UL) % 2UL == 0
-        ? "Arbitrum / AVAX C-Chain / CELO / Monad / Optimism / Rootstock / Solana"
-        : "MISMA RED AL TRANSFERIR";
-    s_canvas.drawString(footer, SCREEN_W - SAFE, 390, &Satoshi9);
+    s_canvas.drawString(
+        "Arbitrum / AVAX C-Chain / CELO / Monad / Optimism / Rootstock / Solana",
+        SCREEN_W - SAFE, 390, &Satoshi9);
 }
 
 void drawMarkets(const UsdtDataSnapshot& data) {

@@ -18,7 +18,7 @@
 
 // ── App version ──
 #if LEMON_USDT_MODE
-#define APP_VERSION "5.1.1-usdt.7"
+#define APP_VERSION "5.1.1-usdt.8"
 #elif LEMON_USDT_MOCK_MODE
 #define APP_VERSION "5.1.1-usdt-mock.2"
 #else
@@ -51,7 +51,7 @@
 #define LEMON_YIELD_EP "https://api.lemoncash.com.ar/api/v1/interest-funds-percentages"
 #define COINBASE_USDT_RATES_EP "https://api.coinbase.com/v2/exchange-rates?currency=USDT"
 #define COINGECKO_USDT_CHART_EP "https://api.coingecko.com/api/v3/coins/tether/market_chart?vs_currency=ars&days=7&interval=hourly"
-#define DEFILLAMA_USDT_EP "https://stablecoins.llama.fi/stablecoins?includePrices=true"
+#define LEMON_USDT_NETWORKS_EP "https://lemon-box.vercel.app/api/usdt-networks"
 
 // ── CoinGecko USDC/ARS chart (for dollar sparkline) ──
 #define COINGECKO_TETHER_CHART_EP "https://api.coingecko.com/api/v3/coins/usd-coin/market_chart?vs_currency=ars&days="

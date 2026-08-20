@@ -1,0 +1,13 @@
+.pio/
+.worktrees/
+.playwright-cli/
+.playwright-mcp/
+test-results/
+tools/build/
+tools/dist/
+tools/dist*/
+tmp/
+output/
+*.bin
+*.stl
+*.pdf
