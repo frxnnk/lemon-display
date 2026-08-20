@@ -199,6 +199,7 @@ class UsdtFirmwareContractTests(unittest.TestCase):
     def test_regions_show_each_country_flag_inside_its_card(self):
         ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
         regions = ui[ui.index("void drawRegions") : ui.index("void drawSystem")]
+        card = ui[ui.index("void drawRegionCard") : ui.index("void drawRegions")]
         for function in (
             "drawArgentinaFlag",
             "drawBrazilFlag",
@@ -206,7 +207,26 @@ class UsdtFirmwareContractTests(unittest.TestCase):
             "drawColombiaFlag",
         ):
             self.assertIn(function, ui)
-            self.assertIn(function, regions)
+            self.assertIn(function, card)
+        for flag in (
+            "REGION_FLAG_ARGENTINA",
+            "REGION_FLAG_BRAZIL",
+            "REGION_FLAG_PERU",
+            "REGION_FLAG_COLOMBIA",
+        ):
+            self.assertIn(flag, regions)
+
+    def test_region_cards_share_one_aligned_content_grid(self):
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        self.assertIn("void drawRegionCard", ui)
+        card = ui[ui.index("void drawRegionCard") : ui.index("void drawRegions")]
+        self.assertIn("const int valueY = y + 54", card)
+        self.assertIn("const int flagY = valueY - 12", card)
+        self.assertIn("x + 16, valueY", card)
+        self.assertIn("x + w - 54, flagY", card)
+        regions = ui[ui.index("void drawRegions") : ui.index("void drawSystem")]
+        self.assertEqual(regions.count("drawRegionCard("), 4)
+        self.assertNotIn("drawCard(", regions)
 
     def test_network_rows_use_each_chain_icon_instead_of_generic_dots(self):
         ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
@@ -248,8 +268,8 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         self.assertIn("const int y = 145 + i * 65", networks)
         self.assertIn("drawMarketPairCard(USDT_MARKET_ARS_X", markets)
         self.assertIn("drawMarketChart(data.peg", markets)
-        self.assertIn("drawCard(SAFE, 128, 204, 120", regions)
-        self.assertIn("drawCard(SAFE, 260, 204, 120", regions)
+        self.assertIn("drawRegionCard(SAFE, 128", regions)
+        self.assertIn("drawRegionCard(SAFE, 260", regions)
 
     def test_markets_uses_a_full_width_selectable_seven_day_chart(self):
         ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
