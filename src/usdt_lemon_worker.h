@@ -6,6 +6,7 @@
 enum UsdtWorkerUpdateKind : uint8_t {
     USDT_WORKER_DATA_PARTIAL = 0,
     USDT_WORKER_DATA_COMPLETE,
+    USDT_WORKER_PRICE_COMPLETE,
     USDT_WORKER_OTA_CHECK,
     USDT_WORKER_OTA_PROBE,
 };
@@ -20,6 +21,7 @@ struct UsdtWorkerUpdate {
 bool usdtWorkerSetup();
 bool usdtWorkerBusy();
 bool usdtWorkerRequestData(const UsdtDataSnapshot& seed);
+bool usdtWorkerRequestPrice(const UsdtDataSnapshot& seed);
 bool usdtWorkerRequestOtaCheck();
 bool usdtWorkerRequestOtaProbe();
 bool usdtWorkerPoll(UsdtWorkerUpdate& update);

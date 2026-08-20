@@ -65,6 +65,28 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         self.assertIn('strcmp(COINGECKO_API_KEY, "YOUR_COINGECKO_DEMO_KEY")', api)
         self.assertIn("addCoinGeckoKey && coinGeckoKeyConfigured()", api)
 
+    def test_vercel_network_endpoint_has_its_active_google_root(self):
+        api = (ROOT / "src/api_client.cpp").read_text(encoding="utf-8")
+        self.assertIn("GTS Root R1", api)
+        self.assertIn("MIIFVzCCAz+gAwIBAgINAgPlk28xsBNJiGuiFz", api)
+
+    def test_overview_shows_argentina_flag_and_price_cents(self):
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        self.assertIn("drawArgentinaFlag", ui)
+        self.assertIn('snprintf(out, outSize, "$%.2f", value)', ui)
+        overview = ui[ui.index("void drawOverview") : ui.index("void drawNetworks")]
+        self.assertIn("drawArgentinaFlag", overview)
+
+    def test_primary_price_refreshes_independently_every_15_seconds(self):
+        runtime = (ROOT / "src/usdt_lemon_runtime.cpp").read_text(encoding="utf-8")
+        worker = (ROOT / "src/usdt_lemon_worker.cpp").read_text(encoding="utf-8")
+        worker_header = (ROOT / "src/usdt_lemon_worker.h").read_text(encoding="utf-8")
+        self.assertIn("PRICE_REFRESH_INTERVAL_MS = 15UL * 1000UL", runtime)
+        self.assertIn("usdtWorkerRequestPrice", runtime)
+        self.assertIn("usdtWorkerRequestPrice", worker)
+        self.assertIn("usdtWorkerRequestPrice", worker_header)
+        self.assertIn("USDT_WORKER_PRICE_COMPLETE", worker_header)
+
     def test_market_data_runs_outside_the_touch_loop_after_ntp_sync(self):
         runtime = (ROOT / "src/usdt_lemon_runtime.cpp").read_text(encoding="utf-8")
         worker = (ROOT / "src/usdt_lemon_worker.cpp").read_text(encoding="utf-8")
@@ -165,7 +187,7 @@ class UsdtFirmwareContractTests(unittest.TestCase):
 
     def test_usdt_release_version_is_bumped(self):
         config = (ROOT / "src/config.h").read_text(encoding="utf-8")
-        self.assertIn('#define APP_VERSION "5.1.1-usdt.8"', config)
+        self.assertIn('#define APP_VERSION "5.1.1-usdt.9"', config)
     def test_main_boots_live_runtime_before_v1(self):
         main = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
         self.assertIn("#if LEMON_USDT_MODE", main)

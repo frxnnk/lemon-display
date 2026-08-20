@@ -18,7 +18,8 @@
 #include <esp_task_wdt.h>
 
 namespace {
-constexpr uint32_t REFRESH_INTERVAL_MS = 60UL * 1000UL;
+constexpr uint32_t FULL_REFRESH_INTERVAL_MS = 60UL * 1000UL;
+constexpr uint32_t PRICE_REFRESH_INTERVAL_MS = 15UL * 1000UL;
 constexpr uint32_t CLOCK_REDRAW_MS = 30UL * 1000UL;
 constexpr uint32_t OTA_PROBE_MS = 60UL * 1000UL;
 constexpr uint32_t OTA_CHECK_MS = 5UL * 60UL * 1000UL;
@@ -30,6 +31,7 @@ OtaInfo s_otaInfo = {};
 bool s_provisioning = false;
 bool s_networkReady = false;
 uint32_t s_lastFetchMs = 0;
+uint32_t s_lastPriceFetchMs = 0;
 uint32_t s_lastDrawMs = 0;
 uint32_t s_lastOtaCheckMs = 0;
 uint32_t s_lastOtaProbeMs = 0;
@@ -132,11 +134,18 @@ void serviceWorkerUpdates() {
         if (update.kind == USDT_WORKER_DATA_PARTIAL ||
             update.kind == USDT_WORKER_DATA_COMPLETE) {
             s_data = update.data;
+            if (update.kind == USDT_WORKER_DATA_PARTIAL && s_data.lemon.valid) {
+                s_lastPriceFetchMs = millis();
+            }
             if (update.kind == USDT_WORKER_DATA_COMPLETE) {
                 s_data.fetching = false;
                 s_lastFetchMs = millis();
                 s_initialDataComplete = true;
             }
+            changed = true;
+        } else if (update.kind == USDT_WORKER_PRICE_COMPLETE) {
+            s_data = update.data;
+            s_lastPriceFetchMs = millis();
             changed = true;
         } else if (update.kind == USDT_WORKER_OTA_CHECK) {
             applyOtaResult(update.ota);
@@ -175,8 +184,14 @@ void serviceNetworkScheduling(uint32_t nowMs) {
         requestOtaCheck();
         return;
     }
-    if (!usdtWorkerBusy() && nowMs - s_lastFetchMs >= REFRESH_INTERVAL_MS) {
+    if (!usdtWorkerBusy() &&
+        nowMs - s_lastFetchMs >= FULL_REFRESH_INTERVAL_MS) {
         refreshNow();
+        return;
+    }
+    if (!usdtWorkerBusy() && s_initialDataComplete &&
+        nowMs - s_lastPriceFetchMs >= PRICE_REFRESH_INTERVAL_MS) {
+        usdtWorkerRequestPrice(s_data);
         return;
     }
     if (!usdtWorkerBusy() && s_data.ota.checked && !s_data.ota.available &&
@@ -270,6 +285,7 @@ void usdtLemonLoop() {
         s_bootOtaPending = false;
         s_refreshPending = true;
         s_initialDataComplete = false;
+        s_lastPriceFetchMs = 0;
         redraw();
     }
 

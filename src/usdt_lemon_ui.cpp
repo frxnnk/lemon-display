@@ -20,6 +20,8 @@ bool s_allocationAttempted = false;
 constexpr int SAFE = 24;
 constexpr uint16_t TETHER_GREEN = 0x250F;
 constexpr uint16_t TETHER_DARK = 0x0A29;
+constexpr uint16_t ARGENTINA_BLUE = 0x5D9F;
+constexpr uint16_t ARGENTINA_SUN = 0xFDC0;
 
 struct NetworkRow {
     const char* name;
@@ -66,6 +68,15 @@ void drawTetherLogo64(int x, int y) {
     }
 }
 
+void drawArgentinaFlag(int x, int y) {
+    constexpr int width = 38;
+    constexpr int height = 24;
+    s_canvas.fillSmoothRoundRect(x, y, width, height, 4, ARGENTINA_BLUE);
+    s_canvas.fillRect(x + 1, y + 8, width - 2, 8, 0xFFFF);
+    s_canvas.fillCircle(x + width / 2, y + height / 2, 3, ARGENTINA_SUN);
+    s_canvas.drawRoundRect(x, y, width, height, 4, Colors::CARD_BORDER);
+}
+
 void drawUsdtTitle(const char* title) {
     drawTetherLogo(SAFE, 80);
     s_canvas.setTextDatum(lgfx::top_left);
@@ -101,7 +112,7 @@ void formatArs(char* out, size_t outSize, float value) {
         out[outSize - 1] = '\0';
         return;
     }
-    snprintf(out, outSize, "$%.0f", value);
+    snprintf(out, outSize, "$%.2f", value);
 }
 
 void formatPct(char* out, size_t outSize, float value) {
@@ -166,6 +177,10 @@ void drawOverview(const UsdtDataSnapshot& data) {
     s_canvas.setTextColor(data.lemon.valid ? Colors::TEXT_PRIMARY : Colors::TEXT_TERTIARY,
                           Colors::BG_BASE);
     s_canvas.drawString(price, SCREEN_W / 2, 146, &SatoshiBold40);
+    const int priceWidth = s_canvas.textWidth(price, &SatoshiBold40);
+    const int flagX = min(SCREEN_W - SAFE - 38,
+                          SCREEN_W / 2 + priceWidth / 2 + 12);
+    drawArgentinaFlag(flagX, 157);
     s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
     s_canvas.drawString("ARS", SCREEN_W / 2, 190, &Satoshi9);
 
