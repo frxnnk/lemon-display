@@ -19,6 +19,7 @@ struct UsdtWorkerUpdate {
 };
 
 bool usdtWorkerSetup();
+void usdtWorkerStop();
 bool usdtWorkerBusy();
 bool usdtWorkerRequestData(const UsdtDataSnapshot& seed);
 bool usdtWorkerRequestPrice(const UsdtDataSnapshot& seed);

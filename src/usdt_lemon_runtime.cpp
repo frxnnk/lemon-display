@@ -110,8 +110,11 @@ void installUsdtOtaNow() {
     if (!s_data.ota.available || !s_otaInfo.url[0] || !s_otaInfo.md5[0]) return;
     usdtUiDrawLoading(usdtRuntimeCopy("ACTUALIZANDO FIRMWARE", "UPDATING FIRMWARE"), 8);
     apiStop();
+    usdtWorkerStop();
+    delay(100);
     const bool installed = otaFlash(s_otaInfo.url, nullptr, s_otaInfo.md5);
     if (installed) return;
+    usdtWorkerSetup();
     s_data.ota.available = false;
     s_data.ota.failed = true;
     s_lastOtaFailureMs = millis();
