@@ -35,7 +35,7 @@ constexpr NetworkRow PRIMARY_NETWORKS[] = {
 
 uint16_t freshnessColor(UsdtFreshness state) {
     if (state == USDT_LIVE) return TETHER_GREEN;
-    if (state == USDT_ERROR || state == USDT_RATE_LIMITED) return Colors::NEGATIVE;
+    if (state == USDT_RATE_LIMITED) return Colors::NEGATIVE;
     return Colors::TEXT_TERTIARY;
 }
 
@@ -113,6 +113,19 @@ void formatPct(char* out, size_t outSize, float value) {
     snprintf(out, outSize, "%+.2f%%", value);
 }
 
+void formatUsdSupply(char* out, size_t outSize, float value) {
+    if (!std::isfinite(value) || value <= 0.0f) {
+        strncpy(out, "--", outSize);
+        out[outSize - 1] = '\0';
+    } else if (value >= 1.0e9f) {
+        snprintf(out, outSize, "$%.2fB", value / 1.0e9f);
+    } else if (value >= 1.0e6f) {
+        snprintf(out, outSize, "$%.1fM", value / 1.0e6f);
+    } else {
+        snprintf(out, outSize, "$%.0fK", value / 1.0e3f);
+    }
+}
+
 void drawCard(int x, int y, int w, int h, const char* label, const char* value,
               const char* suffix, uint16_t valueColor) {
     s_canvas.fillSmoothRoundRect(x, y, w, h, 12, Colors::BG_CARD);
@@ -184,34 +197,46 @@ void drawOverview(const UsdtDataSnapshot& data) {
     drawCard(SAFE, 310, 432, 82, "PEG USD", pegValue, pegSuffix, pegColor);
 }
 
-void drawNetworks() {
+void drawNetworks(const UsdtDataSnapshot& data) {
     drawUsdtTitle("REDES");
     s_canvas.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_BASE);
-    s_canvas.drawString("GUIA ESTATICA: DEPOSITAR O RETIRAR", SAFE, 116, &Satoshi9);
-    s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-    s_canvas.drawString("DISPONIBILIDAD Y FEES: VER EN APP", SAFE, 132, &Satoshi9);
+    s_canvas.drawString("USDT EN CIRCULACION  /  CAMBIO 24H", SAFE, 116, &Satoshi9);
     for (int i = 0; i < 4; ++i) {
-        const int y = 150 + i * 36;
-        s_canvas.fillCircle(SAFE + 6, y + 10, 4, TETHER_GREEN);
+        const int y = 142 + i * 55;
+        const UsdtNetworkMetric& metric = data.networks.metrics[i];
+        char supply[20] = "--";
+        char change[20] = "--";
+        if (metric.valid) {
+            formatUsdSupply(supply, sizeof(supply), metric.supplyUsd);
+            formatPct(change, sizeof(change), metric.change24h);
+        }
+        s_canvas.fillCircle(SAFE + 6, y + 9, 4,
+                            metric.valid ? TETHER_GREEN : Colors::TEXT_TERTIARY);
         s_canvas.setTextDatum(lgfx::top_left);
         s_canvas.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_BASE);
         s_canvas.drawString(PRIMARY_NETWORKS[i].name, SAFE + 22, y, &Satoshi12);
-        s_canvas.setTextDatum(lgfx::top_right);
         s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-        s_canvas.drawString(PRIMARY_NETWORKS[i].tag, SCREEN_W - SAFE, y, &Satoshi9);
-        s_canvas.drawFastHLine(SAFE + 22, y + 28, 410, Colors::DIVIDER);
+        s_canvas.drawString(PRIMARY_NETWORKS[i].tag, SAFE + 22, y + 22, &Satoshi9);
+        s_canvas.setTextDatum(lgfx::top_right);
+        s_canvas.setTextColor(metric.valid ? Colors::TEXT_PRIMARY : Colors::TEXT_TERTIARY,
+                              Colors::BG_BASE);
+        s_canvas.drawString(supply, SCREEN_W - SAFE, y, &SatoshiBold24);
+        s_canvas.setTextColor(!metric.valid ? Colors::TEXT_TERTIARY
+                              : metric.change24h < 0.0f ? Colors::NEGATIVE
+                              : TETHER_GREEN,
+                              Colors::BG_BASE);
+        s_canvas.drawString(change, SCREEN_W - SAFE, y + 28, &Satoshi9);
+        s_canvas.drawFastHLine(SAFE + 22, y + 49, 410, Colors::DIVIDER);
     }
     s_canvas.setTextDatum(lgfx::top_left);
+    s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
+    s_canvas.drawString("SUPPLY ON-CHAIN  /  FUENTE: DEFILLAMA", SAFE, 372, &Satoshi9);
+    s_canvas.setTextDatum(lgfx::top_right);
     s_canvas.setTextColor(TETHER_GREEN, Colors::BG_BASE);
-    s_canvas.drawString("OTRAS 7 EN LA APP", SAFE, 298, &Satoshi9);
-    s_canvas.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_BASE);
-    s_canvas.drawString("Arbitrum   AVAX C-Chain   CELO", SAFE, 316, &Satoshi9);
-    s_canvas.drawString("Monad   Optimism   Rootstock   Solana", SAFE, 333, &Satoshi9);
-    s_canvas.fillSmoothRoundRect(SAFE, 356, SCREEN_W - SAFE * 2, 46, 10, TETHER_DARK);
-    s_canvas.setTextDatum(lgfx::middle_center);
-    s_canvas.setTextColor(TETHER_GREEN, TETHER_DARK);
-    s_canvas.drawString("MISMA RED EN ORIGEN Y DESTINO", SCREEN_W / 2, 379,
-                        &Satoshi12);
+    const char* footer = (millis() / 4000UL) % 2UL == 0
+        ? "Arbitrum / AVAX C-Chain / CELO / Monad / Optimism / Rootstock / Solana"
+        : "MISMA RED AL TRANSFERIR";
+    s_canvas.drawString(footer, SCREEN_W - SAFE, 390, &Satoshi9);
 }
 
 void drawMarkets(const UsdtDataSnapshot& data) {
@@ -269,24 +294,28 @@ void drawSystem(const UsdtDataSnapshot& data, const UsdtDeviceInfo& device) {
     s_canvas.setTextDatum(lgfx::top_left);
     s_canvas.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_BASE);
     s_canvas.drawString("SISTEMA", SAFE, 82, &SatoshiBold24);
-    char signal[20], heap[20], uptime[20];
+    char signal[20];
     snprintf(signal, sizeof(signal), "%ld dBm", static_cast<long>(device.rssi));
-    snprintf(heap, sizeof(heap), "%lu KB", static_cast<unsigned long>(device.freeHeap / 1024));
-    snprintf(uptime, sizeof(uptime), "%lu MIN", static_cast<unsigned long>(device.uptimeSeconds / 60));
     const char* ota = data.ota.checking ? "BUSCANDO"
                      : data.ota.available ? data.ota.version
                      : data.ota.checked ? "AL DIA"
                      : "PENDIENTE";
-    static const char* labels[] = {"VERSION", "RED", "SENAL", "OTA", "UPTIME"};
+    static const char* labels[] = {
+        "VERSION", "WI-FI", "PRECIO", "PEG / REG", "VARIACION",
+        "YIELD", "REDES", "OTA"
+    };
     const char* values[] = {
         "v" APP_VERSION,
-        data.online ? (device.ssid[0] ? device.ssid : "CONECTADO") : "OFFLINE",
         data.online ? signal : "--",
-        ota,
-        uptime
+        usdtFetchStatusLabel(data.lemonStatus),
+        usdtFetchStatusLabel(data.pegStatus),
+        usdtFetchStatusLabel(data.variationsStatus),
+        usdtFetchStatusLabel(data.yieldStatus),
+        usdtFetchStatusLabel(data.networksStatus),
+        ota
     };
-    for (int i = 0; i < 5; ++i) {
-        const int y = 124 + i * 34;
+    for (int i = 0; i < 8; ++i) {
+        const int y = 116 + i * 27;
         s_canvas.setTextDatum(lgfx::top_left);
         s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
         s_canvas.drawString(labels[i], SAFE, y, &Satoshi9);
@@ -365,7 +394,7 @@ void usdtUiDraw(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model,
     drawHeader(data, device);
     switch (model.scene) {
         case USDT_OVERVIEW: drawOverview(data); break;
-        case USDT_NETWORKS: drawNetworks(); break;
+        case USDT_NETWORKS: drawNetworks(data); break;
         case USDT_MARKETS: drawMarkets(data); break;
         case USDT_REGIONS: drawRegions(data); break;
         case USDT_SYSTEM: drawSystem(data, device); break;

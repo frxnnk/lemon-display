@@ -12,7 +12,8 @@ Pantalla 1 / Overview:
 3. Rendimiento Lemon Yield — `https://api.lemoncash.com.ar/api/v1/interest-funds-percentages` fila `currency=USDt` + `protocol=LEMON_YIELD` (live, no hardcode 2.5%)
 4. PEG vs USD — Coinbase `exchange-rates?currency=USDT`
 
-Otras pantallas: Networks (BEP20, Polygon/MATIC, TRC20, ERC20 +7), Markets,
+Otras pantallas: Networks (supply on-chain y cambio 24h para BEP20,
+Polygon/MATIC, TRC20 y ERC20, mas el listado de las otras 7), Markets,
 Regions (Argentina, Brasil, Peru y Colombia) y System.
 Intel y Alert no existen en este firmware.
 
@@ -22,13 +23,15 @@ Intel y Alert no existen en este firmware.
 |------|--------|----------|----------------------------|
 | USDt/ARS Lemon, bid y ask | CriptoYa | 60 s | conserva el ultimo valor y marca su freshness |
 | PEG USD + BRL/PEN/COP | Coinbase | 60 s | PEG y regiones se validan por separado |
-| Variaciones 1h/24h/7d ARS | CoinGecko market chart | 30 min | backoff de 30 min; se ocultan despues de 2 h sin actualizar |
+| Variaciones 1h/24h/7d ARS | CoinGecko market chart | 30 min | reintenta en 60 s si nunca obtuvo un chart valido |
 | Rendimiento USDt | Lemon API `LEMON_YIELD` | 60 s | conserva el ultimo APR valido |
+| Supply por red + cambio 24h | DefiLlama stablecoins | 15 min | conserva la ultima distribucion valida; reintenta en 60 s |
 
-El header prioriza la salud del precio Lemon. Un fallo de PEG o del chart no muestra
-`ERROR` arriba mientras el precio principal siga disponible. La carga es progresiva:
-primero aparece USDt/ARS, despues se completan PEG, rendimiento y variaciones, y el
-chequeo OTA ocurre con el dashboard ya visible.
+El header prioriza la salud del precio Lemon y usa `REINTENTO` en vez de un error
+generico. System muestra el estado individual de precio, PEG/regiones, variaciones,
+yield y redes. La caja espera a que NTP entregue una hora valida antes de abrir TLS.
+Los requests de datos y los chequeos OTA corren en un worker FreeRTOS separado, por
+lo que touch y navegacion siguen funcionando durante timeouts o respuestas lentas.
 
 Si `COINGECKO_API_KEY` esta vacia o conserva `YOUR_COINGECKO_DEMO_KEY`, el cliente
 no la envia. CoinGecko permite entonces la consulta publica; enviar el placeholder
@@ -42,7 +45,7 @@ python -m platformio run -e matouch_esp32s3_40_usdt
 
 Binario: `.pio/build/matouch_esp32s3_40_usdt/firmware.bin`
 Asset OTA: `firmware-usdt.bin`
-Version: `5.1.1-usdt.6` (`APP_VERSION` cuando `LEMON_USDT_MODE=1`)
+Version: `5.1.1-usdt.7` (`APP_VERSION` cuando `LEMON_USDT_MODE=1`)
 
 ## Flash USB inicial (DIO keep)
 
@@ -80,7 +83,7 @@ Los artefactos de recovery salen de `.pio/build/matouch_esp32s3_40_usdt/` y `boo
 Despues del primer USB, la cajita:
 
 1. Consulta `https://api.github.com/repos/frxnnk/lemon-display/releases/latest`
-2. Compara el tag contra `APP_VERSION` (`5.1.1-usdt.6`)
+2. Compara el tag contra `APP_VERSION` (`5.1.1-usdt.7`)
 3. Busca exactamente el asset `firmware-usdt.bin`
 4. Exige MD5 en el body: `firmware-usdt.bin MD5: <32 hex lowercase>`
 5. Descarga, flashea y reinicia sola
