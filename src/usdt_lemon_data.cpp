@@ -297,8 +297,8 @@ bool usdtDataFetchRates(UsdtDataSnapshot& io) {
 bool usdtDataFetchVariations(UsdtDataSnapshot& io) {
     if (WiFi.status() != WL_CONNECTED) return false;
     const uint32_t nowMs = millis();
-    const uint32_t interval = io.peg.variationsValid ? USDT_VARIATIONS_REFRESH_MS
-                                                     : USDT_VARIATIONS_RETRY_MS;
+    const uint32_t interval = io.variationsStatus == USDT_FETCH_OK
+        ? USDT_VARIATIONS_REFRESH_MS : USDT_VARIATIONS_RETRY_MS;
     const bool chartDue = io.peg.variationsLastAttemptMs == 0 ||
         nowMs - io.peg.variationsLastAttemptMs >= interval;
     if (!chartDue) return false;
@@ -318,8 +318,8 @@ bool usdtDataFetchVariations(UsdtDataSnapshot& io) {
 bool usdtDataFetchUsdChart(UsdtDataSnapshot& io) {
     if (WiFi.status() != WL_CONNECTED) return false;
     const uint32_t nowMs = millis();
-    const uint32_t interval = io.peg.usdChartValid ? USDT_VARIATIONS_REFRESH_MS
-                                                   : USDT_VARIATIONS_RETRY_MS;
+    const uint32_t interval = io.usdChartStatus == USDT_FETCH_OK
+        ? USDT_VARIATIONS_REFRESH_MS : USDT_VARIATIONS_RETRY_MS;
     const bool chartDue = io.peg.usdChartLastAttemptMs == 0 ||
         nowMs - io.peg.usdChartLastAttemptMs >= interval;
     if (!chartDue) return false;
