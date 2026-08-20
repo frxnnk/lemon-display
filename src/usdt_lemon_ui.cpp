@@ -502,7 +502,8 @@ void drawMarketChart(const float* values, uint8_t count, bool usable,
         maxPrice = max(maxPrice, values[i]);
     }
     float range = maxPrice - minPrice;
-    if (range < 0.01f) range = 0.01f;
+    const float minimumRange = usd ? 0.0005f : 0.01f;
+    if (range < minimumRange) range = minimumRange;
 
     s_canvas.drawFastHLine(chartX, chartY + chartH / 2, chartW, Colors::DIVIDER);
     const uint16_t chartColor =
