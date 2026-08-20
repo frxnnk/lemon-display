@@ -120,6 +120,18 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         self.assertIn("usdtWorkerRequestPrice", worker_header)
         self.assertIn("USDT_WORKER_PRICE_COMPLETE", worker_header)
 
+    def test_peg_card_draws_a_real_live_sparkline(self):
+        header = (ROOT / "src/usdt_lemon_data.h").read_text(encoding="utf-8")
+        data = (ROOT / "src/usdt_lemon_data.cpp").read_text(encoding="utf-8")
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        overview = ui[ui.index("void drawOverview") : ui.index("void drawNetworks")]
+        self.assertIn("USDT_PEG_SAMPLE_COUNT = 24", header)
+        self.assertIn("float pegSamples[USDT_PEG_SAMPLE_COUNT]", header)
+        self.assertIn("appendPegSample(out, usd);", data)
+        self.assertIn("void drawPegSparkline", ui)
+        self.assertIn("drawPegSparkline(data.peg", overview)
+        self.assertIn('snprintf(pegSuffix, sizeof(pegSuffix), "DESVIO %+.1f BPS", bps);', overview)
+
     def test_market_data_runs_outside_the_touch_loop_after_ntp_sync(self):
         runtime = (ROOT / "src/usdt_lemon_runtime.cpp").read_text(encoding="utf-8")
         worker = (ROOT / "src/usdt_lemon_worker.cpp").read_text(encoding="utf-8")
@@ -220,7 +232,7 @@ class UsdtFirmwareContractTests(unittest.TestCase):
 
     def test_usdt_release_version_is_bumped(self):
         config = (ROOT / "src/config.h").read_text(encoding="utf-8")
-        self.assertIn('#define APP_VERSION "5.1.1-usdt.12"', config)
+        self.assertIn('#define APP_VERSION "5.1.1-usdt.13"', config)
     def test_main_boots_live_runtime_before_v1(self):
         main = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
         self.assertIn("#if LEMON_USDT_MODE", main)

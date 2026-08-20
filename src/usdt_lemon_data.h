@@ -11,6 +11,8 @@ struct UsdtPriceData {
     bool valid = false;
 };
 
+constexpr uint8_t USDT_PEG_SAMPLE_COUNT = 24;
+
 struct UsdtPegData {
     float usd = 0.0f;
     float ars = 0.0f;
@@ -20,6 +22,8 @@ struct UsdtPegData {
     float brl = 0.0f;
     float pen = 0.0f;
     float cop = 0.0f;
+    float pegSamples[USDT_PEG_SAMPLE_COUNT] = {};
+    uint8_t pegSampleCount = 0;
     uint32_t lastUpdateMs = 0;
     uint32_t variationsLastUpdateMs = 0;
     uint32_t variationsLastAttemptMs = 0;

@@ -52,6 +52,16 @@ bool parseLemonPrice(const char* json, UsdtPriceData& out) {
     return true;
 }
 
+void appendPegSample(UsdtPegData& out, float usd) {
+    if (out.pegSampleCount < USDT_PEG_SAMPLE_COUNT) {
+        out.pegSamples[out.pegSampleCount++] = usd;
+        return;
+    }
+    memmove(out.pegSamples, out.pegSamples + 1,
+            sizeof(float) * (USDT_PEG_SAMPLE_COUNT - 1));
+    out.pegSamples[USDT_PEG_SAMPLE_COUNT - 1] = usd;
+}
+
 bool parseCoinbaseRates(const char* json, UsdtPegData& out) {
     JsonDocument doc;
     JsonDocument filter;
@@ -66,6 +76,7 @@ bool parseCoinbaseRates(const char* json, UsdtPegData& out) {
     const float usd = rates["USD"].as<float>();
     if (!finiteRange(usd, 0.80f, 1.20f)) return false;
 
+    appendPegSample(out, usd);
     out.usd = usd;
     out.valid = true;
     out.lastUpdateMs = millis();
