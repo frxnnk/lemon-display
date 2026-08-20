@@ -77,6 +77,44 @@ void drawArgentinaFlag(int x, int y) {
     s_canvas.drawRoundRect(x, y, width, height, 4, Colors::CARD_BORDER);
 }
 
+void drawBrazilFlag(int x, int y) {
+    constexpr int width = 38;
+    constexpr int height = 24;
+    constexpr uint16_t green = 0x1468;
+    constexpr uint16_t yellow = 0xFFE0;
+    constexpr uint16_t blue = 0x01D0;
+    s_canvas.fillSmoothRoundRect(x, y, width, height, 4, green);
+    s_canvas.fillTriangle(x + 5, y + height / 2,
+                          x + width / 2, y + 3,
+                          x + width / 2, y + height - 3, yellow);
+    s_canvas.fillTriangle(x + width - 5, y + height / 2,
+                          x + width / 2, y + 3,
+                          x + width / 2, y + height - 3, yellow);
+    s_canvas.fillCircle(x + width / 2, y + height / 2, 5, blue);
+    s_canvas.drawRoundRect(x, y, width, height, 4, Colors::CARD_BORDER);
+}
+
+void drawPeruFlag(int x, int y) {
+    constexpr int width = 38;
+    constexpr int height = 24;
+    constexpr uint16_t red = 0xD945;
+    s_canvas.fillSmoothRoundRect(x, y, width, height, 4, red);
+    s_canvas.fillRect(x + 13, y + 1, 12, height - 2, 0xFFFF);
+    s_canvas.drawRoundRect(x, y, width, height, 4, Colors::CARD_BORDER);
+}
+
+void drawColombiaFlag(int x, int y) {
+    constexpr int width = 38;
+    constexpr int height = 24;
+    constexpr uint16_t yellow = 0xFFE0;
+    constexpr uint16_t blue = 0x01D0;
+    constexpr uint16_t red = 0xD945;
+    s_canvas.fillSmoothRoundRect(x, y, width, height, 4, yellow);
+    s_canvas.fillRect(x + 1, y + 12, width - 2, 6, blue);
+    s_canvas.fillRect(x + 1, y + 18, width - 2, 5, red);
+    s_canvas.drawRoundRect(x, y, width, height, 4, Colors::CARD_BORDER);
+}
+
 void drawUsdtTitle(const char* title) {
     drawTetherLogo(SAFE, 80);
     s_canvas.setTextDatum(lgfx::top_left);
@@ -299,6 +337,10 @@ void drawRegions(const UsdtDataSnapshot& data) {
     drawCard(252, 132, 204, 86, "BRASIL", brl, "BRL", Colors::TEXT_PRIMARY);
     drawCard(SAFE, 232, 204, 86, "PERU", pen, "PEN", Colors::TEXT_PRIMARY);
     drawCard(252, 232, 204, 86, "COLOMBIA", cop, "COP", Colors::TEXT_PRIMARY);
+    drawArgentinaFlag(176, 142);
+    drawBrazilFlag(404, 142);
+    drawPeruFlag(176, 242);
+    drawColombiaFlag(404, 242);
     s_canvas.setTextDatum(lgfx::top_left);
     s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
     s_canvas.drawString("COTIZACIONES REGIONALES", SAFE, 368, &Satoshi9);
