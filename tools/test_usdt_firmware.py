@@ -22,6 +22,9 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         self.assertIn("LEMON_YIELD", data)
         self.assertIn("DOLAR DIGITAL", ui)
         self.assertIn("BNB CHAIN", ui)
+        self.assertIn("Arbitrum", ui)
+        self.assertIn("Solana", ui)
+        self.assertIn("v" , ui)
         self.assertNotIn("INTEL", ui)
         self.assertNotIn("ALERT", ui)
     def test_main_boots_live_runtime_before_v1(self):
