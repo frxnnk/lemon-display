@@ -587,6 +587,40 @@ void drawMarkets(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
     }
 }
 
+enum RegionFlag : uint8_t {
+    REGION_FLAG_ARGENTINA = 0,
+    REGION_FLAG_BRAZIL,
+    REGION_FLAG_PERU,
+    REGION_FLAG_COLOMBIA,
+};
+
+void drawRegionCard(int x, int y, const char* country, const char* value,
+                    const char* currency, RegionFlag flag, bool loading) {
+    constexpr int w = 204;
+    constexpr int h = 120;
+    const int valueY = y + 54;
+    const int flagY = valueY - 12;
+    s_canvas.fillSmoothRoundRect(x, y, w, h, 12, Colors::BG_CARD);
+    s_canvas.drawRoundRect(x, y, w, h, 12, Colors::CARD_BORDER);
+    s_canvas.setTextDatum(lgfx::top_left);
+    s_canvas.setTextColor(TETHER_GREEN, Colors::BG_CARD);
+    s_canvas.drawString(country, x + 16, y + 14, &Satoshi9);
+    if (loading) {
+        drawCardLoadingPulse(x + 16, valueY - 14);
+    } else {
+        s_canvas.setTextDatum(lgfx::middle_left);
+        s_canvas.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_CARD);
+        s_canvas.drawString(value, x + 16, valueY, &SatoshiBold24);
+    }
+    if (flag == REGION_FLAG_ARGENTINA) drawArgentinaFlag(x + w - 54, flagY);
+    else if (flag == REGION_FLAG_BRAZIL) drawBrazilFlag(x + w - 54, flagY);
+    else if (flag == REGION_FLAG_PERU) drawPeruFlag(x + w - 54, flagY);
+    else drawColombiaFlag(x + w - 54, flagY);
+    s_canvas.setTextDatum(lgfx::bottom_right);
+    s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+    s_canvas.drawString(currency, x + w - 16, y + h - 12, &Satoshi9);
+}
+
 void drawRegions(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
     drawUsdtTitle(tr(model.language, "REGIONES", "REGIONS"));
     char ars[20] = "--";
@@ -603,19 +637,14 @@ void drawRegions(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
         snprintf(pen, sizeof(pen), "%.2f", data.peg.pen);
         snprintf(cop, sizeof(cop), "%.0f", data.peg.cop);
     }
-    drawCard(SAFE, 128, 204, 120, "ARGENTINA", ars, "ARS", Colors::TEXT_PRIMARY,
-             data.fetching && !arsUsable);
-    drawCard(252, 128, 204, 120, tr(model.language, "BRASIL", "BRAZIL"),
-             brl, "BRL", Colors::TEXT_PRIMARY,
-             data.fetching && !regionsUsable);
-    drawCard(SAFE, 260, 204, 120, "PERU", pen, "PEN", Colors::TEXT_PRIMARY,
-             data.fetching && !regionsUsable);
-    drawCard(252, 260, 204, 120, "COLOMBIA", cop, "COP", Colors::TEXT_PRIMARY,
-             data.fetching && !regionsUsable);
-    drawArgentinaFlag(176, 140);
-    drawBrazilFlag(404, 140);
-    drawPeruFlag(176, 272);
-    drawColombiaFlag(404, 272);
+    drawRegionCard(SAFE, 128, "ARGENTINA", ars, "ARS",
+                   REGION_FLAG_ARGENTINA, data.fetching && !arsUsable);
+    drawRegionCard(252, 128, tr(model.language, "BRASIL", "BRAZIL"), brl, "BRL",
+                   REGION_FLAG_BRAZIL, data.fetching && !regionsUsable);
+    drawRegionCard(SAFE, 260, "PERU", pen, "PEN",
+                   REGION_FLAG_PERU, data.fetching && !regionsUsable);
+    drawRegionCard(252, 260, "COLOMBIA", cop, "COP",
+                   REGION_FLAG_COLOMBIA, data.fetching && !regionsUsable);
 }
 
 void drawSystemControl(int y, const char* label, const char* value,
