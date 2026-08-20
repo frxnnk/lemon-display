@@ -600,6 +600,7 @@ void drawRegionCard(int x, int y, const char* country, const char* value,
     constexpr int h = 120;
     const int valueY = y + 54;
     const int flagY = valueY - 12;
+    const int valueMaxWidth = w - 16 - 54 - 8;
     s_canvas.fillSmoothRoundRect(x, y, w, h, 12, Colors::BG_CARD);
     s_canvas.drawRoundRect(x, y, w, h, 12, Colors::CARD_BORDER);
     s_canvas.setTextDatum(lgfx::top_left);
@@ -608,9 +609,12 @@ void drawRegionCard(int x, int y, const char* country, const char* value,
     if (loading) {
         drawCardLoadingPulse(x + 16, valueY - 14);
     } else {
+        const lgfx::IFont* valueFont =
+            s_canvas.textWidth(value, &SatoshiBold24) > valueMaxWidth
+                ? &SatoshiMedium18 : &SatoshiBold24;
         s_canvas.setTextDatum(lgfx::middle_left);
         s_canvas.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_CARD);
-        s_canvas.drawString(value, x + 16, valueY, &SatoshiBold24);
+        s_canvas.drawString(value, x + 16, valueY, valueFont);
     }
     if (flag == REGION_FLAG_ARGENTINA) drawArgentinaFlag(x + w - 54, flagY);
     else if (flag == REGION_FLAG_BRAZIL) drawBrazilFlag(x + w - 54, flagY);
