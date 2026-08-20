@@ -228,6 +228,13 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         self.assertEqual(regions.count("drawRegionCard("), 4)
         self.assertNotIn("drawCard(", regions)
 
+    def test_long_region_values_shrink_before_reaching_the_flag(self):
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        card = ui[ui.index("void drawRegionCard") : ui.index("void drawRegions")]
+        self.assertIn("const int valueMaxWidth = w - 16 - 54 - 8", card)
+        self.assertIn("textWidth(value, &SatoshiBold24) > valueMaxWidth", card)
+        self.assertIn("&SatoshiMedium18", card)
+
     def test_network_rows_use_each_chain_icon_instead_of_generic_dots(self):
         ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
         networks = ui[ui.index("void drawNetworks") : ui.index("void drawMarkets")]
