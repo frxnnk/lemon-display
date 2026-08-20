@@ -340,6 +340,7 @@ void drawOverview(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
     if (data.fetching && !variationUsable) {
         drawCardLoadingPulse(SAFE + 14, 260);
     } else {
+        s_canvas.setTextDatum(lgfx::top_left);
         s_canvas.setTextColor(variationColor, Colors::BG_CARD);
         s_canvas.drawString(variation, SAFE + 14, 256, &SatoshiBold24);
     }
@@ -354,19 +355,16 @@ void drawOverview(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
              data.fetching && !yieldUsable);
 
     char pegValue[20] = "--";
-    char pegSuffix[28] = "USD";
     uint16_t pegColor = Colors::TEXT_TERTIARY;
     const bool pegUsable = usdtAuxDataUsable(
         data.peg.valid, data.peg.lastUpdateMs, nowMs);
     if (pegUsable) {
         snprintf(pegValue, sizeof(pegValue), "%.4f", data.peg.usd);
         const float bps = (data.peg.usd - 1.0f) * 10000.0f;
-        snprintf(pegSuffix, sizeof(pegSuffix), "%s %+.1f BPS",
-                 tr(model.language, "DESVIO", "DEVIATION"), bps);
         pegColor = std::fabs(bps) <= 25.0f ? TETHER_GREEN : Colors::NEGATIVE;
     }
     const bool pegLoading = data.fetching && !pegUsable;
-    drawCard(SAFE, 310, 204, 82, "PEG USD", pegValue, pegSuffix,
+    drawCard(SAFE, 310, 204, 82, "PEG USD", pegValue, nullptr,
              pegColor, pegLoading);
 
     char spreadValue[20] = "--";

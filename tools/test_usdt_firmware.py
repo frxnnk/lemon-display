@@ -163,6 +163,19 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         overview = ui[ui.index("void drawOverview") : ui.index("void drawNetworks")]
         self.assertIn("drawVariationPeriods", overview)
 
+    def test_variation_value_restores_left_aligned_text_after_period_pills(self):
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        overview = ui[ui.index("void drawOverview") : ui.index("void drawNetworks")]
+        after_periods = overview[overview.index("drawVariationPeriods") :]
+        before_value = after_periods[: after_periods.index("drawString(variation")]
+        self.assertIn("setTextDatum(lgfx::top_left)", before_value)
+
+    def test_home_peg_card_does_not_show_deviation_copy(self):
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        overview = ui[ui.index("void drawOverview") : ui.index("void drawNetworks")]
+        self.assertNotIn('"DESVIO"', overview)
+        self.assertNotIn('"DEVIATION"', overview)
+
     def test_screen_titles_are_centered_as_logo_and_text_groups(self):
         ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
         title = ui[ui.index("void drawUsdtTitle") : ui.index("void drawPill")]
@@ -245,7 +258,6 @@ class UsdtFirmwareContractTests(unittest.TestCase):
             self.assertIn(spanish, ui)
             self.assertIn(english, ui)
         self.assertIn("usdtRuntimeCopy", runtime)
-        self.assertIn('tr(model.language, "DESVIO", "DEVIATION")', ui)
         self.assertIn("void usdtUiSetLanguage", ui)
         self.assertIn("usdtUiSetLanguage(s_model.language);", runtime)
         self.assertIn('"ESPANOL"', ui)
@@ -389,7 +401,7 @@ class UsdtFirmwareContractTests(unittest.TestCase):
 
     def test_usdt_release_version_is_bumped(self):
         config = (ROOT / "src/config.h").read_text(encoding="utf-8")
-        self.assertIn('#define APP_VERSION "5.1.1-usdt.16"', config)
+        self.assertIn('#define APP_VERSION "5.1.1-usdt.17"', config)
     def test_main_boots_live_runtime_before_v1(self):
         main = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
         self.assertIn("#if LEMON_USDT_MODE", main)
