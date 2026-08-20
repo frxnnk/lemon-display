@@ -77,6 +77,18 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         overview = ui[ui.index("void drawOverview") : ui.index("void drawNetworks")]
         self.assertIn("drawArgentinaFlag", overview)
 
+    def test_regions_show_each_country_flag_inside_its_card(self):
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        regions = ui[ui.index("void drawRegions") : ui.index("void drawSystem")]
+        for function in (
+            "drawArgentinaFlag",
+            "drawBrazilFlag",
+            "drawPeruFlag",
+            "drawColombiaFlag",
+        ):
+            self.assertIn(function, ui)
+            self.assertIn(function, regions)
+
     def test_primary_price_refreshes_independently_every_15_seconds(self):
         runtime = (ROOT / "src/usdt_lemon_runtime.cpp").read_text(encoding="utf-8")
         worker = (ROOT / "src/usdt_lemon_worker.cpp").read_text(encoding="utf-8")
@@ -187,7 +199,7 @@ class UsdtFirmwareContractTests(unittest.TestCase):
 
     def test_usdt_release_version_is_bumped(self):
         config = (ROOT / "src/config.h").read_text(encoding="utf-8")
-        self.assertIn('#define APP_VERSION "5.1.1-usdt.9"', config)
+        self.assertIn('#define APP_VERSION "5.1.1-usdt.10"', config)
     def test_main_boots_live_runtime_before_v1(self):
         main = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
         self.assertIn("#if LEMON_USDT_MODE", main)
