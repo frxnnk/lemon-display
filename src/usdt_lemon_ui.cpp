@@ -115,6 +115,54 @@ void drawColombiaFlag(int x, int y) {
     s_canvas.drawRoundRect(x, y, width, height, 4, Colors::CARD_BORDER);
 }
 
+void fillDiamond(int cx, int cy, int radius, uint16_t color) {
+    s_canvas.fillTriangle(cx, cy - radius, cx - radius, cy,
+                          cx + radius, cy, color);
+    s_canvas.fillTriangle(cx, cy + radius, cx - radius, cy,
+                          cx + radius, cy, color);
+}
+
+void drawBnbIcon(int x, int y) {
+    constexpr uint16_t yellow = 0xFE60;
+    fillDiamond(x + 12, y + 12, 5, yellow);
+    fillDiamond(x + 12, y + 3, 3, yellow);
+    fillDiamond(x + 3, y + 12, 3, yellow);
+    fillDiamond(x + 21, y + 12, 3, yellow);
+    fillDiamond(x + 12, y + 21, 3, yellow);
+    fillDiamond(x + 12, y + 12, 2, Colors::BG_BASE);
+}
+
+void drawPolygonIcon(int x, int y) {
+    constexpr uint16_t purple = 0x8A5F;
+    s_canvas.drawRoundRect(x + 2, y + 7, 11, 10, 4, purple);
+    s_canvas.drawRoundRect(x + 11, y + 7, 11, 10, 4, purple);
+    s_canvas.drawLine(x + 9, y + 9, x + 15, y + 15, purple);
+    s_canvas.drawLine(x + 9, y + 15, x + 15, y + 9, purple);
+}
+
+void drawTronIcon(int x, int y) {
+    constexpr uint16_t red = 0xF926;
+    s_canvas.fillTriangle(x + 3, y + 3, x + 21, y + 7,
+                          x + 10, y + 22, red);
+    s_canvas.fillTriangle(x + 7, y + 6, x + 17, y + 8,
+                          x + 10, y + 17, Colors::BG_BASE);
+    s_canvas.drawLine(x + 3, y + 3, x + 10, y + 17, red);
+    s_canvas.drawLine(x + 21, y + 7, x + 10, y + 17, red);
+}
+
+void drawEthereumIcon(int x, int y) {
+    constexpr uint16_t light = 0xBDF7;
+    constexpr uint16_t dark = 0x6B6D;
+    s_canvas.fillTriangle(x + 12, y + 1, x + 4, y + 13,
+                          x + 12, y + 10, light);
+    s_canvas.fillTriangle(x + 12, y + 1, x + 20, y + 13,
+                          x + 12, y + 10, dark);
+    s_canvas.fillTriangle(x + 12, y + 23, x + 4, y + 15,
+                          x + 12, y + 18, dark);
+    s_canvas.fillTriangle(x + 12, y + 23, x + 20, y + 15,
+                          x + 12, y + 18, light);
+}
+
 void drawUsdtTitle(const char* title) {
     drawTetherLogo(SAFE, 80);
     s_canvas.setTextDatum(lgfx::top_left);
@@ -263,13 +311,15 @@ void drawNetworks(const UsdtDataSnapshot& data) {
             formatUsdSupply(supply, sizeof(supply), metric.supplyUsd);
             formatPct(change, sizeof(change), metric.change24h);
         }
-        s_canvas.fillCircle(SAFE + 6, y + 9, 4,
-                            metric.valid ? TETHER_GREEN : Colors::TEXT_TERTIARY);
+        if (i == USDT_NETWORK_BNB) drawBnbIcon(SAFE, y - 2);
+        else if (i == USDT_NETWORK_POLYGON) drawPolygonIcon(SAFE, y - 2);
+        else if (i == USDT_NETWORK_TRON) drawTronIcon(SAFE, y - 2);
+        else drawEthereumIcon(SAFE, y - 2);
         s_canvas.setTextDatum(lgfx::top_left);
         s_canvas.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_BASE);
-        s_canvas.drawString(PRIMARY_NETWORKS[i].name, SAFE + 22, y, &Satoshi12);
+        s_canvas.drawString(PRIMARY_NETWORKS[i].name, SAFE + 36, y, &Satoshi12);
         s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-        s_canvas.drawString(PRIMARY_NETWORKS[i].tag, SAFE + 22, y + 22, &Satoshi9);
+        s_canvas.drawString(PRIMARY_NETWORKS[i].tag, SAFE + 36, y + 22, &Satoshi9);
         s_canvas.setTextDatum(lgfx::top_right);
         s_canvas.setTextColor(metric.valid ? Colors::TEXT_PRIMARY : Colors::TEXT_TERTIARY,
                               Colors::BG_BASE);
@@ -279,7 +329,7 @@ void drawNetworks(const UsdtDataSnapshot& data) {
                               : TETHER_GREEN,
                               Colors::BG_BASE);
         s_canvas.drawString(change, SCREEN_W - SAFE, y + 28, &Satoshi9);
-        s_canvas.drawFastHLine(SAFE + 22, y + 49, 410, Colors::DIVIDER);
+        s_canvas.drawFastHLine(SAFE + 36, y + 49, 396, Colors::DIVIDER);
     }
     s_canvas.setTextDatum(lgfx::top_left);
     s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);

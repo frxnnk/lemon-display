@@ -89,6 +89,19 @@ class UsdtFirmwareContractTests(unittest.TestCase):
             self.assertIn(function, ui)
             self.assertIn(function, regions)
 
+    def test_network_rows_use_each_chain_icon_instead_of_generic_dots(self):
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        networks = ui[ui.index("void drawNetworks") : ui.index("void drawMarkets")]
+        for function in (
+            "drawBnbIcon",
+            "drawPolygonIcon",
+            "drawTronIcon",
+            "drawEthereumIcon",
+        ):
+            self.assertIn(function, ui)
+            self.assertIn(function, networks)
+        self.assertNotIn("fillCircle(SAFE + 6", networks)
+
     def test_primary_price_refreshes_independently_every_15_seconds(self):
         runtime = (ROOT / "src/usdt_lemon_runtime.cpp").read_text(encoding="utf-8")
         worker = (ROOT / "src/usdt_lemon_worker.cpp").read_text(encoding="utf-8")
@@ -199,7 +212,7 @@ class UsdtFirmwareContractTests(unittest.TestCase):
 
     def test_usdt_release_version_is_bumped(self):
         config = (ROOT / "src/config.h").read_text(encoding="utf-8")
-        self.assertIn('#define APP_VERSION "5.1.1-usdt.10"', config)
+        self.assertIn('#define APP_VERSION "5.1.1-usdt.11"', config)
     def test_main_boots_live_runtime_before_v1(self):
         main = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
         self.assertIn("#if LEMON_USDT_MODE", main)
