@@ -133,6 +133,11 @@ class UsdtFirmwareContractTests(unittest.TestCase):
         self.assertIn("drawMarketChart", markets)
         self.assertIn('tr(model.language, "ACTIVO", "ACTIVE")', markets)
 
+    def test_usd_market_chart_preserves_visible_peg_movement(self):
+        ui = (ROOT / "src/usdt_lemon_ui.cpp").read_text(encoding="utf-8")
+        chart = ui[ui.index("void drawMarketChart") : ui.index("void drawMarkets")]
+        self.assertIn("usd ? 0.0005f : 0.01f", chart)
+
     def test_market_pair_taps_redraw_before_generic_navigation(self):
         runtime = (ROOT / "src/usdt_lemon_runtime.cpp").read_text(encoding="utf-8")
         self.assertIn("bool handleMarketControl", runtime)
