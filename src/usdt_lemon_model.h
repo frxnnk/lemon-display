@@ -30,22 +30,30 @@ enum UsdtFetchStatus : uint8_t {
     USDT_FETCH_RATE_LIMITED,
 };
 
+enum UsdtLanguage : uint8_t {
+    USDT_LANGUAGE_ES = 0,
+    USDT_LANGUAGE_EN,
+};
+
 struct UsdtRuntimeModel {
     UsdtScene scene = USDT_OVERVIEW;
     uint32_t sceneEnteredMs = 0;
     uint32_t lastInteractionMs = 0;
     bool refreshRequested = false;
-    bool otaCheckRequested = false;
     bool wifiResetArmed = false;
     uint32_t wifiResetUntilMs = 0;
+    bool soundEnabled = true;
+    UsdtLanguage language = USDT_LANGUAGE_ES;
 };
 
 constexpr int16_t USDT_NAV_Y = 416;
 constexpr int16_t USDT_NAV_H = 64;
-constexpr int16_t USDT_SYSTEM_ACTION_X = 24;
-constexpr int16_t USDT_SYSTEM_ACTION_Y = 338;
-constexpr int16_t USDT_SYSTEM_ACTION_W = 432;
-constexpr int16_t USDT_SYSTEM_ACTION_H = 50;
+constexpr int16_t USDT_SYSTEM_CONTROL_X = 24;
+constexpr int16_t USDT_SYSTEM_CONTROL_W = 432;
+constexpr int16_t USDT_SYSTEM_CONTROL_H = 48;
+constexpr int16_t USDT_SYSTEM_SOUND_Y = 214;
+constexpr int16_t USDT_SYSTEM_LANGUAGE_Y = 270;
+constexpr int16_t USDT_SYSTEM_WIFI_Y = 326;
 constexpr uint32_t USDT_FRESH_MS = 60UL * 1000UL;
 constexpr uint32_t USDT_CACHED_MS = 10UL * 60UL * 1000UL;
 constexpr uint32_t USDT_STALE_MS = 60UL * 60UL * 1000UL;
@@ -107,11 +115,22 @@ constexpr UsdtScene usdtSceneForTab(int8_t tab) {
          : USDT_OVERVIEW;
 }
 
-constexpr bool usdtSystemActionHit(int16_t x, int16_t y) {
-    return x >= USDT_SYSTEM_ACTION_X &&
-           x < USDT_SYSTEM_ACTION_X + USDT_SYSTEM_ACTION_W &&
-           y >= USDT_SYSTEM_ACTION_Y &&
-           y < USDT_SYSTEM_ACTION_Y + USDT_SYSTEM_ACTION_H;
+constexpr bool usdtSystemControlHit(int16_t x, int16_t y, int16_t top) {
+    return x >= USDT_SYSTEM_CONTROL_X &&
+           x < USDT_SYSTEM_CONTROL_X + USDT_SYSTEM_CONTROL_W &&
+           y >= top && y < top + USDT_SYSTEM_CONTROL_H;
+}
+
+constexpr bool usdtSystemSoundHit(int16_t x, int16_t y) {
+    return usdtSystemControlHit(x, y, USDT_SYSTEM_SOUND_Y);
+}
+
+constexpr bool usdtSystemLanguageHit(int16_t x, int16_t y) {
+    return usdtSystemControlHit(x, y, USDT_SYSTEM_LANGUAGE_Y);
+}
+
+constexpr bool usdtSystemWifiHit(int16_t x, int16_t y) {
+    return usdtSystemControlHit(x, y, USDT_SYSTEM_WIFI_Y);
 }
 
 constexpr uint8_t usdtVariationIndex(uint32_t nowMs) {
@@ -126,9 +145,6 @@ inline bool usdtHandleGesture(UsdtRuntimeModel& model, const TouchEvent& event,
         const int8_t tab = usdtBottomTabAt(event.x, event.y);
         if (tab >= 0) model.scene = usdtSceneForTab(tab);
         if (event.y < 96) model.refreshRequested = true;
-        if (model.scene == USDT_SYSTEM && event.y >= 250 && event.y < 330) {
-            model.otaCheckRequested = true;
-        }
     } else if (event.gesture == TOUCH_SWIPE_LEFT) {
         model.scene = static_cast<UsdtScene>(
             (static_cast<uint8_t>(model.scene) + 1) % USDT_SCENE_COUNT);
@@ -139,8 +155,7 @@ inline bool usdtHandleGesture(UsdtRuntimeModel& model, const TouchEvent& event,
     }
     model.lastInteractionMs = nowMs;
     if (before != model.scene) model.sceneEnteredMs = nowMs;
-    return before != model.scene || model.refreshRequested ||
-           model.otaCheckRequested;
+    return before != model.scene || model.refreshRequested;
 }
 
 inline bool usdtApplyTimeout(UsdtRuntimeModel& model, uint32_t nowMs) {
@@ -162,6 +177,20 @@ static_assert(usdtBottomTabAt(336, 448) == 3, "Regions tab hitbox");
 static_assert(usdtBottomTabAt(432, 448) == 4, "System tab hitbox");
 static_assert(usdtBottomTabAt(240, 400) == -1, "Content is not navigation");
 static_assert(usdtSceneForTab(1) == USDT_NETWORKS, "Second tab is networks");
+static_assert(usdtSystemSoundHit(240, USDT_SYSTEM_SOUND_Y + 24),
+              "Sound row hitbox");
+static_assert(usdtSystemLanguageHit(240, USDT_SYSTEM_LANGUAGE_Y + 24),
+              "Language row hitbox");
+static_assert(usdtSystemWifiHit(240, USDT_SYSTEM_WIFI_Y + 24),
+              "Wi-Fi row hitbox");
+static_assert(!usdtSystemSoundHit(23, USDT_SYSTEM_SOUND_Y + 24),
+              "Sound row rejects left margin");
+static_assert(!usdtSystemLanguageHit(456, USDT_SYSTEM_LANGUAGE_Y + 24),
+              "Language row rejects right margin");
+static_assert(!usdtSystemSoundHit(240, USDT_SYSTEM_SOUND_Y + USDT_SYSTEM_CONTROL_H),
+              "Sound row excludes lower edge");
+static_assert(!usdtSystemLanguageHit(240, USDT_SYSTEM_LANGUAGE_Y - 1),
+              "Language row excludes upper gap");
 static_assert(usdtVariationIndex(0) == 0, "First variation window is 1h");
 static_assert(usdtVariationIndex(4000) == 1, "Second variation window is 24h");
 static_assert(usdtVariationIndex(8000) == 2, "Third variation window is 7d");

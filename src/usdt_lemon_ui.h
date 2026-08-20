@@ -14,6 +14,7 @@ struct UsdtDeviceInfo {
 };
 
 bool usdtUiSetup();
+void usdtUiSetLanguage(UsdtLanguage language);
 void usdtUiDrawLoading(const char* message, uint8_t progress);
 void usdtUiDraw(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model,
                 const UsdtDeviceInfo& device);

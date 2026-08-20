@@ -16,12 +16,17 @@ namespace {
 LGFX_Sprite s_canvas(&tft);
 bool s_ready = false;
 bool s_allocationAttempted = false;
+UsdtLanguage s_uiLanguage = USDT_LANGUAGE_ES;
 
 constexpr int SAFE = 24;
 constexpr uint16_t TETHER_GREEN = 0x250F;
 constexpr uint16_t TETHER_DARK = 0x0A29;
 constexpr uint16_t ARGENTINA_BLUE = 0x5D9F;
 constexpr uint16_t ARGENTINA_SUN = 0xFDC0;
+
+const char* tr(UsdtLanguage language, const char* spanish, const char* english) {
+    return language == USDT_LANGUAGE_EN ? english : spanish;
+}
 
 struct NetworkRow {
     const char* name;
@@ -164,10 +169,13 @@ void drawEthereumIcon(int x, int y) {
 }
 
 void drawUsdtTitle(const char* title) {
-    drawTetherLogo(SAFE, 80);
+    const int textWidth = s_canvas.textWidth(title, &SatoshiBold24);
+    const int groupWidth = 28 + 12 + textWidth;
+    const int groupX = (SCREEN_W - groupWidth) / 2;
+    drawTetherLogo(groupX, 80);
     s_canvas.setTextDatum(lgfx::top_left);
     s_canvas.setTextColor(TETHER_GREEN, Colors::BG_BASE);
-    s_canvas.drawString(title, SAFE + 40, 82, &SatoshiBold24);
+    s_canvas.drawString(title, groupX + 40, 82, &SatoshiBold24);
 }
 
 void drawPill(const char* label, int x, int y, uint16_t color) {
@@ -179,14 +187,33 @@ void drawPill(const char* label, int x, int y, uint16_t color) {
     s_canvas.drawString(label, x + width / 2, y + 12, &Satoshi9);
 }
 
-void drawHeader(const UsdtDataSnapshot& data, const UsdtDeviceInfo& device) {
+const char* freshnessCopy(UsdtFreshness freshness, UsdtLanguage language) {
+    switch (freshness) {
+        case USDT_LIVE: return tr(language, "EN VIVO", "LIVE");
+        case USDT_CACHED: return tr(language, "CACHE", "CACHED");
+        case USDT_STALE: return tr(language, "DESACT.", "STALE");
+        case USDT_OFFLINE: return tr(language, "SIN RED", "OFFLINE");
+        case USDT_RATE_LIMITED: return tr(language, "REINTENTO", "RETRY");
+        case USDT_ERROR: return tr(language, "REINTENTO", "RETRY");
+        default: return tr(language, "CARGANDO", "LOADING");
+    }
+}
+
+const char* fetchStatusCopy(UsdtFetchStatus status, UsdtLanguage language) {
+    if (status == USDT_FETCH_OK) return "OK";
+    if (status == USDT_FETCH_RATE_LIMITED) return tr(language, "LIMITADO", "LIMITED");
+    return tr(language, "REINTENTO", "RETRY");
+}
+
+void drawHeader(const UsdtDataSnapshot& data, const UsdtDeviceInfo& device,
+                const UsdtRuntimeModel& model) {
     drawLemonLogo(SAFE, 22);
     s_canvas.setTextDatum(lgfx::top_center);
     s_canvas.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_BASE);
     s_canvas.drawString(device.time, SCREEN_W / 2, 28, &Satoshi12);
     const UsdtFreshness overall =
         usdtPrimaryFreshness(data.lemonFreshness, data.pegFreshness);
-    const char* label = usdtFreshnessLabel(overall);
+    const char* label = freshnessCopy(overall, model.language);
     const int width = s_canvas.textWidth(label, &Satoshi9) + 20;
     drawPill(label, SCREEN_W - SAFE - width, 22, freshnessColor(overall));
     s_canvas.drawFastHLine(SAFE, 66, SCREEN_W - SAFE * 2, Colors::DIVIDER);
@@ -233,6 +260,22 @@ void drawCardLoadingPulse(int x, int y) {
     }
 }
 
+void drawVariationPeriods(int x, int y, uint8_t active) {
+    static const char* periods[] = {"1H", "24H", "7D"};
+    for (uint8_t i = 0; i < 3; ++i) {
+        const int pillX = x + i * 31;
+        const bool selected = i == active;
+        const uint16_t bg = selected ? TETHER_DARK : Colors::BG_ELEVATED;
+        const uint16_t color = selected ? TETHER_GREEN : Colors::TEXT_TERTIARY;
+        s_canvas.fillSmoothRoundRect(pillX, y, 28, 18, 8, bg);
+        s_canvas.drawRoundRect(pillX, y, 28, 18, 8,
+                               selected ? TETHER_GREEN : Colors::CARD_BORDER);
+        s_canvas.setTextDatum(lgfx::middle_center);
+        s_canvas.setTextColor(color, bg);
+        s_canvas.drawString(periods[i], pillX + 14, y + 9, &Satoshi9);
+    }
+}
+
 void drawCard(int x, int y, int w, int h, const char* label, const char* value,
               const char* suffix, uint16_t valueColor, bool loading = false) {
     s_canvas.fillSmoothRoundRect(x, y, w, h, 12, Colors::BG_CARD);
@@ -253,65 +296,20 @@ void drawCard(int x, int y, int w, int h, const char* label, const char* value,
     }
 }
 
-void variationCopy(const UsdtPegData& peg, uint32_t nowMs, char* value, size_t valueSize,
-                   char* suffix, size_t suffixSize, uint16_t& color) {
+void variationCopy(const UsdtPegData& peg, uint32_t nowMs, char* value,
+                   size_t valueSize, uint16_t& color) {
     const uint8_t idx = usdtVariationIndex(nowMs);
     const float amount = idx == 0 ? peg.change1h : idx == 1 ? peg.change24h : peg.change7d;
-    const char* window = idx == 0 ? "1H" : idx == 1 ? "24H" : "7D";
     const bool usable = usdtAuxDataUsable(
         peg.variationsValid, peg.variationsLastUpdateMs, nowMs);
     if (usable) formatPct(value, valueSize, amount);
     else strncpy(value, "--", valueSize);
-    snprintf(suffix, suffixSize, "%s ARS", window);
     color = !usable ? Colors::TEXT_TERTIARY
           : amount < 0.0f ? Colors::NEGATIVE
           : TETHER_GREEN;
 }
 
-void drawPegSparkline(const UsdtPegData& peg, int x, int y, int w, int h) {
-    float low = 1.0f;
-    float high = 1.0f;
-    for (uint8_t i = 0; i < peg.pegSampleCount; ++i) {
-        low = std::fmin(low, peg.pegSamples[i]);
-        high = std::fmax(high, peg.pegSamples[i]);
-    }
-    if (high - low < 0.001f) {
-        const float center = (high + low) * 0.5f;
-        low = center - 0.0005f;
-        high = center + 0.0005f;
-    }
-    const auto pointY = [&](float value) {
-        const float ratio = (value - low) / (high - low);
-        return y + h - 1 - static_cast<int>(ratio * (h - 1));
-    };
-
-    const int pegY = pointY(1.0f);
-    for (int px = x; px < x + w; px += 8) {
-        s_canvas.drawFastHLine(px, pegY, 4, Colors::CARD_BORDER);
-    }
-    s_canvas.setTextDatum(lgfx::top_right);
-    s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
-    s_canvas.drawString("1.0000", x + w, y - 10, &Satoshi9);
-
-    if (peg.pegSampleCount == 0) return;
-    if (peg.pegSampleCount == 1) {
-        s_canvas.fillCircle(x + w, pointY(peg.pegSamples[0]), 3, TETHER_GREEN);
-        return;
-    }
-    int previousX = x;
-    int previousY = pointY(peg.pegSamples[0]);
-    for (uint8_t i = 1; i < peg.pegSampleCount; ++i) {
-        const int currentX = x + (w * i) / (peg.pegSampleCount - 1);
-        const int currentY = pointY(peg.pegSamples[i]);
-        s_canvas.drawLine(previousX, previousY, currentX, currentY, TETHER_GREEN);
-        s_canvas.drawLine(previousX, previousY + 1, currentX, currentY + 1, TETHER_GREEN);
-        previousX = currentX;
-        previousY = currentY;
-    }
-    s_canvas.fillCircle(previousX, previousY, 3, TETHER_GREEN);
-}
-
-void drawOverview(const UsdtDataSnapshot& data) {
+void drawOverview(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
     drawTetherLogo64((SCREEN_W - 64) / 2, 76);
     const uint32_t nowMs = millis();
     char price[24] = "--";
@@ -328,20 +326,30 @@ void drawOverview(const UsdtDataSnapshot& data) {
     s_canvas.drawString("ARS", SCREEN_W / 2, 190, &Satoshi9);
 
     char variation[20] = "--";
-    char variationSuffix[16] = "1H ARS";
     uint16_t variationColor = Colors::TEXT_TERTIARY;
-    variationCopy(data.peg, nowMs, variation, sizeof(variation),
-                  variationSuffix, sizeof(variationSuffix), variationColor);
+    variationCopy(data.peg, nowMs, variation, sizeof(variation), variationColor);
     const bool variationUsable = usdtAuxDataUsable(
         data.peg.variationsValid, data.peg.variationsLastUpdateMs, nowMs);
-    drawCard(SAFE, 216, 204, 82, "VARIACION", variation, variationSuffix,
-             variationColor, data.fetching && !variationUsable);
+    s_canvas.fillSmoothRoundRect(SAFE, 216, 204, 82, 12, Colors::BG_CARD);
+    s_canvas.drawRoundRect(SAFE, 216, 204, 82, 12, Colors::CARD_BORDER);
+    s_canvas.setTextDatum(lgfx::top_left);
+    s_canvas.setTextColor(TETHER_GREEN, Colors::BG_CARD);
+    s_canvas.drawString(tr(model.language, "VARIACION", "CHANGE"),
+                        SAFE + 14, 226, &Satoshi9);
+    drawVariationPeriods(SAFE + 101, 223, usdtVariationIndex(nowMs));
+    if (data.fetching && !variationUsable) {
+        drawCardLoadingPulse(SAFE + 14, 260);
+    } else {
+        s_canvas.setTextColor(variationColor, Colors::BG_CARD);
+        s_canvas.drawString(variation, SAFE + 14, 256, &SatoshiBold24);
+    }
 
     char yieldValue[20] = "--";
     const bool yieldUsable = usdtAuxDataUsable(
         data.yield.valid, data.yield.lastUpdateMs, nowMs);
     if (yieldUsable) snprintf(yieldValue, sizeof(yieldValue), "%.2f%%", data.yield.aprPercent);
-    drawCard(252, 216, 204, 82, "RENDIMIENTO", yieldValue, "LEMON YIELD",
+    drawCard(252, 216, 204, 82,
+             tr(model.language, "RENDIMIENTO", "YIELD"), yieldValue, "LEMON",
              yieldUsable ? TETHER_GREEN : Colors::TEXT_TERTIARY,
              data.fetching && !yieldUsable);
 
@@ -353,30 +361,33 @@ void drawOverview(const UsdtDataSnapshot& data) {
     if (pegUsable) {
         snprintf(pegValue, sizeof(pegValue), "%.4f", data.peg.usd);
         const float bps = (data.peg.usd - 1.0f) * 10000.0f;
-        snprintf(pegSuffix, sizeof(pegSuffix), "DESVIO %+.1f BPS", bps);
+        snprintf(pegSuffix, sizeof(pegSuffix), "%s %+.1f BPS",
+                 tr(model.language, "DESVIO", "DEVIATION"), bps);
         pegColor = std::fabs(bps) <= 25.0f ? TETHER_GREEN : Colors::NEGATIVE;
     }
-    s_canvas.fillSmoothRoundRect(SAFE, 310, 432, 82, 12, Colors::BG_CARD);
-    s_canvas.drawRoundRect(SAFE, 310, 432, 82, 12, Colors::CARD_BORDER);
-    s_canvas.setTextDatum(lgfx::top_left);
-    s_canvas.setTextColor(TETHER_GREEN, Colors::BG_CARD);
-    s_canvas.drawString("PEG USD", SAFE + 14, 320, &Satoshi9);
     const bool pegLoading = data.fetching && !pegUsable;
-    if (pegLoading) {
-        drawCardLoadingPulse(SAFE + 14, 350);
-    } else {
-        s_canvas.setTextColor(pegColor, Colors::BG_CARD);
-        s_canvas.drawString(pegValue, SAFE + 14, 342, &SatoshiBold24);
+    drawCard(SAFE, 310, 204, 82, "PEG USD", pegValue, pegSuffix,
+             pegColor, pegLoading);
+
+    char spreadValue[20] = "--";
+    const bool spreadUsable = data.lemon.valid && data.lemon.ask > 0.0f;
+    if (spreadUsable) {
+        snprintf(spreadValue, sizeof(spreadValue), "%.2f%%",
+                 (data.lemon.ask - data.lemon.bid) * 100.0f / data.lemon.ask);
     }
-    s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
-    s_canvas.drawString(pegSuffix, SAFE + 14, 374, &Satoshi9);
-    if (!pegLoading) drawPegSparkline(data.peg, 250, 332, 190, 42);
+    drawCard(252, 310, 204, 82, "SPREAD ARS", spreadValue,
+             tr(model.language, "COMPRA / VENTA", "BID / ASK"),
+             spreadUsable ? Colors::TEXT_PRIMARY : Colors::TEXT_TERTIARY,
+             data.fetching && !spreadUsable);
 }
 
-void drawNetworks(const UsdtDataSnapshot& data) {
-    drawUsdtTitle("REDES");
+void drawNetworks(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
+    drawUsdtTitle(tr(model.language, "REDES", "NETWORKS"));
     s_canvas.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_BASE);
-    s_canvas.drawString("RED  /  CAMBIO 24H  /  USDT EN CIRCULACION", SAFE, 116, &Satoshi9);
+    s_canvas.drawString(tr(model.language,
+                           "RED  /  CAMBIO 24H  /  USDT EN CIRCULACION",
+                           "CHAIN  /  24H CHANGE  /  USDT SUPPLY"),
+                        SAFE, 116, &Satoshi9);
     for (int i = 0; i < 4; ++i) {
         const int y = 142 + i * 55;
         const UsdtNetworkMetric& metric = data.networks.metrics[i];
@@ -407,17 +418,9 @@ void drawNetworks(const UsdtDataSnapshot& data) {
         s_canvas.drawString(supply, SCREEN_W - SAFE, y, &SatoshiBold24);
         s_canvas.drawFastHLine(SAFE + 36, y + 49, 396, Colors::DIVIDER);
     }
-    s_canvas.setTextDatum(lgfx::top_left);
-    s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-    s_canvas.drawString("SUPPLY ON-CHAIN  /  FUENTE: DEFILLAMA", SAFE, 372, &Satoshi9);
-    s_canvas.setTextDatum(lgfx::top_right);
-    s_canvas.setTextColor(TETHER_GREEN, Colors::BG_BASE);
-    s_canvas.drawString(
-        "Arbitrum / AVAX C-Chain / CELO / Monad / Optimism / Rootstock / Solana",
-        SCREEN_W - SAFE, 390, &Satoshi9);
 }
 
-void drawMarkets(const UsdtDataSnapshot& data) {
+void drawMarkets(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
     drawUsdtTitle("MARKETS");
     char ars[20] = "--";
     char usd[20] = "--";
@@ -438,19 +441,17 @@ void drawMarkets(const UsdtDataSnapshot& data) {
              data.fetching && !data.lemon.valid);
     drawCard(252, 132, 204, 86, "USDT / USD", usd, "PEG", Colors::TEXT_PRIMARY,
              data.fetching && !pegUsable);
-    drawCard(SAFE, 232, 204, 86, "24H ARS", change, "VARIACION",
+    drawCard(SAFE, 232, 204, 86, "24H ARS", change,
+             tr(model.language, "VARIACION", "CHANGE"),
              !variationsUsable ? Colors::TEXT_TERTIARY
              : data.peg.change24h < 0 ? Colors::NEGATIVE : TETHER_GREEN,
              data.fetching && !variationsUsable);
     drawCard(252, 232, 204, 86, "SPREAD", spread, "BID / ASK", Colors::TEXT_PRIMARY,
              data.fetching && !data.lemon.valid);
-    s_canvas.setTextDatum(lgfx::top_left);
-    s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-    s_canvas.drawString("DATOS DE MERCADO USDt", SAFE, 368, &Satoshi9);
 }
 
-void drawRegions(const UsdtDataSnapshot& data) {
-    drawUsdtTitle("REGIONES");
+void drawRegions(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model) {
+    drawUsdtTitle(tr(model.language, "REGIONES", "REGIONS"));
     char ars[20] = "--";
     char brl[20] = "--";
     char pen[20] = "--";
@@ -467,7 +468,8 @@ void drawRegions(const UsdtDataSnapshot& data) {
     }
     drawCard(SAFE, 132, 204, 86, "ARGENTINA", ars, "ARS", Colors::TEXT_PRIMARY,
              data.fetching && !arsUsable);
-    drawCard(252, 132, 204, 86, "BRASIL", brl, "BRL", Colors::TEXT_PRIMARY,
+    drawCard(252, 132, 204, 86, tr(model.language, "BRASIL", "BRAZIL"),
+             brl, "BRL", Colors::TEXT_PRIMARY,
              data.fetching && !regionsUsable);
     drawCard(SAFE, 232, 204, 86, "PERU", pen, "PEN", Colors::TEXT_PRIMARY,
              data.fetching && !regionsUsable);
@@ -477,69 +479,137 @@ void drawRegions(const UsdtDataSnapshot& data) {
     drawBrazilFlag(404, 142);
     drawPeruFlag(176, 242);
     drawColombiaFlag(404, 242);
-    s_canvas.setTextDatum(lgfx::top_left);
-    s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-    s_canvas.drawString("COTIZACIONES REGIONALES", SAFE, 368, &Satoshi9);
 }
 
-void drawSystem(const UsdtDataSnapshot& data, const UsdtDeviceInfo& device) {
-    s_canvas.setTextDatum(lgfx::top_left);
-    s_canvas.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_BASE);
-    s_canvas.drawString("SISTEMA", SAFE, 82, &SatoshiBold24);
+void drawSystemControl(int y, const char* label, const char* value,
+                       bool emphasized = false) {
+    const uint16_t bg = emphasized ? TETHER_DARK : Colors::BG_CARD;
+    s_canvas.fillSmoothRoundRect(USDT_SYSTEM_CONTROL_X, y,
+                                 USDT_SYSTEM_CONTROL_W, USDT_SYSTEM_CONTROL_H,
+                                 12, bg);
+    s_canvas.drawRoundRect(USDT_SYSTEM_CONTROL_X, y,
+                           USDT_SYSTEM_CONTROL_W, USDT_SYSTEM_CONTROL_H,
+                           12, emphasized ? TETHER_GREEN : Colors::CARD_BORDER);
+    s_canvas.setTextDatum(lgfx::middle_left);
+    s_canvas.setTextColor(emphasized ? TETHER_GREEN : Colors::TEXT_PRIMARY, bg);
+    s_canvas.drawString(label, USDT_SYSTEM_CONTROL_X + 16,
+                        y + USDT_SYSTEM_CONTROL_H / 2, &Satoshi12);
+    s_canvas.setTextDatum(lgfx::middle_right);
+    s_canvas.setTextColor(TETHER_GREEN, bg);
+    s_canvas.drawString(value,
+                        USDT_SYSTEM_CONTROL_X + USDT_SYSTEM_CONTROL_W - 16,
+                        y + USDT_SYSTEM_CONTROL_H / 2, &Satoshi12);
+}
+
+void drawSystem(const UsdtDataSnapshot& data, const UsdtDeviceInfo& device,
+                const UsdtRuntimeModel& model) {
+    drawUsdtTitle(tr(model.language, "SISTEMA", "SYSTEM"));
     char signal[20];
     snprintf(signal, sizeof(signal), "%ld dBm", static_cast<long>(device.rssi));
-    const char* ota = data.ota.checking ? "BUSCANDO"
-                     : data.ota.failed ? "PAUSA 30M"
+    const char* ota = data.ota.checking ? tr(model.language, "BUSCANDO", "CHECKING")
+                     : data.ota.failed ? tr(model.language, "PAUSA 30M", "PAUSED 30M")
                      : data.ota.available ? data.ota.version
-                     : data.ota.checked ? "AL DIA"
-                     : "PENDIENTE";
-    static const char* labels[] = {
-        "VERSION", "WI-FI", "PRECIO", "PEG / REG", "VARIACION",
-        "YIELD", "REDES", "OTA"
-    };
-    const char* values[] = {
-        "v" APP_VERSION,
-        data.online ? signal : "--",
-        usdtFetchStatusLabel(data.lemonStatus),
-        usdtFetchStatusLabel(data.pegStatus),
-        usdtFetchStatusLabel(data.variationsStatus),
-        usdtFetchStatusLabel(data.yieldStatus),
-        usdtFetchStatusLabel(data.networksStatus),
-        ota
-    };
-    for (int i = 0; i < 8; ++i) {
-        const int y = 116 + i * 27;
-        s_canvas.setTextDatum(lgfx::top_left);
-        s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_BASE);
-        s_canvas.drawString(labels[i], SAFE, y, &Satoshi9);
-        s_canvas.setTextDatum(lgfx::top_right);
-        s_canvas.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_BASE);
-        s_canvas.drawString(values[i], SCREEN_W - SAFE, y, &Satoshi12);
-    }
-    s_canvas.fillSmoothRoundRect(USDT_SYSTEM_ACTION_X, USDT_SYSTEM_ACTION_Y,
-                                 USDT_SYSTEM_ACTION_W, USDT_SYSTEM_ACTION_H,
-                                 12, TETHER_DARK);
-    s_canvas.setTextDatum(lgfx::middle_center);
-    s_canvas.setTextColor(TETHER_GREEN, TETHER_DARK);
-    s_canvas.drawString("RECONFIGURAR WI-FI",
-                        USDT_SYSTEM_ACTION_X + USDT_SYSTEM_ACTION_W / 2,
-                        USDT_SYSTEM_ACTION_Y + USDT_SYSTEM_ACTION_H / 2,
-                        &SatoshiMedium18);
+                     : data.ota.checked ? tr(model.language, "AL DIA", "UP TO DATE")
+                     : tr(model.language, "PENDIENTE", "PENDING");
+    s_canvas.fillSmoothRoundRect(SAFE, 122, 432, 72, 12, Colors::BG_CARD);
+    s_canvas.drawRoundRect(SAFE, 122, 432, 72, 12, Colors::CARD_BORDER);
+    s_canvas.setTextDatum(lgfx::top_left);
+    s_canvas.setTextColor(Colors::TEXT_TERTIARY, Colors::BG_CARD);
+    s_canvas.drawString(tr(model.language, "VERSION", "VERSION"), 40, 136, &Satoshi9);
+    s_canvas.drawString("WI-FI", 40, 164, &Satoshi9);
+    s_canvas.drawString(tr(model.language, "DATOS", "DATA"), 250, 136, &Satoshi9);
+    s_canvas.drawString("OTA", 250, 164, &Satoshi9);
+    s_canvas.setTextDatum(lgfx::top_right);
+    s_canvas.setTextColor(Colors::TEXT_PRIMARY, Colors::BG_CARD);
+    s_canvas.drawString("v" APP_VERSION, 228, 134, &Satoshi12);
+    s_canvas.drawString(data.online ? signal : "--", 228, 162, &Satoshi12);
+    s_canvas.drawString(fetchStatusCopy(data.lemonStatus, model.language),
+                        440, 134, &Satoshi12);
+    s_canvas.drawString(ota, 440, 162, &Satoshi12);
+
+    drawSystemControl(USDT_SYSTEM_SOUND_Y,
+                      tr(model.language, "SONIDO", "SOUND"),
+                      model.soundEnabled
+                          ? tr(model.language, "ACTIVO", "ON")
+                          : tr(model.language, "APAGADO", "OFF"));
+    drawSystemControl(USDT_SYSTEM_LANGUAGE_Y,
+                      tr(model.language, "IDIOMA", "LANGUAGE"),
+                      model.language == USDT_LANGUAGE_EN ? "ENGLISH" : "ESPANOL");
+    drawSystemControl(USDT_SYSTEM_WIFI_Y,
+                      tr(model.language, "RECONFIGURAR WI-FI", "RECONFIGURE WI-FI"),
+                      ">", true);
 }
 
-void drawNavigation(UsdtScene active) {
+void drawHomeNavIcon(int x, int y, uint16_t color) {
+    s_canvas.drawLine(x - 8, y, x, y - 7, color);
+    s_canvas.drawLine(x, y - 7, x + 8, y, color);
+    s_canvas.drawRect(x - 6, y, 12, 8, color);
+}
+
+void drawNetworksNavIcon(int x, int y, uint16_t color) {
+    s_canvas.drawLine(x - 7, y + 5, x, y - 6, color);
+    s_canvas.drawLine(x, y - 6, x + 7, y + 5, color);
+    s_canvas.drawLine(x - 7, y + 5, x + 7, y + 5, color);
+    s_canvas.fillCircle(x, y - 6, 2, color);
+    s_canvas.fillCircle(x - 7, y + 5, 2, color);
+    s_canvas.fillCircle(x + 7, y + 5, 2, color);
+}
+
+void drawMarketsNavIcon(int x, int y, uint16_t color) {
+    s_canvas.drawFastVLine(x - 7, y - 5, 11, color);
+    s_canvas.fillRect(x - 9, y - 2, 5, 5, color);
+    s_canvas.drawFastVLine(x, y - 8, 15, color);
+    s_canvas.fillRect(x - 2, y - 5, 5, 7, color);
+    s_canvas.drawFastVLine(x + 7, y - 4, 11, color);
+    s_canvas.fillRect(x + 5, y, 5, 5, color);
+}
+
+void drawRegionsNavIcon(int x, int y, uint16_t color) {
+    s_canvas.drawCircle(x, y, 9, color);
+    s_canvas.drawFastVLine(x, y - 8, 17, color);
+    s_canvas.drawFastHLine(x - 8, y, 17, color);
+    s_canvas.drawEllipse(x, y, 4, 9, color);
+}
+
+void drawSystemNavIcon(int x, int y, uint16_t color) {
+    s_canvas.drawCircle(x, y, 7, color);
+    s_canvas.fillCircle(x, y, 2, color);
+    for (int i = 0; i < 4; ++i) {
+        const int dx = i % 2 == 0 ? 0 : (i == 1 ? 10 : -10);
+        const int dy = i % 2 == 0 ? (i == 0 ? -10 : 10) : 0;
+        s_canvas.drawLine(x + dx * 7 / 10, y + dy * 7 / 10,
+                          x + dx, y + dy, color);
+    }
+}
+
+void drawNavigationIcon(UsdtScene scene, int x, int y, uint16_t color) {
+    if (scene == USDT_OVERVIEW) drawHomeNavIcon(x, y, color);
+    else if (scene == USDT_NETWORKS) drawNetworksNavIcon(x, y, color);
+    else if (scene == USDT_MARKETS) drawMarketsNavIcon(x, y, color);
+    else if (scene == USDT_REGIONS) drawRegionsNavIcon(x, y, color);
+    else drawSystemNavIcon(x, y, color);
+}
+
+void drawNavigation(const UsdtRuntimeModel& model) {
     s_canvas.fillRect(0, USDT_NAV_Y, SCREEN_W, USDT_NAV_H, Colors::BG_CARD);
-    static const char* labels[] = {"INICIO", "REDES", "MKT", "REG", "SIST."};
+    const char* labels[] = {
+        tr(model.language, "INICIO", "HOME"),
+        tr(model.language, "REDES", "CHAINS"),
+        "MKT",
+        tr(model.language, "REG", "REG"),
+        tr(model.language, "SIST.", "SYS.")
+    };
     for (int i = 0; i < USDT_SCENE_COUNT; ++i) {
         const int x = i * 96;
-        if (i == static_cast<int>(active)) {
-            s_canvas.fillSmoothRoundRect(x + 8, USDT_NAV_Y + 8, 80, 42, 12, TETHER_DARK);
-            s_canvas.fillRect(x + 30, USDT_NAV_Y + 54, 36, 3, TETHER_GREEN);
+        const bool active = i == static_cast<int>(model.scene);
+        if (active) {
+            s_canvas.fillSmoothRoundRect(x + 10, USDT_NAV_Y + 5, 76, 54, 12, TETHER_DARK);
         }
+        const uint16_t color = active ? TETHER_GREEN : Colors::TEXT_TERTIARY;
+        drawNavigationIcon(static_cast<UsdtScene>(i), x + 48, USDT_NAV_Y + 20, color);
         s_canvas.setTextDatum(lgfx::middle_center);
-        s_canvas.setTextColor(i == static_cast<int>(active) ? TETHER_GREEN : Colors::TEXT_TERTIARY,
-                              i == static_cast<int>(active) ? TETHER_DARK : Colors::BG_CARD);
-        s_canvas.drawString(labels[i], x + 48, USDT_NAV_Y + 29, &Satoshi9);
+        s_canvas.setTextColor(color, active ? TETHER_DARK : Colors::BG_CARD);
+        s_canvas.drawString(labels[i], x + 48, USDT_NAV_Y + 44, &Satoshi9);
     }
 }
 
@@ -547,11 +617,17 @@ void drawFramebufferError() {
     tft.fillScreen(Colors::BG_BASE);
     tft.setTextDatum(lgfx::middle_center);
     tft.setTextColor(Colors::NEGATIVE, Colors::BG_BASE);
-    tft.drawString("ERROR DE MEMORIA", SCREEN_W / 2, SCREEN_H / 2 - 14, &SatoshiBold24);
+    tft.drawString(tr(s_uiLanguage, "ERROR DE MEMORIA", "MEMORY ERROR"),
+                   SCREEN_W / 2, SCREEN_H / 2 - 14, &SatoshiBold24);
     tft.setTextColor(Colors::TEXT_SECONDARY, Colors::BG_BASE);
-    tft.drawString("REINICIA LA LEMON BOX", SCREEN_W / 2, SCREEN_H / 2 + 22, &Satoshi12);
+    tft.drawString(tr(s_uiLanguage, "REINICIA LA LEMON BOX", "RESTART THE LEMON BOX"),
+                   SCREEN_W / 2, SCREEN_H / 2 + 22, &Satoshi12);
 }
 }  // namespace
+
+void usdtUiSetLanguage(UsdtLanguage language) {
+    s_uiLanguage = language;
+}
 
 bool usdtUiSetup() {
     if (s_ready) return true;
@@ -584,16 +660,16 @@ void usdtUiDraw(const UsdtDataSnapshot& data, const UsdtRuntimeModel& model,
                 const UsdtDeviceInfo& device) {
     if (!usdtUiSetup()) return;
     s_canvas.fillSprite(Colors::BG_BASE);
-    drawHeader(data, device);
+    drawHeader(data, device, model);
     switch (model.scene) {
-        case USDT_OVERVIEW: drawOverview(data); break;
-        case USDT_NETWORKS: drawNetworks(data); break;
-        case USDT_MARKETS: drawMarkets(data); break;
-        case USDT_REGIONS: drawRegions(data); break;
-        case USDT_SYSTEM: drawSystem(data, device); break;
-        default: drawOverview(data); break;
+        case USDT_OVERVIEW: drawOverview(data, model); break;
+        case USDT_NETWORKS: drawNetworks(data, model); break;
+        case USDT_MARKETS: drawMarkets(data, model); break;
+        case USDT_REGIONS: drawRegions(data, model); break;
+        case USDT_SYSTEM: drawSystem(data, device, model); break;
+        default: drawOverview(data, model); break;
     }
-    drawNavigation(model.scene);
+    drawNavigation(model);
     displayWaitVSync();
     s_canvas.pushSprite(0, 0);
 }
