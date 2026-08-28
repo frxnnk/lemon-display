@@ -262,20 +262,21 @@ class LandingStaticTest(unittest.TestCase):
         self.assertIn("nav.at-footer", html)
         self.assertNotIn("window.scrollY > 60", html)
 
-    def test_mobile_hero_gives_the_physical_box_a_closer_camera(self):
+    def test_mobile_hero_keeps_the_complete_physical_box_inside_the_frame(self):
         with open(os.path.join(LANDING, "index.html"), "r", encoding="utf-8") as f:
             html = f.read()
 
-        self.assertIn("CAM_PATH.startRadius = narrow ? 175 : 225", html)
-        self.assertIn("CAM_PATH.endRadius   = narrow ? 92 : 110", html)
-        self.assertIn("CAM_PATH.startTargetY = narrow ? -14 : -18", html)
+        self.assertIn("CAM_PATH.startRadius = narrow ? 235 : 225", html)
+        self.assertIn("CAM_PATH.endRadius   = narrow ? 145 : 110", html)
+        self.assertIn("CAM_PATH.startTargetY = narrow ? -8 : -18", html)
         self.assertIn("const verticalTargetT = easeInOutCubic(phaseProgress(t, 0.52, 0.78));", html)
         self.assertIn("const screenTargetT = easeInOutCubic(phaseProgress(t, 0.80, 1.0));", html)
         self.assertIn("const targetY = CAM_PATH.startTargetY * (1 - verticalTargetT) + screenWorldPos.y * screenTargetT;", html)
         self.assertIn("heroCamera.lookAt(screenWorldPos.x * screenTargetT, targetY, screenWorldPos.z * screenTargetT);", html)
         self.assertIn("heroControls.target.copy(screenWorldPos);", html)
-        self.assertIn("width: 114vw !important", html)
-        self.assertIn("height: 44dvh", html)
+        self.assertIn("inset: 3vh 0 5vh", html)
+        self.assertIn("width: 100% !important", html)
+        self.assertIn("height: 92%", html)
         self.assertNotIn("#concepts", html)
 
     def test_landing_links_have_real_internal_destinations(self):

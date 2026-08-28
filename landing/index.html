@@ -2067,9 +2067,9 @@
 
         @media (max-width: 680px) {
             .hero-3d {
-                inset: -3vh -7vw 1vh;
-                width: 114vw !important;
-                height: 102%;
+                inset: 3vh 0 5vh;
+                width: 100% !important;
+                height: 92%;
             }
 
             .hero-scroll-cta {
@@ -2668,10 +2668,10 @@ let screenPlaced = false;
 
 function applyCamPathForViewport() {
     const narrow = window.innerWidth < 680;
-    CAM_PATH.startRadius = narrow ? 175 : 225;
-    CAM_PATH.endRadius   = narrow ? 92 : 110;
+    CAM_PATH.startRadius = narrow ? 235 : 225;
+    CAM_PATH.endRadius   = narrow ? 145 : 110;
     CAM_PATH.startY      = narrow ? 72 : 120;
-    CAM_PATH.startTargetY = narrow ? -14 : -18;
+    CAM_PATH.startTargetY = narrow ? -8 : -18;
     // Land the camera on the screen's normal: the display face is inclined
     // ~15°, so the frontal money shot sits slightly above screen height.
     CAM_PATH.endY = screenPlaced
