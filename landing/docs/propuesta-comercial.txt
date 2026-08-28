@@ -1,0 +1,40 @@
+PROPUESTA COMERCIAL - LEMON BOX
+Versión 27.08.2026
+
+OBJETIVO
+Fabricar un nuevo lote de Lemon Box, entregar una experiencia funcional desde el inicio y desarrollar junto a Lemon el firmware principal del producto.
+
+FABRICACIÓN
+100 unidades: USDC 79 por unidad neto; 34,2% menos que el lote anterior. Total neto USDC 7.900; total con IVA USDC 9.559.
+150 unidades: USDC 75 por unidad neto; 37,5% menos que el lote anterior. Total neto USDC 11.250; total con IVA USDC 13.612,50.
+200 unidades: USDC 70 por unidad neto; 41,7% menos que el lote anterior. Total neto USDC 14.000; total con IVA USDC 16.940.
+
+Referencia: último lote adicional de 7 unidades realizado a USDC 120 por unidad neto.
+
+El precio incluye pantalla, carcasa, armado, programación, control de calidad, packaging individual y el programa de firmware. No incluye cables ni fuentes de alimentación.
+
+INCLUIDO CON EL LOTE
+- Entrega del lote completo en hasta 20 días hábiles con el firmware Stocks.
+- 60 días corridos de trabajo conjunto y directo con un equipo de Lemon para definir, desarrollar, probar y estabilizar el firmware principal.
+- Instalación coordinada del firmware aprobado en todas las unidades del lote, mediante actualización remota cuando sea posible o reflasheo físico.
+- Recall incluido: actualización de carcasa y firmware de hasta 37 Lemon Box ya entregadas. La operatoria se coordina con Lemon antes de iniciar.
+
+SOFTWARE OPCIONAL
+Control de flota + Developer Kit: USDC 4.500 netos; USDC 5.445 con IVA.
+Incluye panel interno, inventario y grupos, gestión de versiones, despliegues controlados, firmware base, SDK de experiencias, plantillas, simulador, herramientas de compilación y Skill de desarrollo.
+
+INVERSIÓN TOTAL
+100 unidades: USDC 7.900 netos; USDC 9.559 con IVA. Con software: USDC 12.400 netos; USDC 15.004 con IVA.
+150 unidades: USDC 11.250 netos; USDC 13.612,50 con IVA. Con software: USDC 15.750 netos; USDC 19.057,50 con IVA.
+200 unidades: USDC 14.000 netos; USDC 16.940 con IVA. Con software: USDC 18.500 netos; USDC 22.385 con IVA.
+
+CONDICIONES
+Pago: 70% al confirmar la producción y 30% contra entrega del lote completo.
+Entrega inicial: hasta 20 días hábiles para el lote completo con el firmware Stocks, contados desde la confirmación, la acreditación del anticipo y la disponibilidad de componentes.
+Firmware: 60 días corridos de desarrollo conjunto desde el inicio con el equipo designado por Lemon.
+Actualización: instalación coordinada del firmware final aprobado en todas las unidades del nuevo lote.
+Recall incluido: actualización de carcasa y firmware de hasta 37 unidades ya entregadas. La operatoria se coordina con Lemon antes de iniciar.
+Software opcional: primera versión operativa en 4 a 6 semanas y 90 días de soporte inicial desde la puesta en marcha.
+
+Valores expresados en USDC. IVA 21% cuando corresponde.
+FERCED x LEMON - 2026

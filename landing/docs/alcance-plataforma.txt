@@ -1,0 +1,45 @@
+CONTROL DE FLOTA + DEVELOPER KIT - LEMON BOX
+Versión 27.08.2026
+
+OBJETIVO
+Centralizar el inventario y la operación de Lemon Box, reducir el trabajo manual sobre cada dispositivo y dar a los equipos de Lemon herramientas para crear, probar y desplegar nuevos firmwares sin reconstruir la base técnica del producto.
+
+CONTROL DE FLOTA
+- Dispositivos: identificador, grupo, estado de conexión, versión instalada, configuración y última actividad.
+- Grupos: organización por equipo, ubicación, campaña, partner o etapa de validación.
+- Actualizaciones: preparación de versiones, prueba en un grupo reducido, ampliación progresiva y restauración de la versión anterior.
+- Actividad: registro de publicaciones, cambios de configuración y acciones administrativas.
+- Usuarios: acceso por rol y permisos para consultar, preparar o aprobar cambios.
+
+DEVELOPER KIT
+- Firmware base: funciones comunes de pantalla táctil, Wi-Fi, caché, operación sin conexión, recuperación y actualización.
+- SDK y plantillas: componentes, ejemplos y contratos de datos para construir firmwares y experiencias sobre una base común.
+- Simulador: vista previa local para validar contenido, estados y navegación antes de usar hardware real.
+- Compilación y validación: herramientas para compilar, ejecutar controles técnicos y empaquetar una versión publicable.
+- Skill de desarrollo: guía para que los asistentes de programación entiendan la arquitectura, generen código compatible y sigan el proceso de pruebas.
+
+La publicación se realiza desde Control de flota, primero sobre un grupo de prueba y siempre con aprobación explícita.
+
+FLUJO DE TRABAJO
+1. Partir del firmware principal o crear una variante.
+2. Desarrollar y revisar la experiencia con el SDK y las plantillas.
+3. Probar localmente en el simulador y luego sobre hardware real.
+4. Validar, compilar y cargar la versión en Control de flota.
+5. Publicar sobre un grupo de prueba, aprobar y ampliar el despliegue.
+
+ENTREGABLES INICIALES
+1. Aplicación web interna con autenticación y roles básicos.
+2. Inventario inicial y grupos de dispositivos.
+3. Vista de estado, conexión, versión y actividad.
+4. Flujo de prueba y publicación de actualizaciones.
+5. Firmware base, SDK de experiencias y plantillas de referencia.
+6. Simulador, herramientas de compilación y validación.
+7. Skill de desarrollo, documentación técnica y sesión de puesta en marcha.
+
+PROGRAMA INCLUIDO CON EL LOTE
+La compra de 100, 150 o 200 unidades incluye 60 días corridos de trabajo conjunto y directo con un equipo designado por Lemon para convertir la versión principal en un firmware estable y listo para operar. Para acelerar la entrega, las unidades pueden salir inicialmente con el firmware Stocks ya desarrollado. Una vez aprobado el firmware final, se coordina su instalación en todo el nuevo lote.
+
+PLAZO Y SOPORTE
+El paquete opcional de Control de flota + Developer Kit se estima en 4 a 6 semanas desde el inicio y la validación del alcance. Incluye una sesión de puesta en marcha y 90 días de soporte inicial.
+
+FERCED x LEMON - 2026

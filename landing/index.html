@@ -2,14 +2,12 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <base href="/landing/">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#121212">
-    <meta name="description" content="La Cajita Lemon: del primer firmware con Bitcoin y dólar al firmware de stocks. USDT queda como colaboración.">
-    <meta property="og:title" content="Lemon Box - de la primera Cajita al firmware de stocks">
-    <meta property="og:description" content="El desarrollo de la Cajita, firmware a firmware. Stocks es el producto. USDT es una colaboración.">
-    <meta property="og:image" content="./assets/v2/ambient-home-product.png">
-    <title>Lemon Box - de la primera Cajita al firmware de stocks</title>
+    <meta name="description" content="Lemon Box: fabricación, firmware y herramientas para operar el producto a escala.">
+    <meta property="og:title" content="Lemon Box">
+    <meta property="og:description" content="Fabricación, firmware y control de flota para la próxima etapa de Lemon Box.">
+    <title>Lemon Box</title>
     <link rel="icon" type="image/svg+xml" href="./assets/lemon-iso.svg">
     <link rel="apple-touch-icon" href="./assets/lemon-iso.svg">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
@@ -87,7 +85,8 @@
         }
 
         /* Section anchor offset (nav is fixed) */
-        #hero-scroll, #firmware, #product, #concepts, #colaboraciones,
+        #hero-scroll,
+        #proposal, #manufacturing, #fleet-control, #integrations, #implementation, #documents,
         #about, #features, #specs {
             scroll-margin-top: 80px;
         }
@@ -1287,7 +1286,6 @@
 
         .hero-copy h1,
         .case-title,
-        .manifesto-title,
         .proof-number,
         .figure-title,
         .roadmap-phase strong {
@@ -1428,506 +1426,6 @@
             text-wrap: pretty;
         }
 
-        .manifesto {
-            width: 100%;
-            padding: clamp(5rem, 10vw, 10rem) clamp(1.25rem, 5vw, 6rem);
-            color: var(--black);
-            background: var(--lime);
-        }
-
-        .manifesto-inner {
-            width: min(100%, 1320px);
-            margin: 0 auto;
-        }
-
-        .manifesto .case-label { color: var(--black); }
-
-        .manifesto-title {
-            max-width: 17ch;
-            font-size: clamp(3.1rem, 8vw, 8.2rem);
-            line-height: .9;
-            letter-spacing: -.055em;
-            text-wrap: balance;
-        }
-
-        .manifesto-copy {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 2rem 6rem;
-            margin-top: clamp(3rem, 6vw, 6rem);
-            padding-top: 1.5rem;
-            border-top: 2px solid var(--black);
-            font-size: clamp(1rem, 1.4vw, 1.22rem);
-            line-height: 1.5;
-        }
-
-        .idea-section {
-            width: min(100%, 1440px);
-            margin: 0 auto;
-            padding: clamp(6rem, 10vw, 10rem) clamp(1.25rem, 3vw, 3.5rem);
-            color: var(--starlight);
-            background: var(--black);
-        }
-
-        .idea-inner { max-width: 1280px; margin: 0 auto; }
-
-        .idea-heading {
-            display: grid;
-            grid-template-columns: minmax(0, 1.15fr) minmax(16rem, .85fr);
-            gap: clamp(2rem, 8vw, 9rem);
-            align-items: end;
-        }
-
-        .idea-title {
-            max-width: 12ch;
-            margin-top: 1.15rem;
-            color: var(--starlight);
-            font-family: 'PP Neue Machina', sans-serif;
-            font-size: clamp(2.7rem, 5.8vw, 6rem);
-            line-height: .92;
-            letter-spacing: -.05em;
-            text-wrap: balance;
-        }
-
-        .idea-lede {
-            max-width: 28rem;
-            color: var(--moon);
-            font-size: clamp(1rem, 1.25vw, 1.18rem);
-            line-height: 1.55;
-            text-wrap: pretty;
-        }
-
-        .idea-flow {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            margin-top: clamp(4rem, 8vw, 8rem);
-            border-top: 1px solid var(--border);
-            border-bottom: 1px solid var(--border);
-        }
-
-        .idea-card {
-            min-height: 17rem;
-            padding: 1.5rem clamp(1rem, 2.4vw, 2.25rem) 2rem;
-            border-right: 1px solid var(--border);
-        }
-
-        .idea-card:first-child { padding-left: 0; }
-        .idea-card:last-child { border-right: 0; }
-
-        .idea-index {
-            display: block;
-            color: var(--greent);
-            font-size: .72rem;
-            font-weight: 700;
-            letter-spacing: .1em;
-        }
-
-        .idea-card h3 {
-            margin: 3.5rem 0 1rem;
-            color: var(--starlight);
-            font-family: 'PP Neue Machina', sans-serif;
-            font-size: clamp(1.4rem, 2.4vw, 2.35rem);
-            line-height: .98;
-            letter-spacing: -.035em;
-        }
-
-        .idea-card p {
-            max-width: 20rem;
-            color: var(--moon);
-            line-height: 1.55;
-        }
-
-        .idea-principle {
-            display: grid;
-            grid-template-columns: minmax(10rem, .65fr) minmax(0, 1.35fr);
-            gap: 2rem;
-            align-items: baseline;
-            margin-top: clamp(3rem, 6vw, 6rem);
-            padding-top: 1.25rem;
-            border-top: 1px solid var(--border);
-        }
-
-        .idea-principle-label {
-            color: var(--greent);
-            font-size: .72rem;
-            font-weight: 700;
-            letter-spacing: .1em;
-            text-transform: uppercase;
-        }
-
-        .idea-principle strong {
-            display: block;
-            color: var(--lime);
-            font-family: 'PP Neue Machina', sans-serif;
-            font-size: clamp(1.55rem, 3vw, 3rem);
-            line-height: 1;
-            letter-spacing: -.04em;
-        }
-
-        .idea-principle p {
-            max-width: 38rem;
-            margin-top: .8rem;
-            color: var(--moon);
-            line-height: 1.55;
-        }
-
-
-        .firmware-timeline { list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(1.25rem, 3vw, 2.5rem); margin-top: clamp(3.5rem, 7vw, 6.5rem); }
-        .firmware-step { padding-top: 1rem; border-top: 1px solid var(--border); }
-        .firmware-step span { color: var(--greent); font-size: .72rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
-        .firmware-step h3 { margin: 1.2rem 0 .7rem; color: var(--starlight); font-family: 'PP Neue Machina', sans-serif; font-size: clamp(1.2rem, 2vw, 1.7rem); line-height: 1; letter-spacing: -.035em; }
-        .firmware-step p { color: var(--moon); line-height: 1.55; }
-        .collab-section { width: min(100%, 1440px); margin: 0 auto; padding: clamp(5rem, 9vw, 9rem) clamp(1.25rem, 3vw, 3.5rem); color: var(--starlight); background: var(--leaf); }
-        .collab-inner { max-width: 1280px; margin: 0 auto; }
-        .collab-section .case-label { color: var(--lime); }
-        .collab-heading { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(16rem, .95fr); gap: clamp(2rem, 8vw, 9rem); align-items: end; margin-top: 1.15rem; }
-        .collab-title { max-width: 12ch; color: var(--starlight); font-family: 'PP Neue Machina', sans-serif; font-size: clamp(2.4rem, 5vw, 4.8rem); line-height: .92; letter-spacing: -.05em; }
-        .collab-lede { max-width: 29rem; color: rgba(231, 231, 233, .78); font-size: clamp(1rem, 1.25vw, 1.16rem); line-height: 1.55; }
-        .collab-points { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(1.5rem, 4vw, 3rem); margin-top: clamp(3.5rem, 7vw, 6rem); }
-        .collab-points article { padding-top: 1rem; border-top: 1px solid rgba(231, 231, 233, .22); }
-        .collab-points span { color: var(--lime); font-size: .72rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
-        .collab-points h3 { margin: 1.2rem 0 .7rem; font-family: 'PP Neue Machina', sans-serif; font-size: clamp(1.2rem, 2vw, 1.7rem); letter-spacing: -.035em; }
-        .collab-points p { color: rgba(231, 231, 233, .72); line-height: 1.55; }
-        @media (max-width: 900px) { .firmware-timeline, .collab-points, .collab-heading { grid-template-columns: 1fr; } }
-
-        .usdt-section {
-            width: min(100%, 1440px);
-            margin: 0 auto;
-            padding: clamp(5rem, 9vw, 9rem) clamp(1.25rem, 3vw, 3.5rem);
-            color: var(--starlight);
-            background: var(--leaf);
-        }
-
-        .usdt-inner { max-width: 1280px; margin: 0 auto; }
-
-        .usdt-section .case-label { color: var(--lime); }
-
-        .usdt-heading {
-            display: grid;
-            grid-template-columns: minmax(0, 1.05fr) minmax(16rem, .95fr);
-            gap: clamp(2rem, 8vw, 9rem);
-            align-items: end;
-            margin-top: 1.15rem;
-        }
-
-        .usdt-title {
-            max-width: 11ch;
-            color: var(--starlight);
-            font-family: 'PP Neue Machina', sans-serif;
-            font-size: clamp(2.7rem, 5.5vw, 5.8rem);
-            line-height: .92;
-            letter-spacing: -.05em;
-            text-wrap: balance;
-        }
-
-        .usdt-lede {
-            max-width: 29rem;
-            color: rgba(231, 231, 233, .78);
-            font-size: clamp(1rem, 1.25vw, 1.16rem);
-            line-height: 1.55;
-            text-wrap: pretty;
-        }
-
-        .usdt-layout {
-            display: grid;
-            grid-template-columns: minmax(15rem, .7fr) minmax(0, 1.3fr);
-            gap: clamp(2rem, 7vw, 7rem);
-            align-items: center;
-            margin-top: clamp(4rem, 8vw, 8rem);
-        }
-
-        .usdt-screen {
-            position: relative;
-            display: flex;
-            min-height: 22rem;
-            flex-direction: column;
-            justify-content: space-between;
-            padding: 1.5rem;
-            overflow: hidden;
-            border: 1px solid rgba(207, 255, 46, .35);
-            border-radius: 1.5rem;
-            background: #071e12;
-            box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, .22);
-        }
-
-        .usdt-screen::before {
-            content: '';
-            position: absolute;
-            width: 16rem;
-            height: 16rem;
-            top: -8rem;
-            right: -5rem;
-            border-radius: 50%;
-            background: rgba(0, 223, 26, .13);
-            filter: blur(1rem);
-        }
-
-        .usdt-screen > * { position: relative; z-index: 1; }
-
-        .usdt-screen-kicker,
-        .usdt-screen-meta,
-        .usdt-screen-pairs {
-            font-size: .68rem;
-            font-weight: 700;
-            letter-spacing: .12em;
-            text-transform: uppercase;
-        }
-
-        .usdt-screen-kicker { color: var(--lime); }
-
-        .usdt-screen-pair {
-            margin-top: 2.5rem;
-            color: var(--starlight);
-            font-family: 'PP Neue Machina', sans-serif;
-            font-size: 1.2rem;
-            letter-spacing: -.03em;
-        }
-
-        .usdt-screen-price {
-            margin-top: .45rem;
-            color: var(--starlight);
-            font-family: 'PP Neue Machina', sans-serif;
-            font-size: clamp(2.1rem, 4.5vw, 4.2rem);
-            line-height: .95;
-            letter-spacing: -.06em;
-        }
-
-        .usdt-screen-meta { color: var(--greent); }
-
-        .usdt-screen-chart {
-            width: 100%;
-            height: 4.5rem;
-            margin-top: 1.3rem;
-        }
-
-        .usdt-screen-pairs {
-            display: flex;
-            justify-content: space-between;
-            gap: 1rem;
-            padding-top: 1rem;
-            border-top: 1px solid rgba(231, 231, 233, .15);
-            color: rgba(231, 231, 233, .68);
-        }
-
-        .usdt-screen-pairs strong { display: block; margin-top: .3rem; color: var(--starlight); font-size: .9rem; letter-spacing: 0; }
-
-        .control-room-preview {
-            position: relative;
-            overflow: hidden;
-            border: 1px solid rgba(207, 255, 46, .35);
-            border-radius: 1.5rem;
-            background: #071e12;
-            box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, .22);
-        }
-
-        .control-room-preview img {
-            display: block;
-            width: 100%;
-            height: auto;
-        }
-
-        .control-room-preview figcaption {
-            display: flex;
-            justify-content: space-between;
-            gap: 1rem;
-            padding: .9rem 1rem 1rem;
-            color: rgba(231, 231, 233, .72);
-            font-size: .68rem;
-            font-weight: 700;
-            letter-spacing: .1em;
-            text-transform: uppercase;
-        }
-
-        .control-room-preview figcaption strong { color: var(--lime); }
-
-        .control-room-gallery {
-            display: grid;
-            grid-template-columns: repeat(12, minmax(0, 1fr));
-            gap: clamp(1rem, 2vw, 2rem);
-            margin-top: clamp(4rem, 8vw, 8rem);
-        }
-
-        .control-room-figure {
-            min-width: 0;
-            margin: 0;
-            overflow: hidden;
-            border: 1px solid rgba(231, 231, 233, .16);
-            border-radius: 1rem;
-            background: rgba(0, 0, 0, .18);
-        }
-
-        .control-room-figure:nth-child(1),
-        .control-room-figure:nth-child(4) { grid-column: span 7; }
-
-        .control-room-figure:nth-child(2),
-        .control-room-figure:nth-child(5) { grid-column: span 5; margin-top: 10%; }
-
-        .control-room-figure:nth-child(3) { grid-column: 3 / span 10; margin-top: 1rem; }
-
-        .control-room-figure img {
-            display: block;
-            width: 100%;
-            height: auto;
-            transition: transform .7s cubic-bezier(.2,.8,.2,1);
-        }
-
-        .control-room-figure:hover img { transform: scale(1.015); }
-
-        .control-room-figure figcaption {
-            display: grid;
-            grid-template-columns: 2.5rem 1fr;
-            gap: .75rem;
-            padding: 1rem;
-            border-top: 1px solid rgba(231, 231, 233, .12);
-        }
-
-        .control-room-figure figcaption span { color: var(--lime); font-size: .7rem; font-weight: 700; }
-        .control-room-figure figcaption strong { color: var(--starlight); font-size: 1rem; }
-        .control-room-figure figcaption p { margin-top: .3rem; color: rgba(231, 231, 233, .62); font-size: .82rem; line-height: 1.45; }
-
-        .usdt-details {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 2.5rem 3rem;
-        }
-
-        .usdt-detail {
-            padding-top: 1rem;
-            border-top: 1px solid rgba(231, 231, 233, .22);
-        }
-
-        .usdt-detail span {
-            color: var(--lime);
-            font-size: .72rem;
-            font-weight: 700;
-            letter-spacing: .1em;
-        }
-
-        .usdt-detail h3 {
-            margin: 1.5rem 0 .7rem;
-            color: var(--starlight);
-            font-family: 'PP Neue Machina', sans-serif;
-            font-size: clamp(1.25rem, 2vw, 1.85rem);
-            line-height: 1;
-            letter-spacing: -.035em;
-        }
-
-        .usdt-detail p {
-            color: rgba(231, 231, 233, .72);
-            line-height: 1.55;
-        }
-
-        .ota-strip {
-            display: grid;
-            grid-template-columns: minmax(10rem, .7fr) minmax(0, 1.3fr);
-            gap: 2rem;
-            align-items: baseline;
-            margin-top: clamp(4rem, 8vw, 8rem);
-            padding-top: 1.25rem;
-            border-top: 1px solid rgba(231, 231, 233, .22);
-        }
-
-        .ota-label {
-            color: var(--lime);
-            font-size: .72rem;
-            font-weight: 700;
-            letter-spacing: .1em;
-            text-transform: uppercase;
-        }
-
-        .ota-strip strong {
-            display: block;
-            color: var(--starlight);
-            font-family: 'PP Neue Machina', sans-serif;
-            font-size: clamp(1.5rem, 3vw, 3rem);
-            line-height: 1;
-            letter-spacing: -.04em;
-        }
-
-        .ota-strip p {
-            max-width: 38rem;
-            margin-top: .8rem;
-            color: rgba(231, 231, 233, .72);
-            line-height: 1.55;
-        }
-
-        .ota-badge {
-            display: inline-block;
-            margin-top: 1.25rem;
-            padding: .45rem .65rem;
-            border: 1px solid rgba(207, 255, 46, .35);
-            border-radius: .45rem;
-            color: var(--lime);
-            font-size: .65rem;
-            font-weight: 700;
-            letter-spacing: .1em;
-        }
-
-        .concept-grid {
-            display: grid;
-            grid-template-columns: repeat(12, minmax(0, 1fr));
-            gap: clamp(1rem, 2vw, 2rem);
-            margin-top: clamp(4rem, 7vw, 7rem);
-        }
-
-        .concept-figure { margin: 0; }
-        .concept-figure:nth-child(1) { grid-column: span 7; }
-        .concept-figure:nth-child(2) { grid-column: span 5; margin-top: 16%; }
-        .concept-figure:nth-child(3) { grid-column: 3 / span 9; margin-top: 2rem; }
-
-        .concept-media {
-            overflow: hidden;
-            border-radius: clamp(1rem, 2vw, 2rem);
-            background: var(--surface);
-        }
-
-        .concept-media picture { display: block; }
-
-        .concept-media img {
-            display: block;
-            width: 100%;
-            height: auto;
-            aspect-ratio: 3 / 2;
-            object-fit: cover;
-            transition: transform .7s cubic-bezier(.2,.8,.2,1);
-        }
-
-        .concept-figure:hover img { transform: scale(1.015); }
-
-        .concept-caption {
-            display: grid;
-            grid-template-columns: 3rem 1fr;
-            gap: 1rem;
-            margin-top: 1.1rem;
-        }
-
-        .figure-index { color: var(--greent); }
-
-        .figure-title {
-            margin-bottom: .35rem;
-            color: var(--starlight);
-            font-size: clamp(1.2rem, 2vw, 1.7rem);
-        }
-
-        .concept-caption p {
-            max-width: 40rem;
-            color: var(--moon);
-            line-height: 1.5;
-        }
-
-        .concept-disclaimer {
-            display: inline-block;
-            margin-top: 1.25rem;
-            padding: .45rem .65rem;
-            border: 1px solid var(--border);
-            border-radius: .5rem;
-            color: var(--moon);
-            font-size: .69rem;
-            font-weight: 700;
-            letter-spacing: .08em;
-            text-transform: uppercase;
-        }
-
         .state-board {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2028,30 +1526,11 @@
             .hero-copy { width: min(75vw, 36rem); }
             .hero-3d { width: 82vw !important; margin-left: 18vw; }
             .case-heading,
-            .proof-grid,
-            .idea-heading,
-            .usdt-heading { grid-template-columns: 1fr; }
+            .proof-grid { grid-template-columns: 1fr; }
             .proof-points { margin-top: 1rem; }
-            .concept-figure:nth-child(1),
-            .concept-figure:nth-child(2),
-            .concept-figure:nth-child(3) { grid-column: 1 / -1; margin-top: 0; }
-            .state-board,
-            .idea-flow { grid-template-columns: 1fr; }
-            .usdt-layout { grid-template-columns: 1fr; }
-            .control-room-figure:nth-child(1),
-            .control-room-figure:nth-child(2),
-            .control-room-figure:nth-child(3),
-            .control-room-figure:nth-child(4),
-            .control-room-figure:nth-child(5) {
-                grid-column: 1 / -1;
-                margin-top: 0;
-            }
+            .state-board { grid-template-columns: 1fr; }
             .state-column { min-height: 0; border-right: 0; border-bottom: 1px solid var(--border); }
             .state-column:last-child { border-bottom: 0; }
-            .idea-card { min-height: 0; border-right: 0; border-bottom: 1px solid var(--border); }
-            .idea-card:last-child { border-bottom: 0; }
-            .idea-card:first-child { padding-left: clamp(1rem, 2.4vw, 2.25rem); }
-            .usdt-details { gap: 2rem; }
             .roadmap-phase { grid-template-columns: 5rem 1fr; }
             .roadmap-phase p { grid-column: 2; }
         }
@@ -2071,25 +1550,9 @@
             .case-title { font-size: clamp(2.5rem, 13vw, 4.2rem); }
             .proof-number { font-size: 8rem; }
             .proof-points,
-            .manifesto-copy,
             .artifact-list { grid-template-columns: 1fr; }
-            .manifesto-title { font-size: clamp(3rem, 15vw, 5rem); }
-            .case-section { padding: 4rem 1.25rem 4.5rem; }
-            .manifesto { padding: 4rem 1.25rem 4.5rem; }
-            .idea-section { padding: 4rem 1.25rem 4.5rem; }
-            .usdt-section { padding: 4rem 1.25rem 4.5rem; }
-            .concept-grid { grid-template-columns: minmax(0, 1fr); gap: 3rem 0; }
-            .concept-figure { min-width: 0; }
-            .concept-caption { grid-template-columns: 2rem minmax(0, 1fr); }
             .roadmap-phase { grid-template-columns: 1fr; gap: .65rem; }
             .roadmap-phase p { grid-column: 1; }
-            .idea-principle { grid-template-columns: 1fr; gap: .8rem; }
-            .ota-strip { grid-template-columns: 1fr; gap: .8rem; }
-            .usdt-details { grid-template-columns: 1fr; }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-            .concept-media img { transition: none; }
         }
 
         .hero-actions {
@@ -2341,7 +1804,7 @@
                 border-color .38s ease;
         }
 
-        body.hero-intro-ready nav { opacity: 1; transform: translateY(0); }
+        body.hero-nav-ready nav { opacity: 1; transform: translateY(0); }
         nav.scrolled {
             border-color: rgba(18, 18, 18, .12);
             background: rgba(231, 231, 231, .96);
@@ -2419,9 +1882,6 @@
                 transform .7s cubic-bezier(.2,.8,.2,1);
         }
         body.hero-intro-ready .hero-copy > * { opacity: 1; transform: translateY(0); }
-        body.hero-intro-ready .hero-copy h1 { transition-delay: .08s; }
-        body.hero-intro-ready .hero-copy p { transition-delay: .16s; }
-        body.hero-intro-ready .hero-actions { transition-delay: .24s; }
 
         .hero-3d {
             animation: none;
@@ -2431,7 +1891,7 @@
                 opacity .85s ease .12s,
                 transform .95s cubic-bezier(.2,.8,.2,1) .12s;
         }
-        body.hero-intro-ready .hero-3d {
+        body.hero-product-ready .hero-3d {
             opacity: var(--hero-exit-opacity, 1);
             transform: translateY(0) scale(1);
         }
@@ -2449,78 +1909,6 @@
         .hero-actions { margin-top: 1.25rem; }
         .hero-action { border-radius: 999px; }
         .hero-note { right: 1.5rem; bottom: 1.2rem; }
-
-        .manifesto {
-            width: auto;
-            max-width: none;
-            margin: var(--page-gutter);
-            padding: clamp(5rem, 8vw, 8rem) clamp(1.5rem, 6vw, 6rem);
-            overflow: hidden;
-            border-radius: var(--stage-radius);
-        }
-
-        .manifesto-inner { max-width: 1280px; }
-        .manifesto-title {
-            max-width: 12ch;
-            font-size: clamp(2.75rem, 4.2vw, 4rem);
-            line-height: .92;
-        }
-        .manifesto-copy { max-width: 31rem; font-size: clamp(.95rem, 1.2vw, 1.08rem); }
-
-        #concepts {
-            --concept-stage-scale: .9;
-            --concept-stage-radius: var(--stage-radius);
-            position: relative;
-            isolation: isolate;
-            max-width: none;
-            width: auto;
-            margin: 0;
-            padding: clamp(5rem, 8vw, 8rem) clamp(2rem, 7vw, 7rem) clamp(6rem, 10vw, 10rem);
-            overflow: visible;
-            color: var(--starlight);
-            background: transparent;
-        }
-
-        #concepts::before {
-            content: '';
-            position: absolute;
-            z-index: 0;
-            inset: 0;
-            border-radius: var(--concept-stage-radius);
-            background: var(--black);
-            transform: scaleX(var(--concept-stage-scale));
-            transform-origin: center;
-            transition:
-                transform .8s cubic-bezier(.2,.8,.2,1),
-                border-radius .8s cubic-bezier(.2,.8,.2,1);
-            will-change: transform;
-        }
-
-        #concepts > * { position: relative; z-index: 1; }
-
-        #concepts.is-expanded {
-            --concept-stage-radius: .8rem;
-        }
-
-        #concepts .case-label,
-        #concepts .case-heading,
-        #concepts .concept-grid {
-            width: min(100%, 1280px);
-            margin-inline: auto;
-        }
-        #concepts .case-heading { grid-template-columns: minmax(0, 1fr); }
-        #concepts .case-title {
-            max-width: 14ch;
-            font-size: clamp(2.6rem, 4vw, 4rem);
-            line-height: .93;
-        }
-        .concept-grid { margin-top: clamp(3rem, 6vw, 6rem); }
-        #concepts .concept-figure:nth-child(3) { grid-column: 2 / span 10; }
-        .concept-media { border-radius: clamp(.9rem, 1.5vw, 1.35rem); }
-        .concept-caption { margin-top: 1rem; }
-        .figure-title { font-size: clamp(1.15rem, 1.8vw, 1.65rem); }
-        .concept-caption p { font-size: .9rem; }
-        .concept-disclaimer { font-size: .62rem; }
 
         footer {
             max-width: none;
@@ -2544,7 +1932,6 @@
             :root { --page-gutter: .5rem; --stage-radius: 1.2rem; }
             nav { padding: .58rem .65rem .58rem .85rem; }
             .nav-logo img { width: 92px; }
-            .nav-links .nav-product { display: none !important; }
             .nav-links a { min-height: 2.5rem; padding: .5rem .75rem; }
             .hero-scroll { height: 340svh; }
             .hero-sticky {
@@ -2561,37 +1948,109 @@
             }
             .hero-copy p { max-width: 20rem; font-size: .88rem; }
             .hero-3d { right: -4vw; bottom: 1.25rem; width: 108vw !important; height: 44dvh; }
-            .manifesto {
-                padding: 4.5rem 1.25rem 5rem;
-            }
-            .manifesto-title {
-                max-width: 10ch;
-                font-size: clamp(2.2rem, 8.8vw, 2.6rem);
-            }
-            .manifesto-copy { font-size: .92rem; }
-            #concepts {
-                --concept-stage-scale: .94;
-                padding: 5.25rem 1.25rem 5rem;
-            }
-            #concepts.is-expanded { --concept-stage-radius: .65rem; }
-            #concepts .case-title {
-                max-width: 11ch;
-                font-size: clamp(2.2rem, 8.5vw, 2.6rem);
-            }
-            #concepts .concept-grid {
-                grid-template-columns: minmax(0, 1fr);
-                gap: 2.75rem 0;
-                margin-top: 3rem;
-            }
-            #concepts .concept-figure:nth-child(1),
-            #concepts .concept-figure:nth-child(2),
-            #concepts .concept-figure:nth-child(3) {
-                grid-column: 1 / -1;
-                margin-top: 0;
-            }
             footer { padding-top: 3rem; }
         }
+
+        /* Hero cover: centered product, minimal copy */
+        .hero-3d {
+            position: absolute;
+            inset: 0;
+            width: 100% !important;
+            height: 100%;
+            margin: 0 !important;
+            opacity: 0;
+            transform: translateY(1.4rem) scale(.91);
+            transition:
+                opacity .9s cubic-bezier(.2,.8,.2,1),
+                transform 1.15s cubic-bezier(.16,1,.3,1);
+        }
+
+        .hero-scroll-cta {
+            position: absolute;
+            left: 50%;
+            bottom: 1.15rem;
+            z-index: 8;
+            min-height: 2.75rem;
+            padding: .7rem 1rem .7rem 1.15rem;
+            display: inline-flex;
+            align-items: center;
+            gap: .65rem;
+            color: rgba(231, 231, 233, .82);
+            border: 1px solid rgba(231, 231, 233, .2);
+            border-radius: 999px;
+            background: rgba(27, 29, 27, .7);
+            font: 700 .68rem/1 'Satoshi', sans-serif;
+            letter-spacing: .07em;
+            text-transform: uppercase;
+            opacity: 0;
+            transform: translateX(-50%) translateY(.9rem);
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+            transition: color .25s ease, border-color .25s ease, background-color .25s ease, opacity .65s ease, transform .65s cubic-bezier(.16,1,.3,1);
+        }
+
+        body.hero-scroll-ready .hero-scroll-cta {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .hero-scroll-arrow {
+            width: 1.65rem;
+            height: 1.65rem;
+            flex: none;
+            display: grid;
+            place-items: center;
+            border: 1px solid rgba(231, 231, 233, .18);
+            border-radius: 50%;
+            background: rgba(231, 231, 233, .06);
+        }
+
+        .hero-scroll-cta svg {
+            width: .9rem;
+            height: .9rem;
+            transition: transform .25s ease;
+        }
+
+        .hero-scroll-cta:hover {
+            color: var(--black);
+            border-color: var(--greent);
+            background: var(--greent);
+            transform: translateX(-50%) translateY(-2px);
+        }
+
+        .hero-scroll-cta:hover svg { transform: translateY(2px); }
+        .hero-scroll-cta:active { transform: translateX(-50%) translateY(1px) scale(.98); }
+
+        body.hero-scroll-ready .hero-scroll-arrow { animation: scroll-nudge 1.8s cubic-bezier(.16,1,.3,1) infinite; }
+
+        @keyframes scroll-nudge {
+            0%, 65%, 100% { transform: translateY(0); }
+            78% { transform: translateY(3px); }
+        }
+
+        @media (max-width: 680px) {
+            .hero-3d {
+                inset: -3vh -7vw 1vh;
+                width: 114vw !important;
+                height: 102%;
+            }
+
+            .hero-scroll-cta {
+                bottom: 1rem;
+                min-height: 2.6rem;
+                font-size: .62rem;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .hero-3d,
+            .hero-scroll-cta,
+            nav { transition-duration: .01ms !important; }
+            .hero-scroll-arrow { animation: none !important; }
+        }
     </style>
+    <link rel="stylesheet" href="./proposal.css?v=20260827-3">
 </head>
 <body>
 
@@ -2603,155 +2062,180 @@
         <img src="./assets/v2/lemon-horizontal-black.svg" alt="Lemon" width="120">
     </a>
     <ul class="nav-links">
-        <li class="nav-product"><a href="#firmware">Firmware</a></li>
-        <li class="nav-preview"><a href="#colaboraciones">Colaboraciones</a></li>
-        <li class="nav-preview"><a href="./studio/?mode=concept">Ver demo</a></li>
+        <li class="nav-proposal"><a href="#proposal">Propuesta</a></li>
+        <li class="nav-documents"><a href="#documents">Documentos</a></li>
     </ul>
 </nav>
 
+<main id="main">
+
+<!-- HERO — scroll-driven assembly -->
 <section class="hero-scroll" id="hero-scroll">
     <div class="hero-sticky">
         <canvas id="matrix-rain" class="matrix-rain" aria-hidden="true"></canvas>
-        <div class="hero-copy">
-            <h1>La Cajita, firmware a firmware.</h1>
-            <p>Del primer firm con Bitcoin y dólar al firmware de stocks. USDT queda como colaboración, no como el producto.</p>
-            <div class="hero-actions" aria-label="Acción principal">
-                <a class="hero-action primary" href="./studio/?mode=concept">Ver demo ↗</a>
-            </div>
-        </div>
         <div id="hero-viewer" class="hero-3d">
             <div class="loader" id="hero-loader" role="status" aria-live="polite" aria-label="Cargando modelo 3D">
                 <span aria-hidden="true"><span class="loader-dot">.</span><span class="loader-dot">.</span><span class="loader-dot">.</span></span>
             </div>
         </div>
-        <p class="hero-note">Scroll para explorar la Lemon Box</p>
+        <button class="hero-scroll-cta" type="button" aria-label="Desplazarse para explorar Lemon Box">
+            <span>Scroll para explorar</span>
+            <span class="hero-scroll-arrow"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v15m0 0 6-6m-6 6-6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </button>
         <div id="assembly-progress" role="progressbar" aria-label="Progreso de ensamblaje" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
     </div>
 </section>
-<section class="idea-section" id="firmware" aria-labelledby="firmware-title">
-    <div class="idea-inner">
-        <div class="idea-heading">
+
+<section class="proposal-section" id="proposal" aria-labelledby="proposal-title">
+    <div class="proposal-container">
+        <header class="proposal-intro">
             <div>
-                <div class="case-label reveal">02 · El desarrollo</div>
-                <h2 class="idea-title reveal reveal-delay-1" id="firmware-title">De la primera cajita al firmware de stocks.</h2>
+                <span class="proposal-index">02 · Propuesta</span>
+                <h2 id="proposal-title">Propuesta para ampliar Lemon Box</h2>
             </div>
-            <p class="idea-lede reveal reveal-delay-2">La Lemon Box no nació como una sala de control. Nació como un objeto de escritorio: Bitcoin a la vista, dólar Lemon abajo, siempre encendida. El resto del producto se fue ganando firmware a firmware.</p>
+            <p>Fabricación de un nuevo lote, 60 días de desarrollo conjunto del firmware principal, recall de hasta 37 unidades existentes y, de forma opcional, herramientas para operar la flota y crear nuevas experiencias.</p>
+        </header>
+
+        <dl class="proposal-summary" aria-label="Resumen de alcance">
+            <div><dt>Volumen</dt><dd>100, 150 o 200 unidades</dd></div>
+            <div><dt>Entrega rápida</dt><dd>Hasta 20 días hábiles con firmware Stocks</dd></div>
+            <div><dt>Firmware incluido</dt><dd>60 días de desarrollo conjunto</dd></div>
+            <div><dt>Software opcional</dt><dd>USDC 4.500 netos</dd></div>
+        </dl>
+    </div>
+</section>
+
+<section class="proposal-section proposal-section-alt" id="manufacturing" aria-labelledby="manufacturing-title">
+    <div class="proposal-container">
+        <header class="proposal-heading">
+            <span class="proposal-index">03 · Fabricación</span>
+            <h2 id="manufacturing-title">Opciones de fabricación</h2>
+            <p>Los valores incluyen pantalla, carcasa, armado, programación, control de calidad y packaging individual. No incluye cables ni fuentes de alimentación. El ahorro se calcula contra el último lote adicional de 7 unidades, realizado a USDC 120 por unidad.</p>
+        </header>
+
+        <div class="proposal-table-wrap" tabindex="0" aria-label="Tabla de precios por volumen">
+            <table class="proposal-table">
+                <thead>
+                    <tr><th>Volumen</th><th>Precio unitario neto</th><th>Precio unitario con IVA</th><th>Total neto</th><th>Total con IVA</th></tr>
+                </thead>
+                <tbody>
+                    <tr><th>100 unidades <small class="volume-saving">34,2% menos</small></th><td data-label="Unitario neto">USDC 79</td><td data-label="Unitario con IVA">USDC 95,59</td><td data-label="Total neto">USDC 7.900</td><td data-label="Total con IVA">USDC 9.559</td></tr>
+                    <tr><th>150 unidades <small class="volume-saving">37,5% menos</small></th><td data-label="Unitario neto">USDC 75</td><td data-label="Unitario con IVA">USDC 90,75</td><td data-label="Total neto">USDC 11.250</td><td data-label="Total con IVA">USDC 13.612,50</td></tr>
+                    <tr><th>200 unidades <small class="volume-saving">41,7% menos</small></th><td data-label="Unitario neto">USDC 70</td><td data-label="Unitario con IVA">USDC 84,70</td><td data-label="Total neto">USDC 14.000</td><td data-label="Total con IVA">USDC 16.940</td></tr>
+                </tbody>
+            </table>
         </div>
-        <ol class="firmware-timeline" aria-label="Línea de firmware de la Cajita">
-            <li class="firmware-step reveal">
-                <span>01 / V1</span>
-                <h3>El primer firm</h3>
-                <p>Dashboard clásico en 480x480: hora, Bitcoin con sparkline y el dólar Lemon (USDT/ARS) en la zona baja. La cajita mira el mercado por vos, sin app abierta.</p>
-            </li>
-            <li class="firmware-step reveal reveal-delay-1">
-                <span>02 / V5.0</span>
-                <h3>Carousel y mercado</h3>
-                <p>El firmware deja de ser una sola vista. Aparece el carousel, el servidor de config y la primera capa de mercado más allá de BTC y dólar.</p>
-            </li>
-            <li class="firmware-step reveal reveal-delay-2">
-                <span>03 / V5.1</span>
-                <h3>Stocks en Z2</h3>
-                <p>Yahoo Finance, watchlist en NVS y el modo stocks en la zona baja. Dólar, mercados y acciones se eligen en el mismo slot. Ahí llega el firmware de stocks.</p>
-            </li>
-            <li class="firmware-step reveal">
-                <span>04 / V2</span>
-                <h3>Market Desk</h3>
-                <p>La caja existente se vuelve presencia viva: home ambiental, Market Tape y contexto. Informa y puede devolver a Lemon. No opera.</p>
-            </li>
+
+        <div class="proposal-terms">
+            <p><strong>Pago</strong><span>70% al confirmar la producción y 30% contra entrega del lote completo.</span></p>
+            <p><strong>Entrega rápida</strong><span>El lote completo puede entregarse en hasta 20 días hábiles con el firmware Stocks ya desarrollado.</span></p>
+            <p><strong>Firmware principal</strong><span>60 días corridos de trabajo conjunto y directo con un equipo de Lemon para desarrollar y estabilizar el firmware definitivo.</span></p>
+            <p><strong>Actualización incluida</strong><span>Ferced coordina la instalación del template aprobado en todas las unidades del nuevo lote, por OTA cuando sea posible o mediante reflasheo físico.</span></p>
+            <p><strong>Recall incluido</strong><span>Actualización de carcasa y firmware de hasta 37 unidades ya entregadas. La operatoria se coordina con Lemon antes de iniciar.</span></p>
+        </div>
+
+        <div class="partners-option">
+            <div><span>Incluido con el lote</span><h3>Programa de firmware · 60 días</h3><p>Definición, desarrollo, pruebas sobre hardware real, estabilización, documentación y actualización coordinada de todas las unidades al firmware principal aprobado por Lemon.</p></div>
+            <div><strong>Sin costo adicional</strong><small>Incluido en 100, 150 o 200 unidades</small></div>
+        </div>
+    </div>
+</section>
+
+<section class="proposal-section" id="fleet-control" aria-labelledby="fleet-title">
+    <div class="proposal-container fleet-layout">
+        <div class="fleet-copy">
+            <span class="proposal-index">04 · Software opcional</span>
+            <h2 id="fleet-title">Control de flota + Developer Kit</h2>
+            <p>Un único paquete para que Lemon opere la flota y sus desarrolladores puedan crear, probar y publicar nuevas experiencias con independencia.</p>
+            <ul class="scope-list">
+                <li><strong>Inventario y estado</strong><span>Registro, conexión, versión instalada y última actividad.</span></li>
+                <li><strong>Grupos</strong><span>Asignación por equipo, ubicación, campaña o partner.</span></li>
+                <li><strong>Actualizaciones</strong><span>Prueba en un grupo reducido antes de ampliar a toda la flota.</span></li>
+                <li><strong>Developer Kit</strong><span>Firmware base, SDK de experiencias, plantillas, simulador y herramientas de compilación.</span></li>
+                <li><strong>Skill de desarrollo</strong><span>Contexto y flujos para que los asistentes de código trabajen sobre la arquitectura de Lemon Box.</span></li>
+            </ul>
+            <div class="software-price"><span>Implementación opcional</span><strong>USDC 4.500 netos</strong><small>Control de flota + Developer Kit · USDC 5.445 con IVA</small></div>
+        </div>
+
+        <figure class="fleet-preview">
+            <div class="fleet-app">
+                <aside>
+                    <img src="./assets/lemon-iso.svg" alt="" width="28" height="28">
+                    <strong>Lemon Box</strong>
+                    <span class="active">Resumen</span><span>Dispositivos</span><span>Actualizaciones</span><span>Experiencias</span>
+                </aside>
+                <div class="fleet-main">
+                    <header><div><small>LEMON BOX CONTROL</small><h3>Resumen operativo</h3></div><span>Última revisión · 09:41</span></header>
+                    <div class="fleet-metrics"><p><span>Total</span><strong>150</strong></p><p><span>Conectadas</span><strong>142</strong></p><p><span>Requieren revisión</span><strong>8</strong></p></div>
+                    <div class="fleet-status">
+                        <div><span>Grupo</span><b>Equipos</b><b>Estado</b></div>
+                        <div><span>Lemon</span><b>110</b><em>Operativo</em></div>
+                        <div><span>Partner A</span><b>25</b><em>Operativo</em></div>
+                        <div><span>Próxima experiencia</span><b>15</b><em class="pending">Preparación</em></div>
+                    </div>
+                </div>
+            </div>
+            <figcaption>Ejemplo visual de la interfaz. Los valores no representan el estado actual de la flota.</figcaption>
+        </figure>
+    </div>
+</section>
+
+<section class="proposal-section proposal-section-alt" id="integrations" aria-labelledby="integrations-title">
+    <div class="proposal-container">
+        <header class="proposal-heading">
+            <span class="proposal-index">05 · Desarrollo</span>
+            <h2 id="integrations-title">Developer Kit</h2>
+            <p>Una base mantenida para crear experiencias y firmwares derivados sin volver a resolver pantalla, touch, conectividad y actualización en cada proyecto.</p>
+        </header>
+
+        <div class="integration-list">
+            <article><span>01</span><div><h3>Firmware base</h3><p>Pantalla, touch, Wi-Fi, caché, estados sin conexión, recuperación y actualización.</p></div><small>Incluido en el paquete</small></article>
+            <article><span>02</span><div><h3>SDK y plantillas</h3><p>Componentes, ejemplos y contratos de datos para construir nuevas experiencias sobre una base común.</p></div><small>Incluido en el paquete</small></article>
+            <article><span>03</span><div><h3>Simulador y compilación</h3><p>Vista previa local, validaciones y comandos documentados para compilar una versión compatible.</p></div><small>Incluido en el paquete</small></article>
+            <article><span>04</span><div><h3>Skill de desarrollo</h3><p>Instrucciones para que los asistentes de código generen, modifiquen y validen experiencias respetando la arquitectura.</p></div><small>Incluido en el paquete</small></article>
+        </div>
+
+        <p class="approval-policy"><strong>Publicación controlada.</strong> El Developer Kit permite crear y validar paquetes. La publicación sobre la flota se realiza desde Control de flota, primero sobre un grupo de prueba y con aprobación explícita.</p>
+    </div>
+</section>
+
+<section class="proposal-section" id="implementation" aria-labelledby="implementation-title">
+    <div class="proposal-container">
+        <header class="proposal-heading compact">
+            <span class="proposal-index">06 · Implementación</span>
+            <h2 id="implementation-title">Entrega y soporte</h2>
+        </header>
+        <ol class="implementation-list">
+            <li><span>01</span><div><h3>Confirmación</h3><p>Definición del volumen, terminación, responsables y equipo de trabajo de Lemon.</p></div></li>
+            <li><span>02</span><div><h3>Entrega rápida</h3><p>Armado, control de calidad y entrega del lote completo con el firmware Stocks en hasta 20 días hábiles.</p></div></li>
+            <li><span>03</span><div><h3>Firmware principal</h3><p>60 días corridos de trabajo directo, validación sobre hardware real y estabilización del firmware definitivo.</p></div></li>
+            <li><span>04</span><div><h3>Actualización coordinada</h3><p>Instalación de la versión aprobada en todas las unidades del nuevo lote, por OTA o reflasheo físico según disponibilidad.</p></div></li>
+            <li><span>05</span><div><h3>Software opcional</h3><p>Control de flota + Developer Kit, con puesta en marcha y 90 días de soporte inicial si Lemon selecciona el paquete.</p></div></li>
         </ol>
     </div>
 </section>
-<section class="manifesto" id="product" aria-labelledby="manifesto-title">
-    <div class="manifesto-inner">
-        <div class="case-label">03 · El producto</div>
-        <h2 class="manifesto-title" id="manifesto-title">Siempre presente. Relevante cuando importa.</h2>
-        <div class="manifesto-copy">
-            <p>Bitcoin queda a la vista. Los movimientos importantes ganan el foco y vuelven a la calma.</p>
-        </div>
-    </div>
-</section>
-<section class="case-section" id="concepts">
-    <div class="case-label reveal">04 · Así se vive</div>
-    <div class="case-heading">
-        <h2 class="case-title reveal reveal-delay-1">Tres momentos. Una Lemon Box.</h2>
-    </div>
-    <div class="concept-grid">
-        <figure class="concept-figure reveal">
-            <div class="concept-media">
-                <picture>
-                    <source srcset="./assets/v2/ambient-home-product.webp" type="image/webp">
-                    <img src="./assets/v2/ambient-home-product.png" alt="Dirección visual de la Lemon Box fisica mostrando un home ambiental de Bitcoin" loading="lazy" width="1536" height="1024">
-                </picture>
-            </div>
-            <figcaption class="concept-caption">
-                <span class="figure-index">01</span>
-                <div>
-                    <h3 class="figure-title">Home ambiental</h3>
-                    <p>Bitcoin y hora. El primer firm, todavía a la vista.</p>
-                    <span class="concept-disclaimer">Dirección visual · datos ilustrativos</span>
-                </div>
-            </figcaption>
-        </figure>
-        <figure class="concept-figure reveal reveal-delay-1">
-            <div class="concept-media">
-                <picture>
-                    <source srcset="./assets/v2/market-tape-product.webp" type="image/webp">
-                    <img src="./assets/v2/market-tape-product.png" alt="Dirección visual de Market Tape en la Lemon Box fisica con indices, acciones y un Pack" loading="lazy" width="1536" height="1024">
-                </picture>
-            </div>
-            <figcaption class="concept-caption">
-                <span class="figure-index">02</span>
-                <div>
-                    <h3 class="figure-title">Market Tape</h3>
-                    <p>Apertura, cierre y el firmware de stocks.</p>
-                    <span class="concept-disclaimer">Dirección visual · no es mercado en vivo</span>
-                </div>
-            </figcaption>
-        </figure>
-        <figure class="concept-figure reveal">
-            <div class="concept-media">
-                <picture>
-                    <source srcset="./assets/v2/news-takeover-product.webp" type="image/webp">
-                    <img src="./assets/v2/news-takeover-product.png" alt="Dirección visual de una noticia contextual en la Lemon Box fisica con continuidad en Lemon" loading="lazy" width="1536" height="1024">
-                </picture>
-            </div>
-            <figcaption class="concept-caption">
-                <span class="figure-index">03</span>
-                <div>
-                    <h3 class="figure-title">Contexto</h3>
-                    <p>Qué pasó y por qué importa, sin reemplazar la app.</p>
-                    <span class="concept-disclaimer">Dirección visual · contenido de ejemplo</span>
-                </div>
-            </figcaption>
-        </figure>
-    </div>
-</section>
-<section class="collab-section" id="colaboraciones" aria-labelledby="collab-title">
-    <div class="collab-inner">
-        <div class="case-label reveal">05 · Colaboraciones</div>
-        <div class="collab-heading">
-            <h2 class="collab-title reveal reveal-delay-1" id="collab-title">USDT Control Room</h2>
-            <p class="collab-lede reveal reveal-delay-2">Una línea aparte, con canal OTA propio. No es el firmware principal de la Cajita: es una colaboración para seguir el dólar digital desde el escritorio.</p>
-        </div>
-        <div class="collab-points">
+
+<section class="proposal-section documents-section" id="documents" aria-labelledby="documents-title">
+    <div class="proposal-container">
+        <header class="proposal-heading">
+            <span class="proposal-index">07 · Documentos</span>
+            <h2 id="documents-title">Documentos</h2>
+            <p>La propuesta comercial y el detalle técnico del software están disponibles para leer en el navegador o descargar en texto plano y PDF.</p>
+        </header>
+
+        <div class="document-list">
             <article>
-                <span>Canal</span>
-                <h3>firmware-usdt.bin</h3>
-                <p>Aislado de V1 y V2. Las cajas de stocks no toman este asset.</p>
+                <div><span>COMERCIAL</span><h3>Propuesta de fabricación y software</h3><p>Precios por volumen, software opcional, condiciones y totales.</p></div>
+                <nav aria-label="Formatos de propuesta comercial"><a href="./docs/propuesta-comercial.html">Leer</a><a href="./docs/propuesta-comercial.txt" download>TXT</a><a href="./docs/propuesta-comercial.pdf" download>PDF</a></nav>
             </article>
             <article>
-                <span>Qué muestra</span>
-                <h3>Precio, peg y yield</h3>
-                <p>USDT/ARS en Lemon, variación CoinGecko y Lemon Yield live. Informa; no opera.</p>
-            </article>
-            <article>
-                <span>Estado</span>
-                <h3>Firmware colaborativo</h3>
-                <p>Disponible para flashear y actualizar por OTA. No reemplaza el relato de la Cajita.</p>
+                <div><span>OPERATIVO</span><h3>Control de flota + Developer Kit</h3><p>Funciones, permisos, flujo de publicación, entregables y límites de la primera etapa.</p></div>
+                <nav aria-label="Formatos de alcance de plataforma"><a href="./docs/alcance-plataforma.html">Leer</a><a href="./docs/alcance-plataforma.txt" download>TXT</a><a href="./docs/alcance-plataforma.pdf" download>PDF</a></nav>
             </article>
         </div>
     </div>
 </section>
+
 <section class="section" id="about" hidden aria-hidden="true">
     <div class="about-layout">
         <div class="about-copy">
@@ -2900,18 +2384,16 @@
 
 <!-- FOOTER -->
 <footer>
-    <div class="footer-center">
+    <div class="footer-compact">
         <img src="./assets/v2/lemon-horizontal-black.svg" alt="Lemon" class="footer-logo">
-        <p class="footer-tagline">De la primera Cajita al firmware de stocks.</p>
-    </div>
-    <div class="footer-bottom">
-        <p>Documento de evolucion interna - firmware V1 a stocks - Exclusivamente Lemon</p>
+        <p>Propuesta comercial · Lemon Box · 27.08.2026</p>
+        <a class="footer-author" href="https://ferced.com" target="_blank" rel="noopener noreferrer">by ferced ↗</a>
     </div>
 </footer>
 
 <script>
 requestAnimationFrame(() => {
-    requestAnimationFrame(() => document.body.classList.add('hero-intro-ready'));
+    requestAnimationFrame(() => document.body.classList.add('hero-nav-ready'));
 });
 </script>
 
@@ -2952,42 +2434,14 @@ if (_prefersReduced) {
 
 // ── Nav scroll effect ──
 const nav = document.getElementById('main-nav');
+const heroForNav = document.getElementById('hero-scroll');
 const updateNav = () => {
-    nav.classList.toggle('scrolled', window.scrollY > 60);
+    const heroBounds = heroForNav.getBoundingClientRect();
+    const heroHasReleased = heroBounds.bottom <= window.innerHeight;
+    nav.classList.toggle('scrolled', heroHasReleased);
 };
 updateNav();
 window.addEventListener('scroll', updateNav, { passive: true });
-
-const conceptStage = document.getElementById('concepts');
-let conceptStageFrame = 0;
-
-function updateConceptStage() {
-    conceptStageFrame = 0;
-    const rect = conceptStage.getBoundingClientRect();
-    const viewport = window.innerHeight;
-    const restingScale = window.innerWidth < 680 ? 0.94 : 0.90;
-    const enterProgress = clamp((viewport * 0.88 - rect.top) / (viewport * 0.38), 0, 1);
-    const exitProgress = clamp((rect.bottom - viewport * 0.65) / (viewport * 0.35), 0, 1);
-    const focus = Math.min(enterProgress, exitProgress);
-    const scale = restingScale + (0.995 - restingScale) * focus;
-    conceptStage.style.setProperty('--concept-stage-scale', scale.toFixed(4));
-    conceptStage.classList.toggle('is-expanded', focus > 0.94);
-}
-
-function queueConceptStageUpdate() {
-    if (!conceptStageFrame) conceptStageFrame = requestAnimationFrame(updateConceptStage);
-}
-
-const conceptStageObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-        conceptStage.classList.toggle('is-in-view', entry.isIntersecting);
-        queueConceptStageUpdate();
-    });
-}, { threshold: 0, rootMargin: '20% 0px' });
-conceptStageObserver.observe(conceptStage);
-window.addEventListener('scroll', queueConceptStageUpdate, { passive: true });
-window.addEventListener('resize', queueConceptStageUpdate, { passive: true });
-updateConceptStage();
 
 // ── STL paths & data ──
 const BASE = './modelo3d/';
@@ -3035,6 +2489,11 @@ const heroSection = document.getElementById('hero-scroll');
 const heroEl = document.getElementById('hero-viewer');
 const heroLoaderEl = document.getElementById('hero-loader');
 const progressBar = document.getElementById('assembly-progress');
+const heroScrollCta = document.querySelector('.hero-scroll-cta');
+
+heroScrollCta?.addEventListener('click', () => {
+    window.scrollBy({ top: window.innerHeight * 0.72, behavior: 'smooth' });
+});
 
 function getHeroCameraFov() {
     return window.innerWidth < 680 ? 44 : 38;
@@ -3146,17 +2605,19 @@ let dashboardTexture = null;
 const CAM_PATH = {
     startAngle: 0.25,     // ~14° from +Z axis — more frontal
     endAngle:   Math.PI,  // 180° (straight -Z, facing screen)
-    startRadius: 280,     // farther back so exploded parts don't get cropped
-    endRadius:   130,     // close enough to read the screen, far enough to see the whole case
+    startRadius: 225,
+    endRadius:   110,
     startY: 120,          // higher for isometric feel
     endY:   0,
+    startTargetY: -18,
 };
 
 function applyCamPathForViewport() {
     const narrow = window.innerWidth < 680;
-    CAM_PATH.startRadius = narrow ? 205 : 280;
-    CAM_PATH.endRadius   = narrow ? 105 : 130;
+    CAM_PATH.startRadius = narrow ? 175 : 225;
+    CAM_PATH.endRadius   = narrow ? 92 : 110;
     CAM_PATH.startY      = narrow ? 72 : 120;
+    CAM_PATH.startTargetY = narrow ? -14 : -18;
     EXPLODED.lid.set(0, narrow ? -58 : -75, 0);
     EXPLODED.logo.set(0, narrow ? -88 : -140, narrow ? 12 : 20);
 }
@@ -3234,6 +2695,13 @@ Promise.all([
     }
 
     heroLoaderEl.classList.add('hidden');
+
+    const productDelay = prefersReducedMotion ? 0 : 360;
+    const scrollDelay = prefersReducedMotion ? 0 : 620;
+    window.setTimeout(() => {
+        document.body.classList.add('hero-product-ready');
+        window.setTimeout(() => document.body.classList.add('hero-scroll-ready'), scrollDelay);
+    }, productDelay);
 
     // Debug exposure — use via window._hero in devtools
     window._hero = {
@@ -3702,9 +3170,12 @@ function heroAnimate() {
 
             heroCamera.position.set(camX, camY, camZ);
 
-            // Target: origin → screen center as the camera settles into the final frontal view
-            const targetT = easeInOutCubic(phaseProgress(t, 0.80, 1.0));
-            heroCamera.lookAt(0, 0, screenWorldZ * targetT);
+            // Center vertically before the close-up, then settle depth on the screen.
+            // Keeping both movements tied made the box rise and clip before the display appeared.
+            const verticalTargetT = easeInOutCubic(phaseProgress(t, 0.52, 0.78));
+            const screenTargetT = easeInOutCubic(phaseProgress(t, 0.80, 1.0));
+            const targetY = CAM_PATH.startTargetY * (1 - verticalTargetT);
+            heroCamera.lookAt(0, targetY, screenWorldZ * screenTargetT);
         }
 
 
