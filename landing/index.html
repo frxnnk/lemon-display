@@ -2802,10 +2802,6 @@ function createHeroScreen() {
     logoImg.decoding = 'async';
     logoImg.src = './assets/lemonlogo.png';
 
-    const productScreenImg = new Image();
-    productScreenImg.decoding = 'async';
-    productScreenImg.src = './assets/v2/home-screen-demo-480.png';
-
     // Matrix rain on the dashboard texture
     // Bitcoin symbol weighted heavily so it shows up as a recurring motif on the device screen
     const M_CHARS = '₿₿₿₿₿₿₿₿₿₿₿₿₿₿アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789Ξ$%△▽';
@@ -2934,16 +2930,13 @@ function createHeroScreen() {
         ctx.fillStyle = '#03040A';
         ctx.fillRect(0, 0, size, size);
 
-        // Boot sequence plays while the box is still rotating; the home lands
-        // together with the camera settling into the frontal view:
+        // Boot sequence plays while the box is still rotating and remains as
+        // the final screen when the camera settles into the frontal view:
         //   raw 0.28..0.32: Lemon logo fades in (screen just swung into view)
-        //   raw 0.31..0.36: market rain appears over the rotation
-        //   raw 0.44..0.52: Market Desk home replaces the boot moment
-        //   raw 0.52..0.94: completed home remains visible through the hold
+        //   raw 0.31..0.36: Matrix rain appears and holds with the logo
         const raw = window.__heroRawProgress ?? 0;
         const logoVisible = Math.max(0, Math.min(1, (raw - 0.28) / 0.04));
         const matrixVisible = Math.max(0, Math.min(1, (raw - 0.31) / 0.05));
-        const productVisible = Math.max(0, Math.min(1, (raw - 0.44) / 0.08));
 
         // Reset matrix to clean state right before it becomes visible,
         // then only advance it while visible so the user sees it from frame one.
@@ -2954,17 +2947,12 @@ function createHeroScreen() {
 
         if (matrixVisible > 0) {
             drawMatrix();
-            ctx.globalAlpha = matrixVisible * (1 - productVisible);
+            ctx.globalAlpha = matrixVisible;
             ctx.drawImage(matrixCanvas, 0, 0, size, size);
             ctx.globalAlpha = 1;
         }
 
-        drawLogoOn(logoVisible * (1 - productVisible));
-        if (productVisible > 0 && productScreenImg.complete && productScreenImg.naturalWidth > 0) {
-            ctx.globalAlpha = productVisible;
-            ctx.drawImage(productScreenImg, 0, 0, size, size);
-            ctx.globalAlpha = 1;
-        }
+        drawLogoOn(logoVisible);
         ctx.restore();
         dashboardTexture.needsUpdate = true;
     }
@@ -2977,7 +2965,6 @@ function createHeroScreen() {
 
     logoImg.onload = () => { drawScreen(); if (!dashRaf) tick(); };
     logoImg.onerror = () => { drawScreen(); if (!dashRaf) tick(); };
-    productScreenImg.onload = drawScreen;
     drawScreen();
     tick();
 
