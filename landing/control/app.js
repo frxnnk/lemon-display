@@ -9,6 +9,7 @@ function showPanel(id) {
     });
     panels.forEach((panel) => panel.classList.toggle("active", panel.id === id));
     history.replaceState(null, "", `#${id}`);
+    window.scrollTo({ top: 0, behavior: "auto" });
     document.querySelector(`#${id} h1`)?.focus({ preventScroll: true });
 }
 
