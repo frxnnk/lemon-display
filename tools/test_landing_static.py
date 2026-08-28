@@ -99,6 +99,34 @@ class LandingStaticTest(unittest.TestCase):
         self.assertIn(".proposal-table tbody td::before { content: attr(data-label);", proposal_css)
         self.assertIn(".fleet-app aside { display: none; }", proposal_css)
 
+    def test_proposal_screens_fit_the_desktop_viewport_and_restore_the_control_demo(self):
+        with open(os.path.join(LANDING, "index.html"), "r", encoding="utf-8") as f:
+            html = f.read()
+        with open(os.path.join(LANDING, "proposal.css"), "r", encoding="utf-8") as f:
+            proposal_css = f.read()
+
+        price = html.index('class="software-price"')
+        preview = html.index('class="fleet-preview"')
+        self.assertLess(price, preview)
+        self.assertIn('class="fleet-visual"', html)
+        self.assertIn('href="./control/"', html)
+        self.assertIn("Abrir demo operativa", html)
+
+        self.assertIn("@media (min-width: 901px)", proposal_css)
+        self.assertIn("height: 100dvh;", proposal_css)
+        self.assertIn("overflow: hidden;", proposal_css)
+        self.assertIn(".fleet-visual", proposal_css)
+
+        demo_dir = os.path.join(LANDING, "control")
+        for name in ["index.html", "styles.css", "app.js"]:
+            self.assertTrue(os.path.exists(os.path.join(demo_dir, name)), name)
+
+        with open(os.path.join(demo_dir, "index.html"), "r", encoding="utf-8") as f:
+            demo_html = f.read()
+        for label in ["Resumen", "Dispositivos", "Versiones", "Partners"]:
+            self.assertIn(label, demo_html)
+        self.assertIn("Datos ilustrativos", demo_html)
+
     def test_landing_assets_and_studio_entry_exist(self):
         required = [
             "index.html",

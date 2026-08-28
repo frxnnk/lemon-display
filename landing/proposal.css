@@ -5,9 +5,14 @@
     padding: 6.25rem max(1.5rem, env(safe-area-inset-right)) 6.75rem max(1.5rem, env(safe-area-inset-left));
     border-top: 1px solid var(--border);
     background: #121212;
+    scroll-margin-top: 0;
 }
 
 .proposal-section-alt { background: #171917; }
+
+#proposal, #manufacturing, #fleet-control, #integrations, #implementation, #documents {
+    scroll-margin-top: 0;
+}
 
 .proposal-container {
     width: min(1160px, 100%);
@@ -114,16 +119,21 @@
     align-items: center;
 }
 
+.fleet-visual { min-width: 0; display: grid; gap: 1rem; }
+
 .scope-list { margin: 2.75rem 0 0; list-style: none; border-top: 1px solid var(--border); }
 .scope-list li { padding: 1.15rem 0; display: grid; grid-template-columns: 8rem 1fr; gap: 1.25rem; border-bottom: 1px solid var(--border); }
 .scope-list strong { color: var(--starlight); font-size: .8rem; }
 .scope-list span { color: var(--moon); font-size: .8rem; line-height: 1.5; }
 
-.software-price { margin-top: 2.5rem; padding-left: 1rem; border-left: 2px solid var(--greent); }
+.software-price { padding: 1rem 1.1rem; display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; border: 1px solid rgba(231,231,233,.16); border-radius: .75rem; background: rgba(231,231,233,.035); }
 .software-price span, .software-price small, .software-price strong { display: block; }
 .software-price span { color: var(--moon); font-size: .7rem; }
 .software-price strong { margin: .35rem 0; color: var(--starlight); font-size: 1.4rem; font-variant-numeric: tabular-nums; }
 .software-price small { color: rgba(231,231,233,.46); font-size: .72rem; }
+.software-price a { flex: 0 0 auto; min-height: 2.65rem; padding: 0 .9rem; display: inline-flex; align-items: center; gap: .55rem; border: 1px solid rgba(231,231,233,.22); border-radius: .45rem; color: var(--starlight); text-decoration: none; font-size: .72rem; font-weight: 700; transition: color .2s ease, border-color .2s ease, transform .2s ease; }
+.software-price a:hover { color: var(--greent); border-color: var(--greent); transform: translateY(-1px); }
+.software-price a:focus-visible { outline: 2px solid var(--greent); outline-offset: 3px; }
 
 .fleet-preview { margin: 0; }
 .fleet-app { min-height: 500px; display: grid; grid-template-columns: 9.5rem 1fr; overflow: hidden; border: 1px solid rgba(231,231,233,.16); border-radius: 1.2rem; background: #e9eae5; box-shadow: 0 2.5rem 6rem rgba(0,0,0,.28); }
@@ -150,6 +160,68 @@
 .fleet-status em { color: #007f16; }
 .fleet-status em.pending { color: #9c6a00; }
 .fleet-preview figcaption { margin-top: .8rem; color: rgba(231,231,233,.42); font-size: .68rem; line-height: 1.45; }
+
+@media (min-width: 901px) {
+    .proposal-section {
+        height: 100dvh;
+        min-height: 0;
+        overflow: hidden;
+        padding-top: clamp(4.75rem, 9dvh, 6.25rem);
+        padding-bottom: clamp(2rem, 5dvh, 4rem);
+    }
+
+    .proposal-summary { margin-top: clamp(2.5rem, 7dvh, 5rem); }
+    .proposal-table-wrap { margin-top: clamp(1.6rem, 4dvh, 3.75rem); }
+    .proposal-terms { margin-top: clamp(1rem, 3dvh, 2.5rem); gap: clamp(1rem, 2vw, 2.5rem); }
+    .partners-option { margin-top: clamp(1rem, 3dvh, 3.5rem); padding: clamp(1.15rem, 2.5dvh, 2rem); }
+    .scope-list { margin-top: clamp(1.25rem, 3dvh, 2.75rem); }
+    .scope-list li { padding: clamp(.65rem, 1.45dvh, 1.15rem) 0; }
+    .fleet-app { min-height: 0; height: clamp(315px, 49dvh, 500px); }
+    .fleet-main { padding: clamp(1.1rem, 2.5dvh, 1.8rem); }
+    .fleet-metrics { margin-top: clamp(1rem, 3dvh, 2.3rem); }
+    .integration-list, .implementation-list, .document-list { margin-top: clamp(1.75rem, 5dvh, 4rem); }
+    .integration-list article { padding: clamp(.85rem, 2dvh, 1.6rem) 0; }
+    .implementation-list li { padding-top: clamp(1rem, 2.5dvh, 1.6rem); padding-bottom: clamp(1rem, 2.5dvh, 1.6rem); }
+    .implementation-list h3 { margin-top: clamp(1.2rem, 4dvh, 2.5rem); }
+    .document-list article { padding: clamp(1.15rem, 3dvh, 2rem) 0; }
+
+    #manufacturing .proposal-heading { gap: 1.5rem 3rem; }
+    #manufacturing .proposal-heading .proposal-index { margin-bottom: -.6rem; }
+    #manufacturing .proposal-table-wrap { margin-top: 1rem; }
+    #manufacturing .proposal-terms { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1.15rem; }
+    #manufacturing .proposal-terms p { padding-top: .8rem; }
+    #manufacturing .partners-option { margin-top: .8rem; padding: .9rem 1.15rem; }
+    #manufacturing .partners-option p { margin-top: .3rem; }
+
+    #integrations .proposal-heading { gap: .6rem 3rem; }
+    #integrations .proposal-heading .proposal-index { margin-bottom: 0; }
+    #integrations .integration-list { margin-top: 1.25rem; }
+    #integrations .integration-list article { padding: .72rem 0; }
+    #integrations .integration-list p { font-size: .78rem; line-height: 1.35; }
+    #integrations .approval-policy { margin-top: .8rem; }
+}
+
+@media (min-width: 901px) and (max-height: 760px) {
+    .proposal-intro h2, .proposal-heading h2, .fleet-copy h2 { font-size: clamp(1.8rem, 3vw, 2.45rem); }
+    .proposal-intro > p, .proposal-heading > p, .fleet-copy > p { font-size: .88rem; line-height: 1.45; }
+    .proposal-summary div { padding-top: 1.1rem; padding-bottom: 1.2rem; }
+    .proposal-table th, .proposal-table td { padding-top: .8rem; padding-bottom: .8rem; }
+    .proposal-terms span, .partners-option p { font-size: .74rem; line-height: 1.4; }
+    .fleet-layout { gap: clamp(2rem, 5vw, 5rem); }
+    .fleet-app { height: 46dvh; }
+    .software-price { padding: .75rem .9rem; }
+    .software-price strong { font-size: 1.2rem; }
+    #manufacturing .proposal-heading h2 { font-size: 2.1rem; }
+    #manufacturing .proposal-heading > p { font-size: .75rem; line-height: 1.35; }
+    #manufacturing .proposal-table th, #manufacturing .proposal-table td { padding-top: .62rem; padding-bottom: .62rem; }
+    #manufacturing .proposal-terms strong { margin-bottom: .35rem; }
+    #manufacturing .proposal-terms span { font-size: .67rem; line-height: 1.32; }
+    #manufacturing .partners-option h3 { font-size: 1.05rem; }
+    #manufacturing .partners-option p, #manufacturing .partners-option small { font-size: .65rem; }
+    #manufacturing .partners-option strong { font-size: 1.05rem; }
+    #integrations .proposal-heading h2 { font-size: 2.1rem; }
+    #integrations .integration-list article { padding: .58rem 0; }
+}
 
 .integration-list { margin-top: 4rem; border-top: 1px solid rgba(231,231,233,.28); }
 .integration-list article { padding: 1.6rem 0; display: grid; grid-template-columns: 3rem minmax(0, 1fr) minmax(12rem, .45fr); gap: 1.5rem; border-bottom: 1px solid var(--border); align-items: start; }
@@ -221,6 +293,7 @@
     .proposal-table tbody td:last-child { padding-bottom: 0; border-bottom: 0; }
     .proposal-terms { gap: 1.25rem; }
     .fleet-app { min-height: 430px; grid-template-columns: 1fr; border-radius: .8rem; }
+    .software-price { align-items: flex-start; flex-direction: column; }
     .fleet-app aside { display: none; }
     .fleet-main { padding: 1.2rem .85rem; }
     .fleet-main header > span { display: none; }

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#0b0e0b">
+    <meta name="robots" content="noindex,nofollow">
+    <title>Lemon Box Control</title>
+    <link rel="icon" href="../assets/lemon-iso.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <a class="brand" href="../" aria-label="Volver a la propuesta Lemon Box">
+                <img src="../assets/lemon-iso.svg" alt="" width="30" height="30">
+                <strong>LEMON</strong>
+            </a>
+            <nav aria-label="Secciones de Lemon Box Control">
+                <button class="active" type="button" data-panel="summary"><span>01</span>Resumen</button>
+                <button type="button" data-panel="devices"><span>02</span>Dispositivos</button>
+                <button type="button" data-panel="versions"><span>03</span>Versiones</button>
+                <button type="button" data-panel="partners"><span>04</span>Partners</button>
+            </nav>
+            <div class="operator"><span>FC</span><div><strong>Fleet Control</strong><small>Administrador</small></div></div>
+        </aside>
+
+        <main>
+            <header class="topbar">
+                <div><strong>LEMON BOX CONTROL</strong><span>Producción simulada</span></div>
+                <div><i></i><span>Sistemas operativos</span><time>09:41 ART</time></div>
+            </header>
+            <div class="demo-note">Datos ilustrativos · Interfaz sujeta a definición</div>
+
+            <section class="panel active" id="summary" aria-labelledby="summary-title">
+                <div class="page-heading"><div><small>RESUMEN / HOY</small><h1 id="summary-title">Control de flota</h1><p>Estado operativo de Lemon Box, ediciones y despliegues.</p></div><button class="outline-action" data-open="devices">Ver dispositivos ↗</button></div>
+                <div class="metrics">
+                    <article><span>Total</span><strong>150</strong><small>dispositivos registrados</small></article>
+                    <article><span>Conectadas</span><strong class="green">142</strong><small>94,7% de la flota</small></article>
+                    <article><span>Requieren atención</span><strong class="amber">5</strong><small>3 por versión, 2 por red</small></article>
+                    <article><span>Sin conexión</span><strong>3</strong><small>durante la última hora</small></article>
+                </div>
+                <div class="summary-grid">
+                    <article class="chart-card"><header><div><b>ACTIVIDAD DE FLOTA</b><small>Últimas 24 horas</small></div><strong>94,7% online</strong></header><svg viewBox="0 0 700 210" role="img" aria-label="Actividad simulada de la flota"><path class="area" d="M0 175 L60 155 L120 165 L180 132 L240 140 L300 93 L360 108 L420 72 L480 86 L540 48 L600 66 L660 30 L700 42 L700 210 L0 210Z"/><path class="line" d="M0 175 L60 155 L120 165 L180 132 L240 140 L300 93 L360 108 L420 72 L480 86 L540 48 L600 66 L660 30 L700 42"/></svg></article>
+                    <article class="editions-card"><header><b>EDICIONES</b><span>3 activas</span></header><div class="donut"><strong>3</strong><small>activas</small></div><ul><li><i class="lemon"></i>Lemon <b>96</b></li><li><i class="teal"></i>USDt <b>37</b></li><li><i class="violet"></i>Solana <b>17</b></li></ul></article>
+                    <article class="release-card"><div><b>ÚLTIMO DESPLIEGUE</b><h2>Versión 2.4.1</h2><p>Promovida a toda la edición Lemon sin incidentes.</p></div><div><strong>96/96</strong><span>actualizadas</span><small>Finalizado hace 2 h 18 min</small></div></article>
+                    <article class="attention-card"><header><b>ATENCIÓN</b><strong>5 casos</strong></header><p><i></i><span><b>3 dispositivos con versión anterior</b><small>Lemon Office · requieren sincronización</small></span></p><p><i></i><span><b>2 dispositivos con señal inestable</b><small>Partner USDt · conectividad intermitente</small></span></p></article>
+                </div>
+            </section>
+
+            <section class="panel" id="devices" aria-labelledby="devices-title">
+                <div class="page-heading"><div><small>FLOTA / INVENTARIO</small><h1 id="devices-title">Dispositivos</h1><p>Estado, edición y versión instalada por equipo.</p></div><button class="primary-action">+ Registrar equipo</button></div>
+                <div class="toolbar"><label>Buscar <input type="search" placeholder="Nombre o identificador"></label><button>Todos</button><button>Con atención</button><button>Sin conexión</button></div>
+                <div class="data-table"><div class="table-head"><span>Dispositivo</span><span>Edición</span><span>Versión</span><span>Última actividad</span><span>Estado</span></div><div><span><i class="online"></i><b>Lemon Office 01</b><small>LB-00142</small></span><span>Lemon</span><span>2.4.1</span><span>Ahora</span><em>Operativo</em></div><div><span><i class="online"></i><b>Embajadores 08</b><small>LB-00108</small></span><span>Lemon</span><span>2.4.1</span><span>Hace 2 min</span><em>Operativo</em></div><div><span><i class="warning"></i><b>Partner USDt 14</b><small>LB-00074</small></span><span>USDt</span><span>2.3.8</span><span>Hace 8 min</span><em class="warn">Revisar</em></div><div><span><i></i><b>Partner Solana 03</b><small>LB-00031</small></span><span>Solana</span><span>0.8.2</span><span>Hace 1 h</span><em class="muted">Sin conexión</em></div></div>
+            </section>
+
+            <section class="panel" id="versions" aria-labelledby="versions-title">
+                <div class="page-heading"><div><small>SOFTWARE</small><h1 id="versions-title">Versiones y despliegues</h1><p>Publicaciones graduales, reversibles y auditadas.</p></div><button class="primary-action">+ Nueva versión</button></div>
+                <article class="candidate"><div><span>LISTA PARA DESPLEGAR</span><h2>Versión 2.5.0</h2><p>Nueva pantalla de bienvenida, mejoras de reconexión y soporte de templates para partners.</p><small>✓ Firmada &nbsp;&nbsp; ✓ QA aprobado &nbsp;&nbsp; ✓ Compatible: 150/150</small></div><div><small>Estrategia sugerida</small><strong>5 → 25 → 150</strong><span>Prueba gradual con observación</span><button>Iniciar prueba</button></div></article>
+                <div class="rollout"><article class="active"><span>01</span><b>Prueba</b><small>5 equipos</small></article><article><span>02</span><b>Expansión</b><small>25 equipos</small></article><article><span>03</span><b>Producción</b><small>Flota completa</small></article></div>
+                <div class="version-grid"><article><header><b>VERSIONES ACTIVAS</b><small>Estado por edición</small></header><p><strong>2.4.1</strong><span>Lemon principal</span><b>96</b></p><p><strong>1.3.0</strong><span>USDt</span><b>37</b></p><p><strong>0.8.2</strong><span>Solana preview</span><b>17</b></p></article><article><header><b>HISTORIAL</b><small>Últimas operaciones</small></header><p><time>09:12</time><span><strong>2.5.0 aprobada por QA</strong><small>Marina L. · Release Manager</small></span></p><p><time>AYER</time><span><strong>2.4.1 promovida a producción</strong><small>96 dispositivos · sin incidentes</small></span></p><p><time>18 AGO</time><span><strong>Reversión de 2.4.0 completada</strong><small>Recuperación en 4 minutos</small></span></p></article></div>
+            </section>
+
+            <section class="panel" id="partners" aria-labelledby="partners-title">
+                <div class="page-heading"><div><small>ECOSISTEMA</small><h1 id="partners-title">Ediciones para partners</h1><p>Experiencias independientes sobre una base operativa común.</p></div><button class="primary-action">+ Nueva edición</button></div>
+                <div class="partner-grid"><article class="lemon-card"><span>L</span><em>ACTIVA</em><h2>Lemon</h2><p>Experiencia principal de mercado y comunidad.</p><div><b>96 <small>dispositivos</small></b><b>3 <small>pantallas</small></b></div><button>Configurar edición ↗</button></article><article class="teal-card"><span>U</span><em>ACTIVA</em><h2>USDt</h2><p>Edición especial con rendimiento y contenido USDt.</p><div><b>37 <small>dispositivos</small></b><b>3 <small>pantallas</small></b></div><button>Configurar edición ↗</button></article><article class="violet-card"><span>S</span><em>EN REVISIÓN</em><h2>Solana</h2><p>Piloto conceptual para un futuro partner invitado.</p><div><b>17 <small>dispositivos</small></b><b>3 <small>pantallas</small></b></div><button>Configurar edición ↗</button></article></div>
+                <article class="partner-flow"><div><small>CÓMO FUNCIONA</small><h2>Una edición, sin duplicar toda la plataforma.</h2></div><ol><li><span>01</span><b>Identidad</b><small>Marca, color y grupos.</small></li><li><span>02</span><b>Contenido</b><small>Pantallas y fuentes.</small></li><li><span>03</span><b>Prueba</b><small>Vista previa y equipos elegidos.</small></li><li><span>04</span><b>Publicación</b><small>Aprobación y despliegue gradual.</small></li></ol></article>
+            </section>
+        </main>
+    </div>
+    <script src="./app.js"></script>
+</body>
+</html>
