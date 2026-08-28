@@ -1805,6 +1805,11 @@
         }
 
         body.hero-nav-ready nav { opacity: 1; transform: translateY(0); }
+        body.hero-nav-ready nav.at-footer {
+            opacity: 0;
+            transform: translateY(-.75rem);
+            pointer-events: none;
+        }
         nav.scrolled {
             border-color: rgba(18, 18, 18, .12);
             background: rgba(231, 231, 231, .96);
@@ -2435,13 +2440,20 @@ if (_prefersReduced) {
 // ── Nav scroll effect ──
 const nav = document.getElementById('main-nav');
 const heroForNav = document.getElementById('hero-scroll');
+const footerForNav = document.querySelector('footer');
 const updateNav = () => {
     const heroBounds = heroForNav.getBoundingClientRect();
+    const footerBounds = footerForNav.getBoundingClientRect();
     const heroHasReleased = heroBounds.bottom <= window.innerHeight;
+    const footerIsVisible = footerBounds.top < window.innerHeight && footerBounds.bottom > 0;
     nav.classList.toggle('scrolled', heroHasReleased);
+    nav.classList.toggle('at-footer', footerIsVisible);
+    nav.toggleAttribute('inert', footerIsVisible);
+    nav.setAttribute('aria-hidden', String(footerIsVisible));
 };
 updateNav();
 window.addEventListener('scroll', updateNav, { passive: true });
+window.addEventListener('resize', updateNav);
 
 // ── STL paths & data ──
 const BASE = './modelo3d/';

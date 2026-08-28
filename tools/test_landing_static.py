@@ -211,6 +211,11 @@ class LandingStaticTest(unittest.TestCase):
         self.assertIn("nav.scrolled .nav-preview {\n            opacity: 1;", html)
         self.assertIn("const heroHasReleased = heroBounds.bottom <= window.innerHeight;", html)
         self.assertIn("nav.classList.toggle('scrolled', heroHasReleased);", html)
+        self.assertIn("const footerForNav = document.querySelector('footer');", html)
+        self.assertIn("const footerIsVisible = footerBounds.top < window.innerHeight", html)
+        self.assertIn("nav.classList.toggle('at-footer', footerIsVisible);", html)
+        self.assertIn("window.addEventListener('resize', updateNav);", html)
+        self.assertIn("nav.at-footer", html)
         self.assertNotIn("window.scrollY > 60", html)
 
     def test_mobile_hero_gives_the_physical_box_a_closer_camera(self):
