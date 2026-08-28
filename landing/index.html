@@ -2655,18 +2655,27 @@ const CAM_PATH = {
     startTargetY: -18,
 };
 
+// World position/normal of the dashboard screen (computed after load)
+let screenWorldZ = -27.6;
+const screenWorldPos = new THREE.Vector3(0, 0, -27.6);
+const screenWorldNormal = new THREE.Vector3(0, 0, -1);
+let screenPlaced = false;
+
 function applyCamPathForViewport() {
     const narrow = window.innerWidth < 680;
     CAM_PATH.startRadius = narrow ? 175 : 225;
     CAM_PATH.endRadius   = narrow ? 92 : 110;
     CAM_PATH.startY      = narrow ? 72 : 120;
     CAM_PATH.startTargetY = narrow ? -14 : -18;
+    // Land the camera on the screen's normal: the display face is inclined
+    // ~15°, so the frontal money shot sits slightly above screen height.
+    CAM_PATH.endY = screenPlaced
+        ? screenWorldPos.y + screenWorldNormal.y * CAM_PATH.endRadius
+        : 0;
     EXPLODED.lid.set(0, narrow ? -58 : -75, 0);
     EXPLODED.logo.set(0, narrow ? -88 : -140, narrow ? 12 : 20);
 }
 applyCamPathForViewport();
-// World Z position of the dashboard screen (computed after load)
-let screenWorldZ = -27.6;
 
 // ── Load all STL parts in parallel ──
 const stlLoader = new STLLoader();
@@ -2793,6 +2802,10 @@ function createHeroScreen() {
     logoImg.decoding = 'async';
     logoImg.src = './assets/lemonlogo.png';
 
+    const productScreenImg = new Image();
+    productScreenImg.decoding = 'async';
+    productScreenImg.src = './assets/v2/home-screen-demo-480.png';
+
     // Matrix rain on the dashboard texture
     // Bitcoin symbol weighted heavily so it shows up as a recurring motif on the device screen
     const M_CHARS = '₿₿₿₿₿₿₿₿₿₿₿₿₿₿アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789Ξ$%△▽';
@@ -2901,9 +2914,9 @@ function createHeroScreen() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.restore();
 
-        // Clip to rounded rect (square display with soft corners)
+        // Clip to the panel shape — the real display is a sharp-cornered square
         ctx.save();
-        const r = size * 0.08;
+        const r = 0;
         ctx.beginPath();
         ctx.moveTo(r, 0);
         ctx.lineTo(size - r, 0);
@@ -2921,11 +2934,16 @@ function createHeroScreen() {
         ctx.fillStyle = '#03040A';
         ctx.fillRect(0, 0, size, size);
 
-        // The screen resolves into Lemon's boot identity and keeps it through
-        // the final close-up: Matrix rain with the Lemon logo on top.
+        // Boot sequence plays while the box is still rotating; the home lands
+        // together with the camera settling into the frontal view:
+        //   raw 0.28..0.32: Lemon logo fades in (screen just swung into view)
+        //   raw 0.31..0.36: market rain appears over the rotation
+        //   raw 0.44..0.52: Market Desk home replaces the boot moment
+        //   raw 0.52..0.94: completed home remains visible through the hold
         const raw = window.__heroRawProgress ?? 0;
-        const logoVisible = Math.max(0, Math.min(1, (raw - 0.42) / 0.04));
-        const matrixVisible = Math.max(0, Math.min(1, (raw - 0.44) / 0.04));
+        const logoVisible = Math.max(0, Math.min(1, (raw - 0.28) / 0.04));
+        const matrixVisible = Math.max(0, Math.min(1, (raw - 0.31) / 0.05));
+        const productVisible = Math.max(0, Math.min(1, (raw - 0.44) / 0.08));
 
         // Reset matrix to clean state right before it becomes visible,
         // then only advance it while visible so the user sees it from frame one.
@@ -2936,12 +2954,17 @@ function createHeroScreen() {
 
         if (matrixVisible > 0) {
             drawMatrix();
-            ctx.globalAlpha = matrixVisible;
+            ctx.globalAlpha = matrixVisible * (1 - productVisible);
             ctx.drawImage(matrixCanvas, 0, 0, size, size);
             ctx.globalAlpha = 1;
         }
 
-        drawLogoOn(logoVisible);
+        drawLogoOn(logoVisible * (1 - productVisible));
+        if (productVisible > 0 && productScreenImg.complete && productScreenImg.naturalWidth > 0) {
+            ctx.globalAlpha = productVisible;
+            ctx.drawImage(productScreenImg, 0, 0, size, size);
+            ctx.globalAlpha = 1;
+        }
         ctx.restore();
         dashboardTexture.needsUpdate = true;
     }
@@ -2954,6 +2977,7 @@ function createHeroScreen() {
 
     logoImg.onload = () => { drawScreen(); if (!dashRaf) tick(); };
     logoImg.onerror = () => { drawScreen(); if (!dashRaf) tick(); };
+    productScreenImg.onload = drawScreen;
     drawScreen();
     tick();
 
@@ -2973,7 +2997,7 @@ function createHeroScreen() {
     const haloTex = new THREE.CanvasTexture(haloCanvas);
     haloTex.colorSpace = THREE.SRGBColorSpace;
 
-    const haloGeo = new THREE.PlaneGeometry(82, 82);
+    const haloGeo = new THREE.PlaneGeometry(84, 84);
     const haloMat = new THREE.MeshBasicMaterial({
         map: haloTex,
         transparent: true,
@@ -2983,11 +3007,11 @@ function createHeroScreen() {
         toneMapped: false,
     });
     const haloMesh = new THREE.Mesh(haloGeo, haloMat);
-    haloMesh.position.y = -0.08; // slightly behind the display
+    haloMesh.position.z = -0.3; // slightly behind the display, along its normal
     screenAssembly.add(haloMesh);
 
-    // 2) The actual display — square composition mapped onto the front face.
-    const screenGeo = new THREE.PlaneGeometry(70, 70);
+    // 2) The actual display — real active area of the 4" panel: 71.92 mm square
+    const screenGeo = new THREE.PlaneGeometry(71.92, 71.92);
     const screenMat = new THREE.MeshBasicMaterial({
         map: dashboardTexture,
         transparent: true,
@@ -2996,108 +3020,140 @@ function createHeroScreen() {
         toneMapped: false, // preserve UI vibrancy under scene tone mapping
     });
     dashboardMesh = new THREE.Mesh(screenGeo, screenMat);
-    dashboardMesh.position.y = 0.05; // slightly in front of the halo plane
+    dashboardMesh.position.z = 0.05; // slightly in front of the halo plane
     screenAssembly.add(dashboardMesh);
 
     // Parent the assembly to the case so it moves with the case
     caseMesh.add(screenAssembly);
 
-    function measureFrontFace(geometry) {
-        geometry.computeBoundingBox();
-
-        const box = geometry.boundingBox;
-        const size = new THREE.Vector3();
-        box.getSize(size);
-
-        const xMin = box.min.x + size.x * 0.13;
-        const xMax = box.max.x - size.x * 0.13;
-        const zMin = box.min.z + size.z * 0.01;
-        const zMax = box.max.z - size.z * 0.19;
-        const yMin = box.max.y - size.y * 0.25;
-
-        let sx = 0;
-        let sz = 0;
-        let sy = 0;
-        let sxx = 0;
-        let szz = 0;
-        let sxz = 0;
-        let sxy = 0;
-        let szy = 0;
-        let count = 0;
-
+    // The with-screen STL carries the display module as a loose body (~788 tris).
+    // Same placement the Blender film uses: split loose parts, take the module's
+    // largest face for the inclined normal, rest the plane on its outermost verts.
+    function locateScreenFace(geometry) {
         const pos = geometry.attributes.position;
+        const triCount = Math.floor(pos.count / 3);
+        if (!triCount) return null;
+
+        // Weld the triangle soup: identical (rounded) positions share a vertex id
+        const vid = new Map();
+        const vertexIds = new Int32Array(pos.count);
         for (let i = 0; i < pos.count; i++) {
-            const x = pos.getX(i);
-            const y = pos.getY(i);
-            const z = pos.getZ(i);
-
-            if (x < xMin || x > xMax || z < zMin || z > zMax || y < yMin) continue;
-
-            sx += x;
-            sz += z;
-            sy += y;
-            sxx += x * x;
-            szz += z * z;
-            sxz += x * z;
-            sxy += x * y;
-            szy += z * y;
-            count++;
+            const key = Math.round(pos.getX(i) * 100) + ',' + Math.round(pos.getY(i) * 100) + ',' + Math.round(pos.getZ(i) * 100);
+            let id = vid.get(key);
+            if (id === undefined) { id = vid.size; vid.set(key, id); }
+            vertexIds[i] = id;
         }
 
-        const fallbackCenter = new THREE.Vector3(
-            (box.min.x + box.max.x) * 0.5,
-            box.max.y,
-            (box.min.z + box.max.z) * 0.5
-        );
-
-        if (count < 3) {
-            return {
-                normal: new THREE.Vector3(0, 1, 0),
-                center: fallbackCenter,
-            };
+        // Union-find over shared vertices → connected components
+        const parent = new Int32Array(vid.size);
+        for (let i = 0; i < parent.length; i++) parent[i] = i;
+        const find = (a) => { while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; } return a; };
+        for (let t = 0; t < triCount; t++) {
+            const ra = find(vertexIds[t * 3]);
+            const rb = find(vertexIds[t * 3 + 1]);
+            const rc = find(vertexIds[t * 3 + 2]);
+            if (rb !== ra) parent[rb] = ra;
+            if (rc !== ra) parent[rc] = ra;
         }
 
-        const det = sxx * (szz * count - sz * sz) - sxz * (sxz * count - sz * sx) + sx * (sxz * sz - szz * sx);
-        if (Math.abs(det) < 1e-6) {
-            return {
-                normal: new THREE.Vector3(0, 1, 0),
-                center: fallbackCenter,
-            };
+        const triRoot = new Int32Array(triCount);
+        const compTris = new Map();
+        for (let t = 0; t < triCount; t++) {
+            const root = find(vertexIds[t * 3]);
+            triRoot[t] = root;
+            compTris.set(root, (compTris.get(root) || 0) + 1);
         }
+        if (compTris.size < 2) return null;
 
-        const da = sxy * (szz * count - sz * sz) - sxz * (szy * count - sz * sy) + sx * (szy * sz - szz * sy);
-        const db = sxx * (szy * count - sz * sy) - sxy * (sxz * count - sz * sx) + sx * (sxz * sy - szy * sx);
-        const a = da / det;
-        const b = db / det;
+        // Smallest real component is the display module
+        let moduleRoot = -1;
+        let moduleCount = Infinity;
+        for (const [root, count] of compTris) {
+            if (count >= 50 && count < moduleCount) { moduleRoot = root; moduleCount = count; }
+        }
+        if (moduleRoot === -1) return null;
 
-        return {
-            normal: new THREE.Vector3(-a, 1, -b).normalize(),
-            center: new THREE.Vector3(sx / count, sy / count, sz / count),
-        };
+        // Largest face of the module → display normal
+        const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+        const ab = new THREE.Vector3(), ac = new THREE.Vector3(), cross = new THREE.Vector3();
+        const normal = new THREE.Vector3();
+        let bestArea = 0;
+        for (let t = 0; t < triCount; t++) {
+            if (triRoot[t] !== moduleRoot) continue;
+            a.fromBufferAttribute(pos, t * 3);
+            b.fromBufferAttribute(pos, t * 3 + 1);
+            c.fromBufferAttribute(pos, t * 3 + 2);
+            cross.crossVectors(ab.subVectors(b, a), ac.subVectors(c, a));
+            const area = cross.length() * 0.5;
+            if (area > bestArea) { bestArea = area; normal.copy(cross).normalize(); }
+        }
+        if (bestArea === 0) return null;
+        if (normal.y < 0) normal.negate(); // the screen looks toward +Y (STL frame)
+
+        // Outermost module vertices along the normal = the face the UI rests on
+        const v = new THREE.Vector3();
+        let front = -Infinity;
+        for (let t = 0; t < triCount; t++) {
+            if (triRoot[t] !== moduleRoot) continue;
+            for (let k = 0; k < 3; k++) {
+                v.fromBufferAttribute(pos, t * 3 + k);
+                front = Math.max(front, v.dot(normal));
+            }
+        }
+        const center = new THREE.Vector3();
+        const counted = new Set();
+        for (let t = 0; t < triCount; t++) {
+            if (triRoot[t] !== moduleRoot) continue;
+            for (let k = 0; k < 3; k++) {
+                const i = t * 3 + k;
+                if (counted.has(vertexIds[i])) continue;
+                v.fromBufferAttribute(pos, i);
+                if (Math.abs(v.dot(normal) - front) < 0.8) {
+                    counted.add(vertexIds[i]);
+                    center.add(v);
+                }
+            }
+        }
+        if (!counted.size) return null;
+        center.divideScalar(counted.size);
+        return { normal, center };
     }
 
-    caseMesh.geometry.computeBoundingBox();
-    const caseBB = caseMesh.geometry.boundingBox;
-    const caseCenter = new THREE.Vector3();
-    caseBB.getCenter(caseCenter);
-    // Screen sits on the +Y face of the case STL (forward after group rotation)
-    const frontNormal = new THREE.Vector3(0, 1, 0);
-    const screenOffset = frontNormal.clone().multiplyScalar(1.0);
-    const planeUp = new THREE.Vector3(0, 0, 1).projectOnPlane(frontNormal).normalize();
-    const planeRight = new THREE.Vector3().crossVectors(planeUp, frontNormal).normalize();
+    const located = locateScreenFace(caseMesh.geometry);
+    let frontNormal, screenCenter;
+    if (located) {
+        frontNormal = located.normal;
+        screenCenter = located.center;
+    } else {
+        // Fallback: flat +Y face at the bounding box (previous behaviour)
+        caseMesh.geometry.computeBoundingBox();
+        const caseBB = caseMesh.geometry.boundingBox;
+        const caseCenter = new THREE.Vector3();
+        caseBB.getCenter(caseCenter);
+        frontNormal = new THREE.Vector3(0, 1, 0);
+        screenCenter = new THREE.Vector3(caseCenter.x, caseBB.max.y, caseCenter.z);
+    }
+
+    // Texture frame: facing the screen the viewer's right is -X (u=+X mirrors
+    // the UI), and up climbs the inclined face.
+    const planeRight = new THREE.Vector3(-1, 0, 0);
+    const planeUp = new THREE.Vector3().crossVectors(frontNormal, planeRight).normalize();
+    planeRight.crossVectors(planeUp, frontNormal).normalize();
     const screenBasis = new THREE.Matrix4().makeBasis(planeRight, planeUp, frontNormal);
 
-    screenAssembly.position.set(caseCenter.x + screenOffset.x, caseBB.max.y + screenOffset.y, caseCenter.z + screenOffset.z);
+    screenAssembly.position.copy(screenCenter).addScaledVector(frontNormal, 0.5);
     screenAssembly.quaternion.setFromRotationMatrix(screenBasis);
 
     // Expose halo so animation loop can fade it in with the display
     dashboardMesh.userData.halo = haloMesh;
 
-    // Compute the dashboard's WORLD Z so the camera can look directly at it at t=1
+    // World position/normal of the display so the camera can land on it at t=1
     assemblyGroup.updateMatrixWorld(true);
-    const screenWorldPos = new THREE.Vector3();
     dashboardMesh.getWorldPosition(screenWorldPos);
+    screenWorldNormal.copy(frontNormal).transformDirection(caseMesh.matrixWorld);
     screenWorldZ = screenWorldPos.z;
+    screenPlaced = true;
+    applyCamPathForViewport();
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -3144,7 +3200,9 @@ function heroAnimate() {
     const t = prefersReducedMotion ? 1.0 : (window._editGetProgress ? window._editGetProgress() : getScrollProgress());
 
     if (dashboardMesh) {
-        const screenT = easeInOutCubic(phaseProgress(t, 0.82, 1.0));
+        // Light the display as soon as its face swings into view (~half the
+        // orbit), so the boot sequence plays while the box is still rotating.
+        const screenT = easeInOutCubic(phaseProgress(t, 0.52, 0.68));
         dashboardMesh.material.opacity = screenT;
         dashboardMesh.userData.halo.material.opacity = 0.55 * screenT;
     }
@@ -3204,8 +3262,8 @@ function heroAnimate() {
             // Keeping both movements tied made the box rise and clip before the display appeared.
             const verticalTargetT = easeInOutCubic(phaseProgress(t, 0.52, 0.78));
             const screenTargetT = easeInOutCubic(phaseProgress(t, 0.80, 1.0));
-            const targetY = CAM_PATH.startTargetY * (1 - verticalTargetT);
-            heroCamera.lookAt(0, targetY, screenWorldZ * screenTargetT);
+            const targetY = CAM_PATH.startTargetY * (1 - verticalTargetT) + screenWorldPos.y * screenTargetT;
+            heroCamera.lookAt(screenWorldPos.x * screenTargetT, targetY, screenWorldPos.z * screenTargetT);
         }
 
 
@@ -3214,7 +3272,7 @@ function heroAnimate() {
         if (t >= 1.0 && !assemblyComplete) {
             assemblyComplete = true;
             // Orbit around the screen, not the origin, so the dashboard stays centered
-            heroControls.target.set(0, 0, screenWorldZ);
+            heroControls.target.copy(screenWorldPos);
             heroControls.enabled = true;
             heroControls.autoRotate = false;
             heroRenderer.domElement.style.cursor = 'grab';
