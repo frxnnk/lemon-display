@@ -1822,7 +1822,23 @@
         .nav-links { gap: .2rem; }
         nav:not(.scrolled) .nav-links a { color: var(--starlight); }
         nav.scrolled .nav-links a { color: var(--black); }
+        .nav-links a { position: relative; }
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            right: .65rem;
+            bottom: .22rem;
+            left: .65rem;
+            height: 2px;
+            border-radius: 999px;
+            background: var(--greent);
+            transform: scaleX(0);
+            transform-origin: center;
+            transition: transform .24s cubic-bezier(.2,.8,.2,1);
+        }
         .nav-links a:hover { color: var(--greent); }
+        .nav-links a:hover::after,
+        .nav-links a:focus-visible::after { transform: scaleX(1); }
         .nav-preview a {
             padding: .58rem .95rem;
             border-radius: 999px;
@@ -1998,6 +2014,12 @@
         body.hero-scroll-ready .hero-scroll-cta {
             opacity: 1;
             transform: translateX(-50%) translateY(0);
+        }
+
+        body.hero-scroll-ready .hero-scroll-cta.is-hidden {
+            opacity: 0;
+            transform: translateX(-50%) translateY(.65rem);
+            pointer-events: none;
         }
 
         .hero-scroll-arrow {
@@ -2762,10 +2784,6 @@ function createHeroScreen() {
     logoImg.decoding = 'async';
     logoImg.src = './assets/lemonlogo.png';
 
-    const productScreenImg = new Image();
-    productScreenImg.decoding = 'async';
-    productScreenImg.src = './assets/v2/home-screen-demo-480.png';
-
     // Matrix rain on the dashboard texture
     // Bitcoin symbol weighted heavily so it shows up as a recurring motif on the device screen
     const M_CHARS = '₿₿₿₿₿₿₿₿₿₿₿₿₿₿アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789Ξ$%△▽';
@@ -2894,15 +2912,11 @@ function createHeroScreen() {
         ctx.fillStyle = '#03040A';
         ctx.fillRect(0, 0, size, size);
 
-        // Screen sequence completes early enough to leave a genuine hold:
-        //   raw 0.42..0.46: Lemon logo fades in
-        //   raw 0.44..0.48: market rain appears and then holds
-        //   raw 0.52..0.58: Market Desk home replaces the boot moment
-        //   raw 0.58..0.94: completed home remains visible
+        // The screen resolves into Lemon's boot identity and keeps it through
+        // the final close-up: Matrix rain with the Lemon logo on top.
         const raw = window.__heroRawProgress ?? 0;
         const logoVisible = Math.max(0, Math.min(1, (raw - 0.42) / 0.04));
         const matrixVisible = Math.max(0, Math.min(1, (raw - 0.44) / 0.04));
-        const productVisible = Math.max(0, Math.min(1, (raw - 0.52) / 0.06));
 
         // Reset matrix to clean state right before it becomes visible,
         // then only advance it while visible so the user sees it from frame one.
@@ -2913,17 +2927,12 @@ function createHeroScreen() {
 
         if (matrixVisible > 0) {
             drawMatrix();
-            ctx.globalAlpha = matrixVisible * (1 - productVisible);
+            ctx.globalAlpha = matrixVisible;
             ctx.drawImage(matrixCanvas, 0, 0, size, size);
             ctx.globalAlpha = 1;
         }
 
-        drawLogoOn(logoVisible * (1 - productVisible));
-        if (productVisible > 0 && productScreenImg.complete && productScreenImg.naturalWidth > 0) {
-            ctx.globalAlpha = productVisible;
-            ctx.drawImage(productScreenImg, 0, 0, size, size);
-            ctx.globalAlpha = 1;
-        }
+        drawLogoOn(logoVisible);
         ctx.restore();
         dashboardTexture.needsUpdate = true;
     }
@@ -2936,7 +2945,6 @@ function createHeroScreen() {
 
     logoImg.onload = () => { drawScreen(); if (!dashRaf) tick(); };
     logoImg.onerror = () => { drawScreen(); if (!dashRaf) tick(); };
-    productScreenImg.onload = drawScreen;
     drawScreen();
     tick();
 
@@ -3103,6 +3111,7 @@ function getScrollProgress() {
     const distance = heroSection.scrollHeight - window.innerHeight;
     const HOLD_END = 0.52;
     const raw = clamp(-rect.top / distance, 0, 1);
+    heroScrollCta?.classList.toggle('is-hidden', raw > 0);
     const exitOpacity = 1 - clamp((raw - 0.94) / 0.04, 0, 1);
     heroSection.style.setProperty('--hero-exit-opacity', exitOpacity.toFixed(3));
     window.__heroRawProgress = raw;

@@ -121,7 +121,6 @@ class LandingStaticTest(unittest.TestCase):
             "assets/v2/market-tape-product.webp",
             "assets/v2/news-takeover-product.png",
             "assets/v2/news-takeover-product.webp",
-            "assets/v2/home-screen-demo-480.png",
             "assets/v2/PPNeueMachina-PlainBold.ttf",
             "assets/v2/Satoshi-Bold.ttf",
             "assets/v2/Satoshi-Regular.otf",
@@ -138,6 +137,10 @@ class LandingStaticTest(unittest.TestCase):
         self.assertNotIn("<h1>Lemon Box</h1>", html)
         self.assertIn("Scroll para explorar", html)
         self.assertIn("heroScrollCta?.addEventListener", html)
+        self.assertIn("heroScrollCta?.classList.toggle('is-hidden', raw > 0);", html)
+        self.assertIn(".hero-scroll-cta.is-hidden", html)
+        self.assertIn(".nav-links a::after", html)
+        self.assertIn(".nav-links a:hover::after", html)
         self.assertNotIn("~30 cajas físicas", html)
         self.assertNotIn("V2 validada en hardware", html)
         self.assertNotIn("Lemon Market Desk · V2", html)
@@ -190,7 +193,10 @@ class LandingStaticTest(unittest.TestCase):
         self.assertIn("const exitOpacity = 1 - clamp((raw - 0.94) / 0.04, 0, 1)", html)
         self.assertIn("const logoVisible = Math.max(0, Math.min(1, (raw - 0.42) / 0.04))", html)
         self.assertIn("const matrixVisible = Math.max(0, Math.min(1, (raw - 0.44) / 0.04))", html)
-        self.assertIn("const productVisible = Math.max(0, Math.min(1, (raw - 0.52) / 0.06))", html)
+        self.assertIn("ctx.globalAlpha = matrixVisible;", html)
+        self.assertIn("drawLogoOn(logoVisible);", html)
+        self.assertNotIn("productScreenImg", html)
+        self.assertNotIn("home-screen-demo-480.png", html)
         self.assertIn("height: 380vh;", html)
         self.assertIn(".hero-scroll { height: 340svh; }", html)
         self.assertIn("phaseProgress(t, 0.82, 1.0)", html)
