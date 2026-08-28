@@ -123,9 +123,9 @@ class LandingStaticTest(unittest.TestCase):
 
         with open(os.path.join(demo_dir, "index.html"), "r", encoding="utf-8") as f:
             demo_html = f.read()
-        for label in ["Resumen", "Dispositivos", "Versiones", "Partners"]:
-            self.assertIn(label, demo_html)
-        self.assertIn("Datos ilustrativos", demo_html)
+        for label in ["Resumen", "Flota", "Publicaciones", "Experiencias"]:
+            self.assertIn(label.lower(), demo_html.lower())
+        self.assertIn("Vista operativa", demo_html)
 
         self.assertIn('class="control-frame"', demo_html)
         self.assertIn('class="control-nav"', demo_html)
@@ -145,6 +145,84 @@ class LandingStaticTest(unittest.TestCase):
         self.assertIn(".candidate > div:first-child > span", demo_css)
         self.assertNotIn(".candidate > div > span", demo_css)
         self.assertIn("window.scrollTo({ top: 0", demo_js)
+
+    def test_control_demo_represents_the_sold_platform_scope_with_real_brand_assets(self):
+        demo_dir = os.path.join(LANDING, "control")
+        with open(os.path.join(demo_dir, "index.html"), "r", encoding="utf-8") as f:
+            demo_html = f.read()
+
+        for label in [
+            "Flota",
+            "Publicaciones",
+            "Experiencias",
+            "Grupos",
+            "Restauración disponible",
+            "Actividad reciente",
+            "Firmware base",
+            "SDK y plantillas",
+            "Simulador",
+            "Compilación",
+            "Skill de desarrollo",
+        ]:
+            self.assertIn(label.lower(), demo_html.lower())
+
+        self.assertGreaterEqual(demo_html.count('class="nav-icon"'), 4)
+        self.assertIn('../assets/brands/tether-circle.svg', demo_html)
+        self.assertIn('../assets/brands/solana-mark.svg', demo_html)
+        self.assertIn('../assets/lemon-iso.svg', demo_html)
+        self.assertNotIn('<span>U</span>', demo_html)
+        self.assertNotIn('<span>S</span>', demo_html)
+
+        for name in ["tether-circle.svg", "solana-mark.svg"]:
+            self.assertTrue(os.path.exists(os.path.join(LANDING, "assets", "brands", name)), name)
+
+    def test_control_demo_has_working_mock_actions_and_desktop_viewport_layout(self):
+        demo_dir = os.path.join(LANDING, "control")
+        with open(os.path.join(demo_dir, "index.html"), "r", encoding="utf-8") as f:
+            demo_html = f.read()
+        with open(os.path.join(demo_dir, "styles.css"), "r", encoding="utf-8") as f:
+            demo_css = f.read()
+        with open(os.path.join(demo_dir, "app.js"), "r", encoding="utf-8") as f:
+            demo_js = f.read()
+
+        for marker in [
+            'id="fleet-search"',
+            'data-group="all"',
+            'data-action="register-device"',
+            'data-action="upload-version"',
+            'data-action="start-rollout"',
+            'data-action="restore-version"',
+            'data-action="new-experience"',
+            'data-action="account"',
+            'data-experience="Lemon"',
+            'data-tool="firmware"',
+            'id="action-dialog"',
+            'id="toast-region"',
+        ]:
+            self.assertIn(marker, demo_html)
+
+        for behavior in [
+            "filterFleet",
+            "openDialog",
+            "advanceRollout",
+            "addDevice",
+            "createExperience",
+            "showToast",
+            "requestAnimationFrame",
+        ]:
+            self.assertIn(behavior, demo_js)
+
+        self.assertIn("@media (min-width: 901px)", demo_css)
+        self.assertIn("height: calc(100dvh - 16px)", demo_css)
+        self.assertIn("overflow: hidden", demo_css)
+        self.assertIn(".action-dialog", demo_css)
+        self.assertIn(".toast-region", demo_css)
+        self.assertIn(".brand img, .lemon-card .partner-mark", demo_css)
+        self.assertNotIn(".empty-state { padding: 30px !important; display: block !important;", demo_css)
+        self.assertIn(".version-grid p { padding: 5px 0; }", demo_css)
+        self.assertIn('content: "Operativo";', demo_css)
+        self.assertIn(".data-table > [data-device-row]", demo_css)
+        self.assertIn(".toolbar { display: grid; grid-template-columns: repeat(4, 1fr); overflow: visible; }", demo_css)
 
     def test_landing_assets_and_studio_entry_exist(self):
         required = [
