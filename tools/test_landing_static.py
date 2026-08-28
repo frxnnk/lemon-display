@@ -134,6 +134,13 @@ class LandingStaticTest(unittest.TestCase):
         with open(os.path.join(LANDING, "index.html"), "r", encoding="utf-8") as f:
             html = f.read()
         self.assertIn("<title>Lemon Box</title>", html)
+        self.assertIn('<meta property="og:title" content="Lemon Box · Propuesta comercial">', html)
+        self.assertIn('content="Propuesta integral para fabricar el próximo lote, desarrollar el firmware principal y operar la flota de Lemon Box."', html)
+        self.assertIn('<meta name="twitter:card" content="summary">', html)
+        self.assertIn('<meta name="robots" content="max-image-preview:none">', html)
+        self.assertIn('<link rel="canonical" href="https://lemon-box.vercel.app/landing/">', html)
+        self.assertNotIn('property="og:image"', html)
+        self.assertNotIn('name="twitter:image"', html)
         self.assertNotIn("<h1>Lemon Box</h1>", html)
         self.assertIn("Scroll para explorar", html)
         self.assertIn("heroScrollCta?.addEventListener", html)
