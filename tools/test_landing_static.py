@@ -127,6 +127,25 @@ class LandingStaticTest(unittest.TestCase):
             self.assertIn(label, demo_html)
         self.assertIn("Datos ilustrativos", demo_html)
 
+        self.assertIn('class="control-frame"', demo_html)
+        self.assertIn('class="control-nav"', demo_html)
+        self.assertIn('href="../"', demo_html)
+        self.assertIn("Volver a la propuesta", demo_html)
+        self.assertNotIn('class="demo-note"', demo_html)
+
+        with open(os.path.join(demo_dir, "styles.css"), "r", encoding="utf-8") as f:
+            demo_css = f.read()
+        with open(os.path.join(demo_dir, "app.js"), "r", encoding="utf-8") as f:
+            demo_js = f.read()
+        self.assertIn("--starlight:", demo_css)
+        self.assertIn(".control-frame", demo_css)
+        self.assertIn(".control-nav", demo_css)
+        self.assertIn("@media (max-width: 900px)", demo_css)
+        self.assertIn("@media (prefers-reduced-motion: reduce)", demo_css)
+        self.assertIn(".candidate > div:first-child > span", demo_css)
+        self.assertNotIn(".candidate > div > span", demo_css)
+        self.assertIn("window.scrollTo({ top: 0", demo_js)
+
     def test_landing_assets_and_studio_entry_exist(self):
         required = [
             "index.html",
