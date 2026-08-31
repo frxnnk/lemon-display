@@ -23,6 +23,20 @@ class LinkCollector(HTMLParser):
 
 
 class LandingStaticTest(unittest.TestCase):
+    def test_topbar_is_a_compact_centered_pill_with_both_links(self):
+        with open(os.path.join(LANDING, "proposal.css"), encoding="utf-8") as f:
+            css = f.read()
+        self.assertIn("#main-nav {", css)
+        nav_css = css.split("#main-nav {", 1)[1].split("}", 1)[0]
+        for rule in ["left: 50%;", "right: auto;", "width: max-content;",
+                     "translate: -50% 0;", "max-width:"]:
+            self.assertIn(rule, nav_css)
+        self.assertNotIn(".nav-product, .nav-documents { display: none", css)
+        with open(os.path.join(LANDING, "index.html"), encoding="utf-8") as f:
+            nav_html = f.read().split('<nav id="main-nav"', 1)[1].split('</nav>', 1)[0]
+        self.assertIn('href="#proposal"', nav_html)
+        self.assertIn('href="#documents"', nav_html)
+
     def test_miniapp_is_a_discussion_idea_outside_the_quoted_scope(self):
         with open(os.path.join(LANDING, "index.html"), encoding="utf-8") as f:
             html = f.read()
