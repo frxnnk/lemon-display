@@ -23,6 +23,20 @@ class LinkCollector(HTMLParser):
 
 
 class LandingStaticTest(unittest.TestCase):
+    def test_miniapp_is_a_discussion_idea_outside_the_quoted_scope(self):
+        with open(os.path.join(LANDING, "index.html"), encoding="utf-8") as f:
+            html = f.read()
+        self.assertIn('id="miniapp"', html)
+        section = html.split('id="miniapp"', 1)[1].split('</section>', 1)[0]
+        for text in ["Integración Miniapp", "Idea para conversar", "portfolio",
+                     "solo lectura", "privacidad", "alertas", "No incluida",
+                     "acceso autorizado", "Sin precio ni plazo definidos"]:
+            self.assertIn(text, section)
+        self.assertNotIn("USDC", section)
+        self.assertNotIn("2026-08-31-lemon-box-portfolio-integration-design.md", html)
+        self.assertLess(html.index('id="implementation"'), html.index('id="miniapp"'))
+        self.assertLess(html.index('id="miniapp"'), html.index('id="documents"'))
+
     def test_customer_proposal_is_integrated_with_readable_attachments(self):
         with open(os.path.join(LANDING, "index.html"), "r", encoding="utf-8") as f:
             html = f.read()
