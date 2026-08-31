@@ -1,3 +1,25 @@
+#main-nav {
+    left: 50%;
+    right: auto;
+    width: max-content;
+    max-width: calc(100% - 2 * var(--page-gutter));
+    translate: -50% 0;
+    justify-content: center;
+    gap: 1.6rem;
+    padding: .6rem .75rem .6rem 1.15rem;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .08);
+}
+
+#main-nav .nav-logo { flex-shrink: 0; }
+#main-nav .nav-links { flex-shrink: 0; white-space: nowrap; }
+
+@media (max-width: 620px) {
+    #main-nav { gap: .75rem; padding: .45rem .55rem .45rem .85rem; }
+    #main-nav .nav-logo img { width: 84px; }
+    #main-nav .nav-links { gap: .1rem; }
+    #main-nav .nav-links a { min-height: 2.75rem; padding-inline: .5rem; }
+}
+
 .proposal-section {
     min-height: calc(100dvh + 1px);
     display: flex;
@@ -296,7 +318,7 @@
 
 @media (max-width: 620px) {
     .proposal-section { padding-top: 4.5rem; padding-bottom: 5rem; }
-    .nav-product, .nav-documents { display: none !important; }
+    .nav-product { display: none !important; }
     .proposal-intro h2, .proposal-heading h2, .fleet-copy h2 { font-size: clamp(2rem, 9vw, 2.35rem); }
     .proposal-summary, .proposal-terms, .implementation-list { grid-template-columns: 1fr; }
     .proposal-summary div, .proposal-summary div + div { padding: 1.2rem 0; border-left: 0; border-top: 1px solid var(--border); }
