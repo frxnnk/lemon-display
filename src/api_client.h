@@ -19,7 +19,8 @@ void apiStop();  // Release TLS session to free heap before OTA
 // retry on empty body. Intended for use by sibling client modules
 // (stocks_client, poly_client) that want the same hardened code path.
 const char* apiHttpGet(const char* url, bool addCoinGeckoKey, ApiResult& result,
-                       int timeoutMs = 7000, uint32_t maxBodyBytes = 0);
+                       int timeoutMs = 7000, uint32_t maxBodyBytes = 0,
+                       int maxAttempts = 2);
 
 // Each returns ApiResult. On failure, struct is left unchanged.
 ApiResult fetchBtcPrice(BtcPrice& out);

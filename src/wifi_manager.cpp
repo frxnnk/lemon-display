@@ -9,7 +9,6 @@ static const unsigned long RECONNECT_MAX = 300000; // 5 min cap
 // Stored credentials for auto-reconnect
 static char storedSSID[33] = {0};
 static char storedPass[65] = {0};
-static bool everConnected = false;  // Only reconnect if we connected successfully at least once
 static bool dnsApplied = false;
 
 // Async connect state
@@ -54,11 +53,10 @@ void wifiSetup(const char* ssid, const char* password) {
         Serial.printf("[WiFi] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
         applyPublicDns();
         WiFi.setAutoReconnect(true);  // Only enable after successful connection
-        everConnected = true;
     } else {
         Serial.println("[WiFi] Connection failed");
         dnsApplied = false;
-        WiFi.disconnect(true);  // Stop trying
+        WiFi.disconnect();
     }
 }
 
@@ -69,12 +67,10 @@ void wifiLoop() {
         }
         // Reset backoff on successful connection
         reconnectInterval = 10000;
-        everConnected = true;
         return;
     }
     dnsApplied = false;
     if (storedSSID[0] == '\0') return;  // No credentials stored
-    if (!everConnected) return;  // Never connected — don't retry with possibly bad creds
 
     unsigned long now = millis();
     if (now - lastReconnectAttempt >= reconnectInterval) {
@@ -173,7 +169,6 @@ bool wifiConnecting() {
     if (!asyncConnecting) return false;
     if (WiFi.status() == WL_CONNECTED) {
         applyPublicDns();
-        everConnected = true;
         asyncConnecting = false;
         return false;
     }
