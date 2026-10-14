@@ -23,7 +23,7 @@ class LinkCollector(HTMLParser):
 
 
 class LandingStaticTest(unittest.TestCase):
-    def test_topbar_is_a_compact_centered_pill_with_both_links(self):
+    def test_topbar_is_a_compact_centered_pill_with_the_proposal_link(self):
         with open(os.path.join(LANDING, "proposal.css"), encoding="utf-8") as f:
             css = f.read()
         self.assertIn("#main-nav {", css)
@@ -31,11 +31,10 @@ class LandingStaticTest(unittest.TestCase):
         for rule in ["left: 50%;", "right: auto;", "width: max-content;",
                      "translate: -50% 0;", "max-width:"]:
             self.assertIn(rule, nav_css)
-        self.assertNotIn(".nav-product, .nav-documents { display: none", css)
         with open(os.path.join(LANDING, "index.html"), encoding="utf-8") as f:
             nav_html = f.read().split('<nav id="main-nav"', 1)[1].split('</nav>', 1)[0]
         self.assertIn('href="#proposal"', nav_html)
-        self.assertIn('href="#documents"', nav_html)
+        self.assertNotIn('href="#documents"', nav_html)
 
     def test_miniapp_is_a_discussion_idea_outside_the_quoted_scope(self):
         with open(os.path.join(LANDING, "index.html"), encoding="utf-8") as f:
@@ -49,82 +48,31 @@ class LandingStaticTest(unittest.TestCase):
         self.assertNotIn("USDC", section)
         self.assertNotIn("2026-08-31-lemon-box-portfolio-integration-design.md", html)
         self.assertLess(html.index('id="implementation"'), html.index('id="miniapp"'))
-        self.assertLess(html.index('id="miniapp"'), html.index('id="documents"'))
 
-    def test_customer_proposal_is_integrated_with_readable_attachments(self):
+    def test_public_proposal_keeps_scope_without_commercial_terms(self):
         with open(os.path.join(LANDING, "index.html"), "r", encoding="utf-8") as f:
             html = f.read()
 
         for text in [
             "Propuesta para ampliar Lemon Box",
-            "Opciones de fabricación",
-            "Control de flota",
-            "Developer Kit",
-            "100 unidades",
-            "150 unidades",
-            "200 unidades",
-            "USDC [redacted]",
-            "USDC [redacted] por unidad",
-            "34,2% menos",
-            "37,5% menos",
-            "41,7% menos",
-            "Programa de firmware · 60 días",
-            "60 días corridos",
+            "Control de flota + Developer Kit",
+            "Skill de desarrollo",
             "firmware Stocks",
-            "No incluye cables ni fuentes de alimentación.",
-            "Recall incluido",
-            "70% al confirmar la producción y 30% contra entrega del lote completo",
-            "SDK",
-            "Skill",
             "20 días hábiles",
             "90 días de soporte inicial",
         ]:
             self.assertIn(text, html)
 
-        self.assertNotIn("Una plataforma física para Lemon", html)
-        self.assertNotIn("Tres escalas. Un precio claro por unidad.", html)
-        self.assertIn("Control de flota + Developer Kit", html)
-        self.assertIn("Skill de desarrollo", html)
-        self.assertNotIn("USDC [redacted]", html)
-        self.assertNotIn("USDC [redacted]", html)
-        self.assertNotIn("Plataforma Partners", html)
-        self.assertNotIn("MCP", html)
-        self.assertNotIn("20% con el lote ensamblado", html)
         self.assertIn('id="proposal"', html)
-        self.assertIn('id="documents"', html)
-
-        required_documents = [
-            "docs/propuesta-comercial.html",
-            "docs/propuesta-comercial.txt",
-            "docs/propuesta-comercial.pdf",
-            "docs/alcance-plataforma.html",
-            "docs/alcance-plataforma.txt",
-            "docs/alcance-plataforma.pdf",
-        ]
-        for name in required_documents:
-            self.assertTrue(os.path.exists(os.path.join(LANDING, *name.split("/"))), name)
-            self.assertIn(f'./{name}', html)
-
-        for name in ["docs/propuesta-comercial.html", "docs/propuesta-comercial.txt", "docs/alcance-plataforma.html", "docs/alcance-plataforma.txt"]:
-            with open(os.path.join(LANDING, *name.split("/")), "r", encoding="utf-8") as f:
-                document_copy = f.read()
-            self.assertIn("Control de flota + Developer Kit", document_copy)
-            self.assertIn("60 d", document_copy)
-            self.assertIn("Stocks", document_copy)
-            self.assertNotIn("Plataforma Partners", document_copy)
-            self.assertNotIn("MCP", document_copy)
-
-        for name in ["docs/propuesta-comercial.html", "docs/propuesta-comercial.txt"]:
-            with open(os.path.join(LANDING, *name.split("/")), "r", encoding="utf-8") as f:
-                commercial_copy = f.read()
-            self.assertIn("No incluye cables ni fuentes", commercial_copy)
-            self.assertIn("Recall incluido", commercial_copy)
+        for removed in ['id="manufacturing"', 'id="documents"', "USDC [redacted]",
+                        "Precio unitario", "con IVA", "propuesta-comercial",
+                        "alcance-plataforma"]:
+            self.assertNotIn(removed, html)
+        self.assertFalse(os.path.exists(os.path.join(LANDING, "docs")))
 
         with open(os.path.join(LANDING, "proposal.css"), "r", encoding="utf-8") as f:
             proposal_css = f.read()
-        self.assertIn(".document-list h3 { margin: .6rem 0 .4rem; color: var(--starlight);", proposal_css)
         self.assertIn(".implementation-list h3 { margin: 2.5rem 0 .6rem; color: var(--starlight);", proposal_css)
-        self.assertIn(".proposal-table tbody td::before { content: attr(data-label);", proposal_css)
         self.assertIn(".fleet-app aside { display: none; }", proposal_css)
 
     def test_proposal_screens_fit_the_desktop_viewport_and_restore_the_control_demo(self):
