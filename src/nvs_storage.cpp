@@ -114,6 +114,15 @@ void nvsSetSoundEnabled(bool on) {
     prefs.putUChar("sound_on", on ? 1 : 0);
 }
 
+uint8_t nvsGetUsdtLanguage() {
+    const uint8_t language = prefs.getUChar("usdt_lang", 0);
+    return language > 1 ? 0 : language;
+}
+
+void nvsSetUsdtLanguage(uint8_t language) {
+    prefs.putUChar("usdt_lang", language > 1 ? 0 : language);
+}
+
 // ── Alerts ──
 
 bool nvsGetAlertEnabled() {

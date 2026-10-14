@@ -24,6 +24,10 @@ void     nvsSetTheme(uint8_t theme);
 bool     nvsGetSoundEnabled();
 void     nvsSetSoundEnabled(bool on);
 
+// USDt interface language (0=Spanish, 1=English)
+uint8_t  nvsGetUsdtLanguage();
+void     nvsSetUsdtLanguage(uint8_t language);
+
 // Alerts
 bool     nvsGetAlertEnabled();
 void     nvsSetAlertEnabled(bool on);

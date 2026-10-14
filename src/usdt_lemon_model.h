@@ -30,27 +30,51 @@ enum UsdtFetchStatus : uint8_t {
     USDT_FETCH_RATE_LIMITED,
 };
 
+enum UsdtLanguage : uint8_t {
+    USDT_LANGUAGE_ES = 0,
+    USDT_LANGUAGE_EN,
+};
+
+enum UsdtMarketPair : uint8_t {
+    USDT_MARKET_ARS = 0,
+    USDT_MARKET_USD,
+};
+
 struct UsdtRuntimeModel {
     UsdtScene scene = USDT_OVERVIEW;
+    UsdtMarketPair marketPair = USDT_MARKET_ARS;
     uint32_t sceneEnteredMs = 0;
     uint32_t lastInteractionMs = 0;
     bool refreshRequested = false;
-    bool otaCheckRequested = false;
     bool wifiResetArmed = false;
     uint32_t wifiResetUntilMs = 0;
+    bool soundEnabled = true;
+    UsdtLanguage language = USDT_LANGUAGE_ES;
 };
 
 constexpr int16_t USDT_NAV_Y = 416;
 constexpr int16_t USDT_NAV_H = 64;
-constexpr int16_t USDT_SYSTEM_ACTION_X = 24;
-constexpr int16_t USDT_SYSTEM_ACTION_Y = 338;
-constexpr int16_t USDT_SYSTEM_ACTION_W = 432;
-constexpr int16_t USDT_SYSTEM_ACTION_H = 50;
+constexpr int16_t USDT_MARKET_CARD_Y = 128;
+constexpr int16_t USDT_MARKET_CARD_H = 120;
+constexpr int16_t USDT_MARKET_CARD_W = 204;
+constexpr int16_t USDT_MARKET_ARS_X = 24;
+constexpr int16_t USDT_MARKET_USD_X = 252;
+constexpr int16_t USDT_SYSTEM_CONTROL_X = 24;
+constexpr int16_t USDT_SYSTEM_CONTROL_W = 432;
+constexpr int16_t USDT_SYSTEM_CONTROL_H = 48;
+constexpr int16_t USDT_SYSTEM_SOUND_Y = 214;
+constexpr int16_t USDT_SYSTEM_LANGUAGE_Y = 270;
+constexpr int16_t USDT_SYSTEM_WIFI_Y = 326;
 constexpr uint32_t USDT_FRESH_MS = 60UL * 1000UL;
 constexpr uint32_t USDT_CACHED_MS = 10UL * 60UL * 1000UL;
 constexpr uint32_t USDT_STALE_MS = 60UL * 60UL * 1000UL;
 constexpr uint32_t USDT_SCENE_TIMEOUT_MS = 90UL * 1000UL;
 constexpr uint32_t USDT_VARIATION_ROTATE_MS = 4000UL;
+constexpr uint32_t USDT_VARIATIONS_REFRESH_MS = 30UL * 60UL * 1000UL;
+constexpr uint32_t USDT_VARIATIONS_RETRY_MS = 60UL * 1000UL;
+constexpr uint32_t USDT_NETWORKS_REFRESH_MS = 15UL * 60UL * 1000UL;
+constexpr uint32_t USDT_NETWORKS_RETRY_MS = 60UL * 1000UL;
+constexpr uint32_t USDT_AUX_MAX_AGE_MS = 2UL * 60UL * 60UL * 1000UL;
 
 constexpr UsdtFreshness usdtFreshness(bool valid, uint32_t lastUpdateMs,
                                       uint32_t nowMs, bool online,
@@ -64,6 +88,24 @@ constexpr UsdtFreshness usdtFreshness(bool valid, uint32_t lastUpdateMs,
          : nowMs - lastUpdateMs <= USDT_FRESH_MS ? USDT_LIVE
          : nowMs - lastUpdateMs <= USDT_CACHED_MS ? USDT_CACHED
          : USDT_STALE;
+}
+
+constexpr bool usdtFreshnessHasData(UsdtFreshness freshness) {
+    return freshness == USDT_LIVE || freshness == USDT_CACHED ||
+           freshness == USDT_STALE;
+}
+
+constexpr UsdtFreshness usdtPrimaryFreshness(UsdtFreshness lemon,
+                                             UsdtFreshness peg) {
+    return usdtFreshnessHasData(lemon) ? lemon
+         : usdtFreshnessHasData(peg) ? peg
+         : lemon;
+}
+
+constexpr bool usdtAuxDataUsable(bool valid, uint32_t lastUpdateMs,
+                                 uint32_t nowMs) {
+    return valid && lastUpdateMs != 0 &&
+           nowMs - lastUpdateMs <= USDT_AUX_MAX_AGE_MS;
 }
 
 constexpr int8_t usdtBottomTabAt(int16_t x, int16_t y) {
@@ -84,11 +126,43 @@ constexpr UsdtScene usdtSceneForTab(int8_t tab) {
          : USDT_OVERVIEW;
 }
 
-constexpr bool usdtSystemActionHit(int16_t x, int16_t y) {
-    return x >= USDT_SYSTEM_ACTION_X &&
-           x < USDT_SYSTEM_ACTION_X + USDT_SYSTEM_ACTION_W &&
-           y >= USDT_SYSTEM_ACTION_Y &&
-           y < USDT_SYSTEM_ACTION_Y + USDT_SYSTEM_ACTION_H;
+constexpr bool usdtSystemControlHit(int16_t x, int16_t y, int16_t top) {
+    return x >= USDT_SYSTEM_CONTROL_X &&
+           x < USDT_SYSTEM_CONTROL_X + USDT_SYSTEM_CONTROL_W &&
+           y >= top && y < top + USDT_SYSTEM_CONTROL_H;
+}
+
+constexpr bool usdtSystemSoundHit(int16_t x, int16_t y) {
+    return usdtSystemControlHit(x, y, USDT_SYSTEM_SOUND_Y);
+}
+
+constexpr bool usdtSystemLanguageHit(int16_t x, int16_t y) {
+    return usdtSystemControlHit(x, y, USDT_SYSTEM_LANGUAGE_Y);
+}
+
+constexpr bool usdtSystemWifiHit(int16_t x, int16_t y) {
+    return usdtSystemControlHit(x, y, USDT_SYSTEM_WIFI_Y);
+}
+
+constexpr int8_t usdtMarketPairAt(int16_t x, int16_t y) {
+    return y < USDT_MARKET_CARD_Y ||
+           y >= USDT_MARKET_CARD_Y + USDT_MARKET_CARD_H ? -1
+         : x >= USDT_MARKET_ARS_X &&
+           x < USDT_MARKET_ARS_X + USDT_MARKET_CARD_W ? USDT_MARKET_ARS
+         : x >= USDT_MARKET_USD_X &&
+           x < USDT_MARKET_USD_X + USDT_MARKET_CARD_W ? USDT_MARKET_USD
+         : -1;
+}
+
+inline bool usdtHandleMarketPairTap(UsdtRuntimeModel& model,
+                                    const TouchEvent& event,
+                                    uint32_t nowMs) {
+    if (model.scene != USDT_MARKETS || event.gesture != TOUCH_TAP) return false;
+    const int8_t pair = usdtMarketPairAt(event.x, event.y);
+    if (pair < 0) return false;
+    model.marketPair = static_cast<UsdtMarketPair>(pair);
+    model.lastInteractionMs = nowMs;
+    return true;
 }
 
 constexpr uint8_t usdtVariationIndex(uint32_t nowMs) {
@@ -103,9 +177,6 @@ inline bool usdtHandleGesture(UsdtRuntimeModel& model, const TouchEvent& event,
         const int8_t tab = usdtBottomTabAt(event.x, event.y);
         if (tab >= 0) model.scene = usdtSceneForTab(tab);
         if (event.y < 96) model.refreshRequested = true;
-        if (model.scene == USDT_SYSTEM && event.y >= 250 && event.y < 330) {
-            model.otaCheckRequested = true;
-        }
     } else if (event.gesture == TOUCH_SWIPE_LEFT) {
         model.scene = static_cast<UsdtScene>(
             (static_cast<uint8_t>(model.scene) + 1) % USDT_SCENE_COUNT);
@@ -115,9 +186,13 @@ inline bool usdtHandleGesture(UsdtRuntimeModel& model, const TouchEvent& event,
             USDT_SCENE_COUNT);
     }
     model.lastInteractionMs = nowMs;
-    if (before != model.scene) model.sceneEnteredMs = nowMs;
-    return before != model.scene || model.refreshRequested ||
-           model.otaCheckRequested;
+    if (before != model.scene) {
+        model.sceneEnteredMs = nowMs;
+        if (model.scene == USDT_MARKETS) {
+            model.marketPair = USDT_MARKET_ARS;
+        }
+    }
+    return before != model.scene || model.refreshRequested;
 }
 
 inline bool usdtApplyTimeout(UsdtRuntimeModel& model, uint32_t nowMs) {
@@ -139,6 +214,28 @@ static_assert(usdtBottomTabAt(336, 448) == 3, "Regions tab hitbox");
 static_assert(usdtBottomTabAt(432, 448) == 4, "System tab hitbox");
 static_assert(usdtBottomTabAt(240, 400) == -1, "Content is not navigation");
 static_assert(usdtSceneForTab(1) == USDT_NETWORKS, "Second tab is networks");
+static_assert(usdtMarketPairAt(48, 160) == USDT_MARKET_ARS,
+              "Left market card selects ARS");
+static_assert(usdtMarketPairAt(300, 160) == USDT_MARKET_USD,
+              "Right market card selects USD");
+static_assert(usdtMarketPairAt(240, 160) == -1,
+              "Gap between market cards is not interactive");
+static_assert(usdtMarketPairAt(48, 248) == -1,
+              "Market cards exclude their lower edge");
+static_assert(usdtSystemSoundHit(240, USDT_SYSTEM_SOUND_Y + 24),
+              "Sound row hitbox");
+static_assert(usdtSystemLanguageHit(240, USDT_SYSTEM_LANGUAGE_Y + 24),
+              "Language row hitbox");
+static_assert(usdtSystemWifiHit(240, USDT_SYSTEM_WIFI_Y + 24),
+              "Wi-Fi row hitbox");
+static_assert(!usdtSystemSoundHit(23, USDT_SYSTEM_SOUND_Y + 24),
+              "Sound row rejects left margin");
+static_assert(!usdtSystemLanguageHit(456, USDT_SYSTEM_LANGUAGE_Y + 24),
+              "Language row rejects right margin");
+static_assert(!usdtSystemSoundHit(240, USDT_SYSTEM_SOUND_Y + USDT_SYSTEM_CONTROL_H),
+              "Sound row excludes lower edge");
+static_assert(!usdtSystemLanguageHit(240, USDT_SYSTEM_LANGUAGE_Y - 1),
+              "Language row excludes upper gap");
 static_assert(usdtVariationIndex(0) == 0, "First variation window is 1h");
 static_assert(usdtVariationIndex(4000) == 1, "Second variation window is 24h");
 static_assert(usdtVariationIndex(8000) == 2, "Third variation window is 7d");
@@ -155,3 +252,10 @@ static_assert(usdtFreshness(true, 100, 100 + USDT_CACHED_MS + 1, true, false,
 static_assert(usdtFreshness(true, 100, 110, false, false,
                             USDT_FETCH_NETWORK_ERROR) == USDT_OFFLINE,
               "Connectivity state overrides age");
+static_assert(usdtPrimaryFreshness(USDT_LIVE, USDT_ERROR) == USDT_LIVE,
+              "Healthy Lemon price hides secondary provider errors");
+static_assert(usdtPrimaryFreshness(USDT_ERROR, USDT_LIVE) == USDT_LIVE,
+              "PEG can provide a healthy fallback status");
+static_assert(usdtAuxDataUsable(true, 100, 110), "Fresh auxiliary data is usable");
+static_assert(!usdtAuxDataUsable(true, 100, 100 + USDT_AUX_MAX_AGE_MS + 1),
+              "Expired auxiliary data is hidden");

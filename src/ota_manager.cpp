@@ -170,7 +170,7 @@ OtaInfo otaCheckAsset(const char* repo, const char* assetName, const char* local
     JsonDocument filter;
     filter["tag_name"] = true;
     filter["assets"][0]["name"] = true;
-    filter["assets"][0]["url"] = true;
+    filter["assets"][0]["browser_download_url"] = true;
     filter["body"] = true;
 
     JsonDocument doc;
@@ -199,7 +199,7 @@ OtaInfo otaCheckAsset(const char* repo, const char* assetName, const char* local
     for (JsonObject asset : doc["assets"].as<JsonArray>()) {
         const char* name = asset["name"] | (const char*)nullptr;
         if (name && strcmp(name, assetName) == 0) {
-            assetUrl = asset["url"] | (const char*)nullptr;
+            assetUrl = asset["browser_download_url"] | (const char*)nullptr;
             break;
         }
     }
@@ -207,7 +207,7 @@ OtaInfo otaCheckAsset(const char* repo, const char* assetName, const char* local
         Serial.printf("[OTA] Exact asset not found: %s\n", assetName);
         return info;
     }
-    Serial.printf("[OTA] Asset API URL: %s\n", assetUrl);
+    Serial.printf("[OTA] Asset browser URL: %s\n", assetUrl);
 
     strncpy(info.url, assetUrl, sizeof(info.url) - 1);
     info.available = true;

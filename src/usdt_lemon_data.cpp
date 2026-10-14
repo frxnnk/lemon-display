@@ -52,29 +52,146 @@ bool parseLemonPrice(const char* json, UsdtPriceData& out) {
     return true;
 }
 
-bool parsePeg(const char* simpleJson, const char* marketsJson, UsdtPegData& out) {
-    JsonDocument simpleDoc;
-    if (deserializeJson(simpleDoc, simpleJson)) return false;
-    JsonObject tether = simpleDoc["tether"];
-    if (tether.isNull()) return false;
-    UsdtPegData next = {};
-    next.usd = tether["usd"] | 0.0f;
-    next.ars = tether["ars"] | 0.0f;
-    next.brl = tether["brl"] | 0.0f;
-    next.mxn = tether["mxn"] | 0.0f;
-    next.change24h = tether["ars_24h_change"] | 0.0f;
-    JsonDocument marketsDoc;
-    if (marketsJson && marketsJson[0] && !deserializeJson(marketsDoc, marketsJson) && marketsDoc.size() > 0) {
-        JsonObject row = marketsDoc[0];
-        next.change1h = row["price_change_percentage_1h_in_currency"] | 0.0f;
-        next.change24h = row["price_change_percentage_24h_in_currency"] | next.change24h;
-        next.change7d = row["price_change_percentage_7d_in_currency"] | 0.0f;
+void appendPegSample(UsdtPegData& out, float usd) {
+    if (out.pegSampleCount < USDT_PEG_SAMPLE_COUNT) {
+        out.pegSamples[out.pegSampleCount++] = usd;
+        return;
     }
-    next.valid = finiteRange(next.usd, 0.80f, 1.20f) &&
-                 finiteRange(next.ars, 100.0f, 100000.0f);
-    if (!next.valid) return false;
-    next.lastUpdateMs = millis();
-    out = next;
+    memmove(out.pegSamples, out.pegSamples + 1,
+            sizeof(float) * (USDT_PEG_SAMPLE_COUNT - 1));
+    out.pegSamples[USDT_PEG_SAMPLE_COUNT - 1] = usd;
+}
+
+bool parseCoinbaseRates(const char* json, UsdtPegData& out) {
+    JsonDocument doc;
+    JsonDocument filter;
+    filter["data"]["rates"]["USD"] = true;
+    filter["data"]["rates"]["BRL"] = true;
+    filter["data"]["rates"]["PEN"] = true;
+    filter["data"]["rates"]["COP"] = true;
+    if (deserializeJson(doc, json, DeserializationOption::Filter(filter))) return false;
+    JsonObject rates = doc["data"]["rates"];
+    if (rates.isNull()) return false;
+
+    const float usd = rates["USD"].as<float>();
+    if (!finiteRange(usd, 0.80f, 1.20f)) return false;
+
+    appendPegSample(out, usd);
+    out.usd = usd;
+    out.valid = true;
+    out.lastUpdateMs = millis();
+
+    const float brl = rates["BRL"].as<float>();
+    const float pen = rates["PEN"].as<float>();
+    const float cop = rates["COP"].as<float>();
+    out.regionsValid = false;
+    if (finiteRange(brl, 1.0f, 20.0f) &&
+        finiteRange(pen, 1.0f, 20.0f) &&
+        finiteRange(cop, 100.0f, 20000.0f)) {
+        out.brl = brl;
+        out.pen = pen;
+        out.cop = cop;
+        out.regionsValid = true;
+        out.regionsLastUpdateMs = out.lastUpdateMs;
+    }
+    return true;
+}
+
+bool readChartSamples(JsonArray prices, float low, float high,
+                      float* samples, uint8_t& count) {
+    if (prices.size() < 2) return false;
+    const size_t sampleCount = min(
+        static_cast<size_t>(USDT_ARS_CHART_POINT_COUNT), prices.size());
+    for (size_t sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
+        const size_t sourceIndex = sampleIndex * (prices.size() - 1) /
+                                   (sampleCount - 1);
+        JsonArray point = prices[sourceIndex];
+        const float samplePrice = point[1].as<float>();
+        if (!finiteRange(samplePrice, low, high)) return false;
+        samples[sampleIndex] = samplePrice;
+    }
+    count = static_cast<uint8_t>(sampleCount);
+    return true;
+}
+
+bool parseMarketChart(const char* json, UsdtPegData& out) {
+    JsonDocument doc;
+    JsonDocument filter;
+    filter["prices"] = true;
+    if (deserializeJson(doc, json, DeserializationOption::Filter(filter))) return false;
+    JsonArray prices = doc["prices"];
+    if (prices.size() < 2) return false;
+
+    JsonArray latest = prices[prices.size() - 1];
+    const uint64_t latestMs = latest[0].as<uint64_t>();
+    const float latestPrice = latest[1].as<float>();
+    if (latestMs == 0 || !finiteRange(latestPrice, 100.0f, 100000.0f)) return false;
+
+    float chartSamples[USDT_ARS_CHART_POINT_COUNT] = {};
+    uint8_t sampleCount = 0;
+    if (!readChartSamples(prices, 100.0f, 100000.0f,
+                          chartSamples, sampleCount)) return false;
+
+    auto closestPrice = [&](uint64_t targetMs) {
+        float bestPrice = 0.0f;
+        uint64_t bestDelta = UINT64_MAX;
+        for (JsonArray point : prices) {
+            const uint64_t timestamp = point[0].as<uint64_t>();
+            const float price = point[1].as<float>();
+            if (timestamp == 0 || !finiteRange(price, 100.0f, 100000.0f)) continue;
+            const uint64_t delta = timestamp > targetMs ? timestamp - targetMs
+                                                        : targetMs - timestamp;
+            if (delta < bestDelta) {
+                bestDelta = delta;
+                bestPrice = price;
+            }
+        }
+        return bestPrice;
+    };
+
+    constexpr uint64_t HOUR_MS = 60ULL * 60ULL * 1000ULL;
+    const float price1h = closestPrice(latestMs - HOUR_MS);
+    const float price24h = closestPrice(latestMs - 24ULL * HOUR_MS);
+    const float price7d = closestPrice(latestMs - 7ULL * 24ULL * HOUR_MS);
+    if (price1h <= 0.0f || price24h <= 0.0f || price7d <= 0.0f) return false;
+
+    const float change1h = (latestPrice / price1h - 1.0f) * 100.0f;
+    const float change24h = (latestPrice / price24h - 1.0f) * 100.0f;
+    const float change7d = (latestPrice / price7d - 1.0f) * 100.0f;
+    if (!finiteRange(change1h, -100.0f, 100.0f) ||
+        !finiteRange(change24h, -100.0f, 100.0f) ||
+        !finiteRange(change7d, -100.0f, 100.0f)) return false;
+
+    out.ars = latestPrice;
+    out.change1h = change1h;
+    out.change24h = change24h;
+    out.change7d = change7d;
+    for (size_t sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
+        out.arsChart[sampleIndex] = chartSamples[sampleIndex];
+    }
+    out.arsChartCount = sampleCount;
+    out.variationsValid = true;
+    out.variationsLastUpdateMs = millis();
+    return true;
+}
+
+bool parseUsdMarketChart(const char* json, UsdtPegData& out) {
+    JsonDocument doc;
+    JsonDocument filter;
+    filter["prices"] = true;
+    if (deserializeJson(doc, json, DeserializationOption::Filter(filter))) return false;
+    JsonArray prices = doc["prices"];
+    float chartSamples[USDT_ARS_CHART_POINT_COUNT] = {};
+    uint8_t sampleCount = 0;
+    if (!readChartSamples(prices, 0.80f, 1.20f,
+                          chartSamples, sampleCount)) return false;
+
+    for (uint8_t i = 0; i < sampleCount; ++i) {
+        out.usdChart[i] = chartSamples[i];
+    }
+    out.usdChartCount = sampleCount;
+    out.usdChartValid = true;
+    out.usdChartLastUpdateMs = millis();
     return true;
 }
 
@@ -101,56 +218,165 @@ bool parseYield(const char* json, UsdtYieldData& out) {
     }
     return false;
 }
+
+bool parseNetworkSupply(const char* json, UsdtNetworkData& out) {
+    static const char* networkIds[USDT_NETWORK_COUNT] = {
+        "bsc", "polygon", "tron", "ethereum"
+    };
+    JsonDocument filter;
+    filter["totalSupplyUsd"] = true;
+    filter["networks"][0]["id"] = true;
+    filter["networks"][0]["supplyUsd"] = true;
+    filter["networks"][0]["change24h"] = true;
+
+    JsonDocument doc;
+    if (deserializeJson(doc, json, DeserializationOption::Filter(filter))) {
+        return false;
+    }
+    JsonArray rows = doc["networks"];
+    if (rows.size() != USDT_NETWORK_COUNT) return false;
+
+    UsdtNetworkData next = {};
+    next.totalSupplyUsd = doc["totalSupplyUsd"] | 0.0f;
+    if (!finiteRange(next.totalSupplyUsd, 1.0f, 1.0e12f)) return false;
+    for (JsonObject row : rows) {
+        const char* id = row["id"] | "";
+        int index = -1;
+        for (uint8_t i = 0; i < USDT_NETWORK_COUNT; ++i) {
+            if (equalsIgnoreCase(id, networkIds[i])) index = i;
+        }
+        if (index < 0 || next.metrics[index].valid) return false;
+        const float supply = row["supplyUsd"] | 0.0f;
+        const float change = row["change24h"] | NAN;
+        if (!finiteRange(supply, 1.0f, 1.0e12f) ||
+            !finiteRange(change, -100.0f, 100.0f)) return false;
+        next.metrics[index].supplyUsd = supply;
+        next.metrics[index].change24h = change;
+        next.metrics[index].valid = true;
+    }
+    for (uint8_t i = 0; i < USDT_NETWORK_COUNT; ++i) {
+        if (!next.metrics[i].valid) return false;
+    }
+    next.valid = true;
+    next.lastUpdateMs = millis();
+    next.lastAttemptMs = next.lastUpdateMs;
+    out = next;
+    return true;
+}
 }  // namespace
 
 void usdtDataSetup() {}
 
-bool usdtDataFetch(UsdtDataSnapshot& io) {
+bool usdtDataFetchPrice(UsdtDataSnapshot& io) {
     if (WiFi.status() != WL_CONNECTED) return false;
-    io.fetching = true;
-    bool changed = false;
-
     ApiResult result = API_NETWORK_ERROR;
-    const char* json = apiHttpGet(CRIPTOYA_LEMON_USDT_EP, false, result, 9000, 2048);
+    const char* json = apiHttpGet(
+        CRIPTOYA_LEMON_USDT_EP, false, result, 5000, 2048, 1);
     UsdtPriceData lemon = {};
     if (result == API_OK && json && json[0] && parseLemonPrice(json, lemon)) {
         io.lemon = lemon;
         io.lemonStatus = USDT_FETCH_OK;
-        changed = true;
+        return true;
     } else {
         io.lemonStatus = result == API_OK ? USDT_FETCH_PARSE_ERROR : mapApi(result);
     }
+    return false;
+}
 
-    result = API_NETWORK_ERROR;
-    json = apiHttpGet(COINGECKO_USDT_PEG_EP, true, result, 9000, 4096);
-    char simpleBuf[512] = {};
-    if (json && json[0]) {
-        strncpy(simpleBuf, json, sizeof(simpleBuf) - 1);
-    }
-    ApiResult marketsResult = API_NETWORK_ERROR;
-    const char* marketsJson = apiHttpGet(COINGECKO_USDT_MARKETS_EP, true, marketsResult, 9000, 2048);
-    UsdtPegData peg = {};
-    if (result == API_OK && simpleBuf[0] && parsePeg(simpleBuf, marketsJson, peg)) {
-        io.peg = peg;
+bool usdtDataFetchRates(UsdtDataSnapshot& io) {
+    if (WiFi.status() != WL_CONNECTED) return false;
+    ApiResult result = API_NETWORK_ERROR;
+    const char* json = apiHttpGet(
+        COINBASE_USDT_RATES_EP, false, result, 5000, 24576, 1);
+    if (result == API_OK && json && json[0] && parseCoinbaseRates(json, io.peg)) {
         io.pegStatus = USDT_FETCH_OK;
-        changed = true;
+        return true;
     } else {
         io.pegStatus = result == API_OK ? USDT_FETCH_PARSE_ERROR : mapApi(result);
     }
+    return false;
+}
 
-    result = API_NETWORK_ERROR;
-    json = apiHttpGet(LEMON_YIELD_EP, false, result, 9000, 4096);
+bool usdtDataFetchVariations(UsdtDataSnapshot& io) {
+    if (WiFi.status() != WL_CONNECTED) return false;
+    const uint32_t nowMs = millis();
+    const uint32_t interval = io.variationsStatus == USDT_FETCH_OK
+        ? USDT_VARIATIONS_REFRESH_MS : USDT_VARIATIONS_RETRY_MS;
+    const bool chartDue = io.peg.variationsLastAttemptMs == 0 ||
+        nowMs - io.peg.variationsLastAttemptMs >= interval;
+    if (!chartDue) return false;
+
+    io.peg.variationsLastAttemptMs = nowMs;
+    ApiResult result = API_NETWORK_ERROR;
+    const char* json = apiHttpGet(
+        COINGECKO_USDT_CHART_EP, true, result, 5000, 24576, 1);
+    if (result == API_OK && json && json[0] && parseMarketChart(json, io.peg)) {
+        io.variationsStatus = USDT_FETCH_OK;
+        return true;
+    }
+    io.variationsStatus = result == API_OK ? USDT_FETCH_PARSE_ERROR : mapApi(result);
+    return false;
+}
+
+bool usdtDataFetchUsdChart(UsdtDataSnapshot& io) {
+    if (WiFi.status() != WL_CONNECTED) return false;
+    const uint32_t nowMs = millis();
+    const uint32_t interval = io.usdChartStatus == USDT_FETCH_OK
+        ? USDT_VARIATIONS_REFRESH_MS : USDT_VARIATIONS_RETRY_MS;
+    const bool chartDue = io.peg.usdChartLastAttemptMs == 0 ||
+        nowMs - io.peg.usdChartLastAttemptMs >= interval;
+    if (!chartDue) return false;
+
+    io.peg.usdChartLastAttemptMs = nowMs;
+    ApiResult result = API_NETWORK_ERROR;
+    const char* json = apiHttpGet(
+        COINGECKO_USDT_USD_CHART_EP, true, result, 5000, 24576, 1);
+    if (result == API_OK && json && json[0] && parseUsdMarketChart(json, io.peg)) {
+        io.usdChartStatus = USDT_FETCH_OK;
+        return true;
+    }
+    io.usdChartStatus = result == API_OK ? USDT_FETCH_PARSE_ERROR : mapApi(result);
+    return false;
+}
+
+bool usdtDataFetchYield(UsdtDataSnapshot& io) {
+    if (WiFi.status() != WL_CONNECTED) return false;
+    ApiResult result = API_NETWORK_ERROR;
+    const char* json = apiHttpGet(
+        LEMON_YIELD_EP, false, result, 5000, 4096, 1);
     UsdtYieldData yield = {};
     if (result == API_OK && json && json[0] && parseYield(json, yield)) {
         io.yield = yield;
         io.yieldStatus = USDT_FETCH_OK;
-        changed = true;
+        return true;
     } else {
         io.yieldStatus = result == API_OK ? USDT_FETCH_PARSE_ERROR : mapApi(result);
     }
+    return false;
+}
 
-    io.fetching = false;
-    return changed;
+bool usdtDataFetchNetworks(UsdtDataSnapshot& io) {
+    if (WiFi.status() != WL_CONNECTED) return false;
+    const uint32_t nowMs = millis();
+    const uint32_t interval = io.networks.valid ? USDT_NETWORKS_REFRESH_MS
+                                                : USDT_NETWORKS_RETRY_MS;
+    const bool due = io.networks.lastAttemptMs == 0 ||
+        nowMs - io.networks.lastAttemptMs >= interval;
+    if (!due) return false;
+
+    io.networks.lastAttemptMs = nowMs;
+    ApiResult result = API_NETWORK_ERROR;
+    const char* json = apiHttpGet(
+        LEMON_USDT_NETWORKS_EP, false, result, 5000, 2048, 1);
+    UsdtNetworkData networks = {};
+    if (result == API_OK && json && json[0] &&
+        parseNetworkSupply(json, networks)) {
+        io.networks = networks;
+        io.networksStatus = USDT_FETCH_OK;
+        return true;
+    }
+    io.networksStatus = result == API_OK ? USDT_FETCH_PARSE_ERROR : mapApi(result);
+    return false;
 }
 
 void usdtDataUpdateFreshness(UsdtDataSnapshot& io, uint32_t nowMs, bool online) {
@@ -161,6 +387,9 @@ void usdtDataUpdateFreshness(UsdtDataSnapshot& io, uint32_t nowMs, bool online) 
                                     online, io.fetching, io.pegStatus);
     io.yieldFreshness = usdtFreshness(io.yield.valid, io.yield.lastUpdateMs, nowMs,
                                       online, io.fetching, io.yieldStatus);
+    io.networksFreshness = usdtFreshness(
+        io.networks.valid, io.networks.lastUpdateMs, nowMs,
+        online, io.fetching, io.networksStatus);
 }
 
 const char* usdtFreshnessLabel(UsdtFreshness freshness) {
@@ -171,7 +400,18 @@ const char* usdtFreshnessLabel(UsdtFreshness freshness) {
         case USDT_STALE: return "DESACTUALIZADO";
         case USDT_OFFLINE: return "SIN CONEXION";
         case USDT_RATE_LIMITED: return "LIMITE API";
-        case USDT_ERROR: return "ERROR";
+        case USDT_ERROR: return "REINTENTO";
     }
-    return "ERROR";
+    return "REINTENTO";
+}
+
+const char* usdtFetchStatusLabel(UsdtFetchStatus status) {
+    switch (status) {
+        case USDT_FETCH_OK: return "OK";
+        case USDT_FETCH_NETWORK_ERROR: return "RED";
+        case USDT_FETCH_PARSE_ERROR: return "FORMATO";
+        case USDT_FETCH_TIMEOUT: return "TIMEOUT";
+        case USDT_FETCH_RATE_LIMITED: return "LIMITE";
+    }
+    return "RED";
 }

@@ -10,7 +10,7 @@
 #include <cstring>
 #include <esp_task_wdt.h>
 
-// Root CAs: GTS Root R4 (Google), USERTrust ECC (GitHub), DigiCert Global Root G2 (Binance)
+// Root CAs for every HTTPS provider used by the firmware.
 const char* ROOT_CAS =
     // GTS Root R4 — CoinGecko, CriptoYa, Polymarket
     "-----BEGIN CERTIFICATE-----\n"
@@ -25,6 +25,38 @@ const char* ROOT_CAS =
     "BBSATNbrdP9JNqPV2Py1PsVq8JQdjDAKBggqhkjOPQQDAwNpADBmAjEA6ED/g94D\n"
     "9J+uHXqnLrmvT/aDHQ4thQEd0dlq7A/Cr8deVl5c1RxYIigL9zC2L7F8AjEA8GE8\n"
     "p/SgguMh1YQdc4acLa/KNJvxn7kjNuK8YAOdgLOaVsjh4rsUecrNIdSUtUlD\n"
+    "-----END CERTIFICATE-----\n"
+    // GTS Root R1 — Vercel network metrics endpoint
+    "-----BEGIN CERTIFICATE-----\n"
+    "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\n"
+    "bP6MvPJwNQzcmRk13NfIRmPVNnGuV/u3gm3c\n"
     "-----END CERTIFICATE-----\n"
     // USERTrust ECC — GitHub (OTA)
     "-----BEGIN CERTIFICATE-----\n"
@@ -124,6 +156,11 @@ static WiFiClientSecure secureClient;
 static unsigned long lastCoinGeckoCall = 0;
 static const unsigned long COINGECKO_MIN_INTERVAL = 6000;  // 6s between CoinGecko calls
 
+static bool coinGeckoKeyConfigured() {
+    return COINGECKO_API_KEY[0] != '\0' &&
+           strcmp(COINGECKO_API_KEY, "YOUR_COINGECKO_DEMO_KEY") != 0;
+}
+
 void apiSetup() {
     secureClient.setCACert(ROOT_CAS);
     secureClient.setHandshakeTimeout(5);   // 5s max for TLS handshake
@@ -170,7 +207,7 @@ public:
 // Exposed as apiHttpGet() via api_client.h so sibling clients (stocks, poly)
 // can reuse the hardened TLS / chunked / WDT logic.
 const char* apiHttpGet(const char* url, bool addCoinGeckoKey, ApiResult& result,
-                       int timeoutMs, uint32_t maxBodyBytes) {
+                       int timeoutMs, uint32_t maxBodyBytes, int maxAttempts) {
     // Allocate PSRAM buffer once (persists for device lifetime)
     if (!_rspBuf) {
         _rspBuf = (char*)ps_malloc(RSP_BUF_SIZE);
@@ -183,6 +220,9 @@ const char* apiHttpGet(const char* url, bool addCoinGeckoKey, ApiResult& result,
         }
     }
     _rspBuf[0] = '\0';
+
+    const bool appendCoinGeckoKey =
+        addCoinGeckoKey && coinGeckoKeyConfigured();
 
     // Rate limit CoinGecko calls to avoid 429s — wait if too soon
     if (addCoinGeckoKey && lastCoinGeckoCall > 0) {
@@ -200,7 +240,8 @@ const char* apiHttpGet(const char* url, bool addCoinGeckoKey, ApiResult& result,
     }
     if (addCoinGeckoKey) lastCoinGeckoCall = millis();
 
-    for (int attempt = 0; attempt < 2; attempt++) {
+    if (maxAttempts < 1) maxAttempts = 1;
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
         esp_task_wdt_reset();
         if (attempt > 0) {
             Serial.printf("[API] Retry %d for %s\n", attempt, url);
@@ -208,7 +249,7 @@ const char* apiHttpGet(const char* url, bool addCoinGeckoKey, ApiResult& result,
         }
 
         static HTTPClient http;   // static: ~700 bytes off the 8KB stack
-        http.setConnectTimeout(5000);
+        http.setConnectTimeout(timeoutMs < 5000 ? timeoutMs : 5000);
         http.setTimeout(timeoutMs);
         // Prefix reads use HTTP/1.0 so the body arrives as a close-delimited
         // stream instead of chunk framing. This lets callers stop cleanly
@@ -216,7 +257,7 @@ const char* apiHttpGet(const char* url, bool addCoinGeckoKey, ApiResult& result,
         http.useHTTP10(maxBodyBytes > 0);
 
         static char fullUrl[512]; // static: 512 bytes off the stack
-        if (addCoinGeckoKey) {
+        if (appendCoinGeckoKey) {
             const char* sep = (strchr(url, '?') != nullptr) ? "&" : "?";
             snprintf(fullUrl, sizeof(fullUrl), "%s%sx_cg_demo_api_key=%s", url, sep, COINGECKO_API_KEY);
         } else {
